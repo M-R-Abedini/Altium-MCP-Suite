@@ -1,0 +1,423 @@
+# AI Workflow Guide
+
+This document explains how an AI assistant uses altium-designer-mcp to create Altium components.
+
+## Core Principle
+
+**The AI handles the intelligence. The tool handles file I/O.**
+
+See [VISION.md](VISION.md) for the full responsibility split and architectural rationale.
+
+---
+
+## The Complete Workflow
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    AI's Component Creation Workflow                         │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  1. UNDERSTAND THE REQUEST                                                  │
+│     Engineer: "Create a 0603 chip resistor footprint"                       │
+│     AI reasons about the component requirements                             │
+│                                                                             │
+│  2. CALCULATE DIMENSIONS (AI's job)                                         │
+│     AI applies IPC-7351B formulas:                                          │
+│     • Body: 1.6mm × 0.8mm                                                   │
+│     • Terminal length: 0.3mm                                                │
+│     • Pad size = terminal + toe + heel                                      │
+│     • Courtyard = body + margins                                            │
+│                                                                             │
+│  3. DEFINE PRIMITIVES (AI's job)                                            │
+│     AI constructs the complete footprint:                                   │
+│     • Pads with exact positions and sizes                                   │
+│     • Silkscreen tracks                                                     │
+│     • Courtyard region                                                      │
+│     • Assembly outline                                                      │
+│                                                                             │
+│  4. WRITE TO FILE (Tool's job)                                              │
+│     AI calls: write_pcblib { filepath, footprints }                         │
+│     Tool writes the OLE compound document                                   │
+│                                                                             │
+│  5. VERIFY                                                                  │
+│     AI calls: read_pcblib to verify the result                              │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Step-by-Step Example: Creating a 0603 Resistor
+
+### 1. AI Calculates the Footprint
+
+The AI applies IPC-7351B knowledge:
+
+```text
+Component: 0603 Chip Resistor (1608 metric)
+Body: 1.6mm × 0.8mm × 0.55mm
+Terminal: 0.3mm
+
+IPC-7351B Calculations (Nominal density):
+- Toe extension: 0.35mm
+- Heel extension: 0.35mm
+- Side extension: 0.05mm
+
+Pad dimensions (using manufacturer-recommended values):
+- Width: 0.9mm (terminal + extensions, adjusted for process)
+- Height: 0.95mm (body height + side extensions, adjusted)
+- Centre-to-centre span: 1.5mm
+
+IPC Name: RESC1608X55N
+```
+
+### 2. AI Constructs Primitives
+
+```json
+{
+    "name": "RESC1608X55N",
+    "description": "Chip resistor, 0603 (1608 metric), IPC-7351B Nominal",
+    "pads": [
+        {
+            "designator": "1",
+            "x": -0.75,
+            "y": 0,
+            "width": 0.9,
+            "height": 0.95,
+            "shape": "rounded_rectangle",
+            "layer": "Top Layer"
+        },
+        {
+            "designator": "2",
+            "x": 0.75,
+            "y": 0,
+            "width": 0.9,
+            "height": 0.95,
+            "shape": "rounded_rectangle",
+            "layer": "Top Layer"
+        }
+    ],
+    "tracks": [
+        { "x1": -0.8, "y1": -0.55, "x2": 0.8, "y2": -0.55, "width": 0.12, "layer": "Top Overlay" },
+        { "x1": -0.8, "y1": 0.55, "x2": 0.8, "y2": 0.55, "width": 0.12, "layer": "Top Overlay" }
+    ],
+    "regions": [
+        {
+            "vertices": [
+                { "x": -1.45, "y": -0.73 },
+                { "x": 1.45, "y": -0.73 },
+                { "x": 1.45, "y": 0.73 },
+                { "x": -1.45, "y": 0.73 }
+            ],
+            "layer": "Top Courtyard"
+        }
+    ]
+}
+```
+
+### 3. AI Calls write_pcblib
+
+**MCP Tool Call:**
+
+```json
+{
+    "name": "write_pcblib",
+    "arguments": {
+        "filepath": "./Passives.PcbLib",
+        "footprints": [
+            {
+                "name": "RESC1608X55N",
+                "description": "Chip resistor, 0603 (1608 metric)",
+                "pads": [...],
+                "tracks": [...],
+                "regions": [...]
+            }
+        ]
+    }
+}
+```
+
+**Response:**
+
+```json
+{
+    "status": "success",
+    "filepath": "./Passives.PcbLib",
+    "footprint_count": 1,
+    "footprint_names": ["RESC1608X55N"],
+    "warnings": [],
+    "bodies": []
+}
+```
+
+(`warnings` carries non-blocking silkscreen-over-pad findings; `bodies` echoes
+each footprint's 3D-body height and source so an assumed height can be
+corrected.)
+
+### 4. AI Verifies the Result
+
+**MCP Tool Call:**
+
+```json
+{
+    "name": "read_pcblib",
+    "arguments": {
+        "filepath": "./Passives.PcbLib"
+    }
+}
+```
+
+---
+
+## Primitives & Layers
+
+The primitive types you place (pad, via, track, arc, region, text, fill, component body)
+and the standard Altium layer names are documented in the reference — see
+**[docs/TOOLS.md](TOOLS.md)** and [README § Primitive Types](../README.md#primitive-types).
+This guide covers the *workflow* of assembling them, not the field-by-field reference.
+
+## Symbol Pin Conventions
+
+Conventions the per-tool schema can't express — adapted from
+[coffeenmusic/altium-mcp](https://github.com/coffeenmusic/altium-mcp):
+
+### Active-low pins (overbar)
+
+Pin names are written verbatim, so Altium's overbar convention works directly: put a
+backslash **after** each character that should carry a bar.
+
+| Intended rendering | Pin `name` |
+|--------------------|------------|
+| `RESET`, fully overbarred | `R\E\S\E\T\` |
+| `CS`, both letters barred | `C\S\` |
+| `RW`, bar the `W` only | `RW\` |
+
+### Multi-part symbols
+
+For multi-unit parts (dual / quad op-amps, gate arrays): set `part_count` on the symbol
+and tag each pin with `owner_part_id` (the 1-based part it belongs to). The `DUALPART`
+sample demonstrates a two-part symbol with pins split across parts 1 and 2.
+
+### Pin placement
+
+A symbol reads well when pins sit where an engineer expects them. These rules (adapted from
+[coffeenmusic/altium-mcp](https://github.com/coffeenmusic/altium-mcp)'s
+`symbol_placement_rules.txt`, MIT) give a consistent layout for ICs, regulators and
+connectors; apply them unless the datasheet's reference schematic or an existing library
+style says otherwise.
+
+**Sides.** Use the **left and right** sides only — a pin on the top or bottom edge breaks the
+signal-flow reading and makes wiring awkward. Never overlap or merge pins.
+
+**Where each kind goes**, from most to least important:
+
+| Pins | Position |
+|------|----------|
+| Ground — analogue, digital, power, exposed pad | bottom **left** |
+| No-connect (`NC`, `DNC`) | bottom **right** |
+| Power rails (`VCC`, `VDD`, `AVDD`, `VREF`…) | upper **right** |
+| Inputs | **left** |
+| Outputs | **right** |
+| Switching regulator `VIN` | **left** (input-to-output flow) |
+
+Everything else is grouped by function — one block for SPI, one for I²C, one for RGMII, the
+GPIO bank together — each block's pins in the datasheet's order.
+
+**Spacing.** Pins stay on the 10-unit grid (one 100 mil step). Separate groups with a **gap
+of one grid step**; if the body has room to spare, distribute the groups at equal spacing
+instead of stacking them at one end. Leave the body tall enough that the longer side's groups
+fit without crowding — stretching the rectangle is free, a cramped symbol is not.
+
+**Coordinates.** Lower `x` is left, lower `y` is bottom. In this server a pin's `(x, y)` is
+its body-attach end and `orientation` is the direction it points *outward* (see
+[AGENT_GUIDE.md § Pin geometry](AGENT_GUIDE.md#pin-geometry-the-counter-intuitive-one)), so a
+left-side pin at the body's left edge uses `"orientation": "left"` and its tip extends
+further left. The `write_schlib` response echoes each pin's computed `body_end`/`tip`, which is
+the cheapest way to check a layout before opening Altium.
+
+**Explain first.** Before emitting the symbol, list each pin (or group) with the position
+chosen for it and why — a reviewer can correct a plan in one line; a finished symbol costs a
+regeneration.
+
+## Working with Large Libraries
+
+For libraries with many components, use pagination to avoid output limits:
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ LARGE LIBRARY WORKFLOW                                                       │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  1. LIST COMPONENTS (with optional pagination)                              │
+│     AI calls: list_components { filepath, limit: 50, offset: 0 }            │
+│     Returns: { components: [...], total_count: 200, has_more: true }        │
+│                                                                             │
+│  2. FETCH SPECIFIC COMPONENTS                                               │
+│     AI calls: read_pcblib { filepath, component_name: "RESC0603..." }       │
+│     Returns: Single footprint with full details                             │
+│                                                                             │
+│  3. OR PAGINATE THROUGH ALL DETAILS                                         │
+│     AI calls: read_pcblib { filepath, limit: 5, offset: 0 }                 │
+│     Response includes: has_more: true, total_count: 50                      │
+│     AI calls: read_pcblib { filepath, limit: 5, offset: 5 }                 │
+│     ... continues until has_more: false                                     │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Batch Component Creation
+
+The AI can create entire libraries efficiently:
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ BATCH CREATION: 100 components in minutes                                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  User: "Create a resistor library with all standard chip sizes"             │
+│                                                                             │
+│  AI:                                                                        │
+│    1. List standard chip sizes: [0201, 0402, 0603, 0805, 1206, 2512]        │
+│    2. For each size:                                                        │
+│       - Look up body dimensions                                             │
+│       - Apply IPC-7351B formulas                                            │
+│       - Construct pad, track, region primitives                             │
+│    3. Call write_pcblib with all footprints                                 │
+│    4. Verify with read_pcblib                                               │
+│                                                                             │
+│  Result: Complete resistor library created                                  │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Library Management
+
+Beyond creating components, the server has tools for editing, querying, comparing, and
+maintaining existing libraries. Rather than repeat each tool's parameters and example
+responses here (they live in the reference), this maps the common **task** to the right
+tool — full details in **[docs/TOOLS.md](TOOLS.md)**.
+
+| Task | Tool(s) |
+|------|---------|
+| Remove / rename / reorder components | `delete_component`, `rename_component`, `reorder_components`, `bulk_rename` |
+| Copy / merge across libraries | `copy_component`, `copy_component_cross_library`, `merge_libraries` |
+| Edit in place | `update_component`, `update_pad`, `update_primitive`, `batch_update` |
+| SchLib parameters / footprint links | `manage_schlib_parameters`, `manage_schlib_footprints` |
+| Inspect / search / preview | `list_components`, `get_component`, `search_components`, `render_footprint`, `render_symbol` |
+| Compare | `diff_libraries`, `compare_components` |
+| Validate / repair | `validate_library`, `repair_library` |
+| Import / export | `import_library`, `export_library` |
+| Backups | `list_backups`, `restore_backup` |
+
+**Every mutating operation creates a timestamped backup first**, and most editing and
+maintenance tools accept `dry_run: true` to preview changes without writing (see
+[README § Automatic Backups](../README.md#automatic-backups) for the exact lists).
+
+## Tips for AI Assistants
+
+### 1. Apply IPC-7351B Correctly
+
+The AI is responsible for correct calculations:
+
+- Use appropriate density level (M/N/L) for the application
+- Calculate toe, heel, and side extensions
+- Determine courtyard margins
+- Generate correct IPC names
+
+### 2. Use Consistent Style
+
+When creating multiple components:
+
+- Use the same silkscreen line width (typically 0.12mm or 0.15mm)
+- Use the same courtyard margins
+- Place silkscreen outside the pads
+- Use consistent layer assignments
+
+### 3. Verify Dimensions
+
+Before calling write_pcblib:
+
+- Body length > terminal length
+- Pad width and height > 0
+- Courtyard encompasses all pads
+- Silkscreen doesn't overlap pads
+
+### 4. Handle Through-Hole Components
+
+For through-hole pads:
+
+- Set `layer` to "Multi-Layer"
+- Provide `hole_size` in mm
+- Pad size should be hole + annular ring
+
+---
+
+## Error Handling
+
+Failed tool calls return an MCP `ToolCallResult` with `isError: true` — not a bare
+`{"error": …}` object. The exact payload shapes and the full catalogue of error
+messages live in **[docs/errors.md](errors.md)**.
+
+---
+
+## IPC Standards Reference
+
+When calculating footprints, the AI should apply these IPC standards:
+
+### Primary Standards
+
+| Standard | Description | Key Content |
+|----------|-------------|-------------|
+| **IPC-7351B** | Generic Requirements for Surface Mount Design and Land Pattern Standard | Pad dimensions, courtyard, naming conventions |
+| **IPC-2221** | Generic Standard on Printed Board Design | Through-hole annular rings, via sizing |
+| **IPC-2222** | Sectional Design Standard for Rigid Organic Printed Boards | Layer stackup, design rules |
+
+### IPC-7351B Quick Reference
+
+**Density Levels:**
+
+| Level | Name suffix | Application |
+|-------|-------------|-------------|
+| Most | `M` | High-density designs, fine-pitch |
+| Nominal | `N` | Standard manufacturing |
+| Least | `L` | Wave soldering, hand assembly |
+
+**Naming Convention:**
+
+```text
+RESC1608X55N
+│   │    │ └── Density: N=Nominal, M=Most, L=Least
+│   │    └──── Height in 0.01mm (55 = 0.55mm)
+│   └───────── Body size in 0.01mm (1608 = 1.6mm x 0.8mm)
+└───────────── Package type (RESC = Chip Resistor)
+```
+
+**Common Package Codes:**
+
+| Code | Package Type |
+|------|-------------|
+| RESC | Chip Resistor |
+| CAPC | Chip Capacitor |
+| INDC | Chip Inductor |
+| DIOM | Molded Diode |
+| LEDC | Chip LED |
+| SOIC | Small Outline IC |
+| QFP | Quad Flat Package |
+| QFN | Quad Flat No-Lead |
+| BGA | Ball Grid Array |
+| SOT | Small Outline Transistor |
+
+### Official IPC Resources
+
+- **IPC Standards Store**: [shop.ipc.org](https://shop.ipc.org/)
+- **IPC-7351B land-pattern and naming tools**: [PCB Libraries](https://www.pcblibraries.com/)
+  (the Library Expert / LP Calculator product family)
+
+### Additional References
+
+- **JEDEC Package Outlines**: [jedec.org/standards-documents](https://www.jedec.org/standards-documents)
+- **EIA/JEDEC Component Sizes**: Standard chip sizes (0201, 0402, 0603, etc.)

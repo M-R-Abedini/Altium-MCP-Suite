@@ -1,0 +1,136 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "eda-agent"
+version = "0.5.0"
+description = "MCP server for EDA tool automation, currently supports Altium Designer. Around 400 tools for schematic, PCB, and library ops via DelphiScript bridge."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+authors = [
+    { name = "George Saliba", email = "george.saliba@salitronic.com" }
+]
+keywords = ["altium", "mcp", "pcb", "eda", "schematic"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)",
+]
+
+dependencies = [
+    # Floors are tested-known-good; majors are capped because each of these
+    # has broken compatibility across majors before (pydantic v1->v2 most
+    # famously). Bump the cap deliberately, with the test suite green.
+    "mcp>=1.0.0,<2",
+    "pydantic>=2.0,<3",
+    "psutil>=5.9.0,<8",
+    "pywin32>=306; sys_platform == 'win32'",
+    # MSAA and UI Automation, the two accessible layers the UI driving
+    # rests on: ui/controls.py reads oleacc through it and ui/uia.py
+    # reads UIAutomationCore. Both guard the import, so an absent
+    # comtypes turned every dialog read into "unavailable" rather than a
+    # failure, which is the quietest way for a capability to go missing.
+    "comtypes>=1.2,<2; sys_platform == 'win32'",
+    "networkx>=3.0,<4",
+    "numpy>=1.24,<3",
+    # Pure-Python OLE/CFB reader for the headless Altium file parsers
+    # (fileio/): read .SchDoc/.PcbDoc without a running Altium. Tiny, no
+    # native deps; stable API across its 0.4x line.
+    "olefile>=0.46,<1",
+]
+
+[project.optional-dependencies]
+# Render-and-look previews (design/illustrate.py). matplotlib is imported
+# lazily inside the render functions so the core install stays lean; the
+# design tools' optional render_png path degrades to a preview_error note
+# when it is absent. Install this extra to get the PNG previews.
+render = [
+    "matplotlib>=3.5,<4",
+]
+# KiCad backend (EDA_AGENT_BACKEND=kicad / --backend kicad). kipy is the
+# official KiCad IPC client; it is imported lazily inside the bridge so the
+# core install and the Altium backend never need it, and the KiCad tools
+# degrade to a clear "install kicad-python" reason when it is absent. Needs
+# KiCad 9+ with Preferences > Plugins > KiCad API server enabled.
+kicad = [
+    "kicad-python>=0.7",
+]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21",
+    # The illustrate render tests exercise the matplotlib path, so dev
+    # pulls the render extra (CI installs .[dev] only).
+    "matplotlib>=3.5,<4",
+    # The dashboard tests import the Flask app, so dev pulls the web extra
+    # for the same reason.
+    "flask>=3.0",
+]
+# Local HTTP vote UI for pairwise layout preference capture. Flask is
+# the only runtime dep; the rest is stdlib. ~70 KB on disk.
+web = [
+    "flask>=3.0",
+]
+
+[project.scripts]
+eda-agent = "eda_agent.server:main"
+
+[project.urls]
+Homepage = "https://github.com/salitronic/eda-agent"
+Repository = "https://github.com/salitronic/eda-agent"
+Issues = "https://github.com/salitronic/eda-agent/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/eda_agent"]
+# The .pas / .PrjScr files are not recognised as Python package data by
+# default -- force-include them explicitly. The scripts/altium/ tree stays
+# on disk as the dev source of truth; the wheel gets a copy under
+# eda_agent/scripts/ so `eda-agent install-scripts` can find it.
+exclude = [
+    "**/__pycache__",
+    "**/*.pyc",
+    "**/*.pyo",
+    "**/*.tmp.*",
+]
+
+[tool.hatch.build.targets.wheel.force-include]
+"scripts/altium/Main.pas" = "eda_agent/scripts/Main.pas"
+"scripts/altium/Utils.pas" = "eda_agent/scripts/Utils.pas"
+"scripts/altium/Application.pas" = "eda_agent/scripts/Application.pas"
+"scripts/altium/Project.pas" = "eda_agent/scripts/Project.pas"
+"scripts/altium/Library.pas" = "eda_agent/scripts/Library.pas"
+"scripts/altium/PCBGeneric.pas" = "eda_agent/scripts/PCBGeneric.pas"
+"scripts/altium/PCB.pas" = "eda_agent/scripts/PCB.pas"
+"scripts/altium/Generic.pas" = "eda_agent/scripts/Generic.pas"
+"scripts/altium/Audit.pas" = "eda_agent/scripts/Audit.pas"
+"scripts/altium/StatusForm.pas" = "eda_agent/scripts/StatusForm.pas"
+"scripts/altium/StatusForm.dfm" = "eda_agent/scripts/StatusForm.dfm"
+"scripts/altium/Dispatcher.pas" = "eda_agent/scripts/Dispatcher.pas"
+"scripts/altium/SelfTest.pas" = "eda_agent/scripts/SelfTest.pas"
+"scripts/altium/Altium_API.PrjScr" = "eda_agent/scripts/Altium_API.PrjScr"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/eda_agent",
+    "scripts/altium/*.pas",
+    "scripts/altium/*.dfm",
+    "scripts/altium/*.PrjScr",
+    "README.md",
+    "LICENSE",
+    "pyproject.toml",
+]
+exclude = [
+    "**/__pycache__",
+    "**/*.pyc",
+    "**/*.pyo",
+    "**/*.tmp.*",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

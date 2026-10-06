@@ -1,0 +1,661 @@
+name: Release
+
+# Workflow-level permissions are read-only by default; jobs that need
+# elevated scope declare it on the job itself, following least-privilege.
+# Only the `release` job creates the GitHub release and attests artefacts.
+permissions:
+    contents: read
+
+on:
+    push:
+        tags:
+            - "v[0-9]+.[0-9]+.[0-9]+"
+            - "v[0-9]+.[0-9]+.[0-9]+-*"
+
+    # Dry run. Builds, packages, smoke-tests and checksums every artefact
+    # exactly as a real release does, then stops before publishing anything.
+    # A pushed tag is permanent and a published release is public the instant
+    # it exists, so the pipeline is meant to be proven here first — see
+    # docs/RELEASING.md.
+    workflow_dispatch:
+
+# Serialise releases per-tag so re-running a tag (or pushing two tags
+# back-to-back) doesn't race on the same GitHub release page or
+# attestation upload. Don't cancel an in-progress release — half-
+# uploaded artefacts are worse than a queued duplicate.
+concurrency:
+    group: release-${{ github.ref }}
+    cancel-in-progress: false
+
+env:
+    CARGO_TERM_COLOR: always
+    RUSTFLAGS: "-Dwarnings"
+
+jobs:
+    validate:
+        name: Validate Release
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+
+        # Read-only: validate just inspects the tag and Cargo.toml.
+        permissions:
+            contents: read
+
+        outputs:
+            version: ${{ steps.version.outputs.version }}
+            tag: ${{ steps.version.outputs.tag }}
+            is-release: ${{ steps.version.outputs.is-release }}
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                # Full history: the "tag is on main" check below needs the main
+                # branch and the tagged commit in the same clone.
+                fetch-depth: 0
+
+            - name: Determine version
+              id: version
+              shell: bash
+              run: |
+                # Read the [package] version once; both modes need it.
+                CARGO_VERSION=$(awk -F'"' '
+                    /^\[package\]/ { in_pkg = 1; next }
+                    /^\[/          { in_pkg = 0 }
+                    in_pkg && /^version[[:space:]]*=/ { print $2; exit }
+                ' Cargo.toml)
+
+                if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+                    TAG="${GITHUB_REF#refs/tags/}"
+
+                    # Validate tag format
+                    if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-.*)?$ ]]; then
+                        echo "Error: Invalid tag format: $TAG"
+                        echo "Expected format: v0.0.0 or v0.0.0-suffix"
+                        exit 1
+                    fi
+
+                    VERSION="${TAG#v}"
+                    echo "is-release=true" >> "$GITHUB_OUTPUT"
+                else
+                    # Dry run: build the version Cargo.toml currently declares
+                    # and publish nothing.
+                    VERSION="$CARGO_VERSION"
+                    TAG="(dry run)"
+                    echo "is-release=false" >> "$GITHUB_OUTPUT"
+                    echo "::notice::Dry run — artefacts will be built and verified but NOT published."
+                fi
+
+                echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+                echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+                echo "Release version: $VERSION (tag: $TAG)"
+
+            - name: Verify Cargo.toml version matches tag
+              if: steps.version.outputs.is-release == 'true'
+              shell: bash
+              run: |
+                # Extract the version from the [package] section specifically.
+                # Plain `grep '^version'` would also match version pins under
+                # [dependencies] etc.; this awk reads only after [package]
+                # and stops on the first match, so it can't pick up the
+                # wrong key.
+                CARGO_VERSION=$(awk -F'"' '
+                    /^\[package\]/ { in_pkg = 1; next }
+                    /^\[/          { in_pkg = 0 }
+                    in_pkg && /^version[[:space:]]*=/ { print $2; exit }
+                ' Cargo.toml)
+                TAG_VERSION="${{ steps.version.outputs.version }}"
+
+                # For pre-release tags like v0.1.0-rc1, compare base version
+                BASE_TAG_VERSION="${TAG_VERSION%%-*}"
+
+                if [[ "$CARGO_VERSION" != "$BASE_TAG_VERSION" ]]; then
+                    echo "Error: Version mismatch!"
+                    echo "  Cargo.toml: $CARGO_VERSION"
+                    echo "  Tag:        $BASE_TAG_VERSION"
+                    echo ""
+                    echo "Update Cargo.toml version before tagging."
+                    exit 1
+                fi
+
+                echo "Version verified: $CARGO_VERSION"
+
+            # A tag can be pushed from any commit, including one that never sat
+            # on main and never passed CI. Releases are permanent, so refuse to
+            # build one from a commit main does not contain.
+            - name: Verify the tagged commit is on main
+              if: steps.version.outputs.is-release == 'true'
+              shell: bash
+              run: |
+                # Fetch main explicitly rather than relying on the checkout
+                # action having created the remote-tracking ref for it.
+                git fetch --no-tags --quiet origin +refs/heads/main:refs/remotes/origin/main
+
+                if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+                    echo "Error: the tagged commit is not an ancestor of origin/main."
+                    echo "  tagged commit: $GITHUB_SHA"
+                    echo ""
+                    echo "Release only from a commit that has been merged to main"
+                    echo "and has a green CI run."
+                    exit 1
+                fi
+                echo "Tagged commit is on main."
+
+            # Release notes are extracted from CHANGELOG.md at the very end of
+            # this workflow. Without this check a missing entry is only noticed
+            # after ~30 minutes of building, and the release silently publishes
+            # with the placeholder note "Release <version>".
+            - name: Verify CHANGELOG has an entry for this version
+              shell: bash
+              run: |
+                VERSION="${{ steps.version.outputs.version }}"
+                NOTES=$(awk -v ver="## [${VERSION}]" '
+                    index($0, ver) == 1 { found=1; next }
+                    found && /^## \[/ { exit }
+                    found { print }
+                ' CHANGELOG.md | tr -d '[:space:]')
+
+                if [[ -n "$NOTES" ]]; then
+                    echo "CHANGELOG entry found for ${VERSION}."
+                    exit 0
+                fi
+
+                MSG="CHANGELOG.md has no non-empty '## [${VERSION}]' section."
+                if [[ "${{ steps.version.outputs.is-release }}" == "true" ]]; then
+                    echo "Error: $MSG"
+                    echo ""
+                    echo "Stamp the heading (and its date) before tagging, so the"
+                    echo "published release notes are the real changelog entry."
+                    exit 1
+                fi
+                # Dry runs are expected to happen before the heading is stamped,
+                # so this is informational there rather than fatal.
+                echo "::warning::${MSG} Fine for a dry run; it will block the real tag."
+
+            # Fail fast rather than discovering the collision in `gh release
+            # create` after the whole matrix has built.
+            - name: Verify the release does not already exist
+              if: steps.version.outputs.is-release == 'true'
+              shell: bash
+              env:
+                GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                TAG="${{ steps.version.outputs.tag }}"
+                if gh release view "$TAG" >/dev/null 2>&1; then
+                    echo "Error: a GitHub release for $TAG already exists."
+                    echo "Releases are not overwritten by this workflow."
+                    exit 1
+                fi
+                echo "No existing release for $TAG."
+
+    build:
+        name: Build (${{ matrix.target }})
+        needs: validate
+        timeout-minutes: 30
+
+        # Read-only: build compiles + uploads artefacts to the workflow's
+        # ephemeral artifact store (no write to repo or releases).
+        permissions:
+            contents: read
+
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - os: ubuntu-latest
+                      target: x86_64-unknown-linux-gnu
+                      artifact: altium-designer-mcp-linux-x86_64
+                      binary: altium-designer-mcp
+
+                    - os: macos-latest
+                      target: aarch64-apple-darwin
+                      artifact: altium-designer-mcp-macos-aarch64
+                      binary: altium-designer-mcp
+
+                    - os: windows-latest
+                      target: x86_64-pc-windows-msvc
+                      artifact: altium-designer-mcp-windows-x86_64
+                      binary: altium-designer-mcp.exe
+
+        runs-on: ${{ matrix.os }}
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+            - name: Install Rust toolchain
+              uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # v1.95.0 (latest stable)
+              with:
+                targets: ${{ matrix.target }}
+
+            # No caching for release builds - they're one-off events triggered by
+            # version tags, so caches would never be reused and just waste storage
+
+            # --locked: resolve dependencies exactly as the committed
+            # Cargo.lock pins them, so all three platform binaries embed the
+            # identical set and a rebuild of the tag reproduces it. A stale
+            # lockfile fails the build here rather than shipping a silently
+            # different dependency tree.
+            - name: Build release binary
+              shell: bash
+              run: cargo build --locked --release --target ${{ matrix.target }} --verbose
+
+            - name: Run tests
+              shell: bash
+              run: cargo test --locked --release --target ${{ matrix.target }} --verbose
+
+            - name: Prepare artifact (Unix)
+              if: runner.os != 'Windows'
+              shell: bash
+              run: |
+                mkdir -p dist/docs
+                cp target/${{ matrix.target }}/release/${{ matrix.binary }} dist/
+                cp LICENCE CHANGELOG.md dist/
+                cp config/example-config.json dist/
+                cp docs/AGENT_GUIDE.md docs/TOOLS.md dist/docs/
+                cp docs/CLIENT_SETUP.md docs/USAGE.md dist/docs/
+
+                # A bundle-specific README rather than the repository's own:
+                # someone unpacking a binary wants install and verification
+                # steps, not the contributor-facing project page.
+                sed "s/@VERSION@/${{ needs.validate.outputs.tag }}/g" .github/release-assets/README.md > dist/README.md
+                cd dist
+                tar -czvf ../${{ matrix.artifact }}.tar.gz *
+
+            - name: Verify archive contents and run the packaged binary (Unix)
+              if: runner.os != 'Windows'
+              shell: bash
+              env:
+                EXPECTED_VERSION: ${{ needs.validate.outputs.version }}
+              run: |
+                # Unpack into a clean directory and exercise *that* copy, so the
+                # thing being checked is the artefact users download rather than
+                # the build tree it came from.
+                mkdir -p verify && tar -xzf ${{ matrix.artifact }}.tar.gz -C verify
+
+                for f in ${{ matrix.binary }} README.md LICENCE CHANGELOG.md \
+                         example-config.json docs/AGENT_GUIDE.md docs/TOOLS.md \
+                         docs/CLIENT_SETUP.md docs/USAGE.md; do
+                    if [[ ! -e "verify/$f" ]]; then
+                        echo "Error: $f missing from ${{ matrix.artifact }}"
+                        exit 1
+                    fi
+                done
+
+                chmod +x "verify/${{ matrix.binary }}"
+                OUT="$(verify/${{ matrix.binary }} --version)"
+                echo "Packaged binary reports: $OUT"
+
+                # Pre-release tags (0.1.0-rc1) carry a suffix the crate version
+                # does not, so compare against the base version.
+                if [[ "$OUT" != *"${EXPECTED_VERSION%%-*}"* ]]; then
+                    echo "Error: expected version ${EXPECTED_VERSION%%-*} in --version output"
+                    exit 1
+                fi
+
+            - name: Prepare artifact (Windows)
+              if: runner.os == 'Windows'
+              shell: bash
+              run: |
+                mkdir -p dist/docs
+                cp target/${{ matrix.target }}/release/${{ matrix.binary }} dist/
+                cp LICENCE CHANGELOG.md dist/
+                cp config/example-config.json dist/
+                cp docs/AGENT_GUIDE.md docs/TOOLS.md dist/docs/
+                cp docs/CLIENT_SETUP.md docs/USAGE.md dist/docs/
+
+                # A bundle-specific README rather than the repository's own:
+                # someone unpacking a binary wants install and verification
+                # steps, not the contributor-facing project page.
+                sed "s/@VERSION@/${{ needs.validate.outputs.tag }}/g" .github/release-assets/README.md > dist/README.md
+                cd dist
+                7z a -tzip ../${{ matrix.artifact }}.zip *
+
+            - name: Verify archive contents and run the packaged binary (Windows)
+              if: runner.os == 'Windows'
+              shell: bash
+              env:
+                EXPECTED_VERSION: ${{ needs.validate.outputs.version }}
+              run: |
+                mkdir -p verify && 7z x -overify ${{ matrix.artifact }}.zip >/dev/null
+
+                for f in ${{ matrix.binary }} README.md LICENCE CHANGELOG.md \
+                         example-config.json docs/AGENT_GUIDE.md docs/TOOLS.md \
+                         docs/CLIENT_SETUP.md docs/USAGE.md; do
+                    if [[ ! -e "verify/$f" ]]; then
+                        echo "Error: $f missing from ${{ matrix.artifact }}"
+                        exit 1
+                    fi
+                done
+
+                OUT="$(verify/${{ matrix.binary }} --version)"
+                echo "Packaged binary reports: $OUT"
+
+                if [[ "$OUT" != *"${EXPECTED_VERSION%%-*}"* ]]; then
+                    echo "Error: expected version ${EXPECTED_VERSION%%-*} in --version output"
+                    exit 1
+                fi
+
+            - name: Upload artifact (Unix)
+              if: runner.os != 'Windows'
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                name: ${{ matrix.artifact }}
+                path: ${{ matrix.artifact }}.tar.gz
+                # A week, so a dry run's artefacts can be downloaded and
+                # inspected by hand before anyone tags.
+                retention-days: 7
+
+            - name: Upload artifact (Windows)
+              if: runner.os == 'Windows'
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                name: ${{ matrix.artifact }}
+                path: ${{ matrix.artifact }}.zip
+                retention-days: 7
+
+    bundle:
+        name: Bundle Claude Desktop extension
+        needs: [validate, build]
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+
+        # Read-only: assembles the extension from the build artefacts and
+        # uploads it to the workflow's ephemeral artifact store.
+        permissions:
+            contents: read
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+            - name: Download all artifacts
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+              with:
+                path: artifacts
+
+            # One cross-platform bundle: the manifest's platform_overrides pick
+            # the right binary at install time, so a single download works on
+            # macOS, Windows and Linux alike.
+            - name: Assemble the extension layout
+              shell: bash
+              run: |
+                set -euo pipefail
+                mkdir -p bundle/server/win32 bundle/server/darwin bundle/server/linux
+
+                tar -xzf artifacts/altium-designer-mcp-linux-x86_64/altium-designer-mcp-linux-x86_64.tar.gz \
+                    -C bundle/server/linux altium-designer-mcp
+                tar -xzf artifacts/altium-designer-mcp-macos-aarch64/altium-designer-mcp-macos-aarch64.tar.gz \
+                    -C bundle/server/darwin altium-designer-mcp
+                unzip -q -j artifacts/altium-designer-mcp-windows-x86_64/altium-designer-mcp-windows-x86_64.zip \
+                    altium-designer-mcp.exe -d bundle/server/win32
+                chmod +x bundle/server/linux/altium-designer-mcp \
+                         bundle/server/darwin/altium-designer-mcp
+
+                # Stamp the manifest with the release version — the same
+                # @VERSION@ convention the release README uses.
+                sed "s/@VERSION@/${{ needs.validate.outputs.version }}/g" \
+                    .github/release-assets/mcpb-manifest.json > bundle/manifest.json
+                cp .github/release-assets/icon.png bundle/icon.png
+
+            # The official packer validates the manifest against the MCPB
+            # schema while zipping. Version-pinned like every action here.
+            # The .dxt twin is the identical bundle under the format's old
+            # name, so older Claude Desktop builds install it too.
+            - name: Pack .mcpb and its .dxt twin
+              shell: bash
+              run: |
+                npx --yes @anthropic-ai/mcpb@2.1.2 pack bundle altium-designer-mcp.mcpb
+                cp altium-designer-mcp.mcpb altium-designer-mcp.dxt
+
+            - name: Verify the packed extension
+              shell: bash
+              env:
+                EXPECTED_VERSION: ${{ needs.validate.outputs.version }}
+              run: |
+                set -euo pipefail
+                # The two names must be byte-identical.
+                cmp altium-designer-mcp.mcpb altium-designer-mcp.dxt
+
+                mkdir -p verify-mcpb && unzip -q altium-designer-mcp.mcpb -d verify-mcpb
+                for f in manifest.json icon.png \
+                         server/win32/altium-designer-mcp.exe \
+                         server/darwin/altium-designer-mcp \
+                         server/linux/altium-designer-mcp; do
+                    if [[ ! -e "verify-mcpb/$f" ]]; then
+                        echo "Error: $f missing from the extension bundle"
+                        exit 1
+                    fi
+                done
+
+                grep -q "\"version\": \"${EXPECTED_VERSION}\"" verify-mcpb/manifest.json
+
+                # Run the binary the bundle actually carries, then speak MCP to
+                # it with the exact arguments the manifest starts it with.
+                chmod +x verify-mcpb/server/linux/altium-designer-mcp
+                OUT="$(verify-mcpb/server/linux/altium-designer-mcp --version)"
+                echo "Bundled binary reports: $OUT"
+                if [[ "$OUT" != *"${EXPECTED_VERSION%%-*}"* ]]; then
+                    echo "Error: expected version ${EXPECTED_VERSION%%-*} in --version output"
+                    exit 1
+                fi
+
+                mkdir -p smoke-libs
+                printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"release-smoke","version":"0"}}}\n' \
+                    | verify-mcpb/server/linux/altium-designer-mcp --allow smoke-libs \
+                    | grep -q '"jsonrpc":"2.0"'
+                echo "Bundled binary answers MCP initialize under --allow."
+
+            - name: Upload extension artifact
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                name: altium-designer-mcp-extension
+                path: |
+                    altium-designer-mcp.mcpb
+                    altium-designer-mcp.dxt
+                retention-days: 7
+
+    release:
+        name: Create Release
+        needs: [validate, build, bundle]
+        # Dry runs stop here: everything above has built, been unpacked, run and
+        # checksummed, but nothing is published.
+        if: needs.validate.outputs.is-release == 'true'
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+
+        # The only job that needs elevated scope:
+        # - `contents: write` to create the GitHub release
+        # - `id-token: write` + `attestations: write` for SLSA build provenance
+        permissions:
+            contents: write
+            id-token: write
+            attestations: write
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+            - name: Download all artifacts
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+              with:
+                path: artifacts
+
+            - name: List artifacts
+              run: find artifacts -type f
+
+            # Guards against publishing a partial release. `needs: build` already
+            # fails the job if a matrix leg fails, but this also catches a leg
+            # that succeeded while uploading nothing (a mis-set path, a renamed
+            # artefact), which would otherwise ship a release silently missing
+            # one platform.
+            - name: Verify every platform artefact is present
+              shell: bash
+              run: |
+                missing=0
+                for expected in \
+                    altium-designer-mcp-linux-x86_64.tar.gz \
+                    altium-designer-mcp-macos-aarch64.tar.gz \
+                    altium-designer-mcp-windows-x86_64.zip \
+                    altium-designer-mcp.mcpb \
+                    altium-designer-mcp.dxt; do
+                    if ! find artifacts -type f -name "$expected" | grep -q .; then
+                        echo "Error: missing artefact $expected"
+                        missing=1
+                    fi
+                done
+                [[ $missing -eq 0 ]] || exit 1
+                echo "All platform artefacts and the extension bundle present."
+
+            - name: Generate checksums
+              shell: bash
+              run: |
+                cd artifacts
+                find . -type f \( -name "*.tar.gz" -o -name "*.zip" \
+                    -o -name "*.mcpb" -o -name "*.dxt" \) -exec mv {} . \;
+                sha256sum *.tar.gz *.zip *.mcpb *.dxt > SHA256SUMS.txt
+                cat SHA256SUMS.txt
+
+                # Read the file back and re-hash: the checksums published beside
+                # the binaries are the one thing a user can verify a download
+                # against, so prove they match before anyone relies on them.
+                sha256sum --check --strict SHA256SUMS.txt
+
+            # SLSA build provenance: signs a statement binding each artefact's
+            # digest to this workflow, commit and runner, verifiable offline-ish
+            # with `gh attestation verify`. SHA256SUMS.txt is a subject too —
+            # otherwise the file everyone is told to check their download
+            # against is the one file with no provenance of its own.
+            - name: Attest build provenance
+              uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+              with:
+                subject-path: |
+                    artifacts/*.tar.gz
+                    artifacts/*.zip
+                    artifacts/*.mcpb
+                    artifacts/*.dxt
+                    artifacts/SHA256SUMS.txt
+
+            - name: Extract release notes from CHANGELOG
+              id: release-notes
+              shell: bash
+              run: |
+                VERSION="${{ needs.validate.outputs.version }}"
+
+                # Extract release notes for this version from CHANGELOG.md
+                # Uses awk with index() for literal string matching (avoids regex escaping issues)
+                awk -v ver="## [${VERSION}]" '
+                    index($0, ver) == 1 { found=1; next }
+                    found && /^## \[/ { exit }
+                    found { print }
+                ' CHANGELOG.md > release_notes.md
+
+                # Trim leading/trailing blank lines
+                sed -i '/./,$!d' release_notes.md
+                sed -i ':a;/^[[:space:]]*$/{$d;N;ba}' release_notes.md
+
+                if [[ -s release_notes.md ]]; then
+                    echo "Found release notes in CHANGELOG.md:"
+                else
+                    echo "No CHANGELOG entry for ${VERSION}, using default"
+                    echo "Release ${VERSION}" > release_notes.md
+                fi
+
+                # Append verification instructions to every release. Provenance
+                # nobody knows how to check is decoration, and the release body
+                # is the one place a downloader is guaranteed to look. Generated
+                # here rather than kept in CHANGELOG.md so the changelog stays a
+                # record of changes.
+                # (Built with echo rather than a heredoc: heredoc bodies sit at
+                # column 0, which would end this YAML block scalar.)
+                {
+                    echo ""
+                    echo "---"
+                    echo ""
+                    echo "## Claude Desktop one-click install"
+                    echo ""
+                    echo "Download \`altium-designer-mcp.mcpb\` (older Claude Desktop"
+                    echo "builds: the identical bundle as \`altium-designer-mcp.dxt\`),"
+                    echo "then Claude Desktop → Settings → **Extensions** → **Advanced"
+                    echo "settings** → **Install Extension…**, pick the file and choose"
+                    echo "your library folders. One bundle carries the binary for macOS,"
+                    echo "Windows and Linux."
+                    echo ""
+                    echo "## Verifying this download"
+                    echo ""
+                    echo "Every archive is built by GitHub Actions from a tagged commit and"
+                    echo "carries a signed [SLSA build provenance](https://slsa.dev/)"
+                    echo "attestation. To confirm an archive really came from this"
+                    echo "repository's release workflow:"
+                    echo ""
+                    echo '```bash'
+                    echo "gh attestation verify <archive> --repo ${GITHUB_REPOSITORY}"
+                    echo '```'
+                    echo ""
+                    echo "To check a download is byte-for-byte intact:"
+                    echo ""
+                    echo '```bash'
+                    echo "sha256sum --check --ignore-missing SHA256SUMS.txt"
+                    echo '```'
+                    echo ""
+                    echo "The binaries are unsigned, so Windows SmartScreen and macOS"
+                    echo "Gatekeeper will warn on first run; on macOS use right-click →"
+                    echo "Open. The attestation above is the stronger check either way."
+                } >> release_notes.md
+
+                echo "--- Release Notes ---"
+                cat release_notes.md
+
+            - name: Create GitHub Release
+              shell: bash
+              env:
+                GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                TAG="${{ needs.validate.outputs.tag }}"
+                VERSION="${{ needs.validate.outputs.version }}"
+
+                # Build the flag list as an array so empty entries don't
+                # rely on shell word-splitting (shellcheck-friendly,
+                # robust if values ever contain spaces). A pre-release tag
+                # (version containing '-', e.g. v0.2.0-rc1) must NOT be
+                # marked --latest, or it would surface to users as the
+                # current stable release.
+                RELEASE_FLAGS=()
+                if [[ "$VERSION" == *-* ]]; then
+                    RELEASE_FLAGS+=(--prerelease --latest=false)
+                else
+                    RELEASE_FLAGS+=(--latest)
+                fi
+
+                # Created as a DRAFT on purpose. Everything above is automated
+                # and verified, but publishing is the one step that cannot be
+                # taken back: the moment a release is public it is mirrored,
+                # scraped and downloaded, and deleting it afterwards leaves
+                # dangling links rather than undoing anything. A draft is
+                # private to maintainers and can be deleted without trace, so
+                # the last action is a human opening the draft, checking the
+                # notes and the three archives, and pressing Publish.
+                # See docs/RELEASING.md.
+                gh release create "$TAG" \
+                    --draft \
+                    --title "$TAG" \
+                    --notes-file release_notes.md \
+                    "${RELEASE_FLAGS[@]}" \
+                    artifacts/*.tar.gz \
+                    artifacts/*.zip \
+                    artifacts/*.mcpb \
+                    artifacts/*.dxt \
+                    artifacts/SHA256SUMS.txt
+
+                echo "Draft release created: $TAG"
+                echo "Review it, then publish:  gh release edit $TAG --draft=false"
+
+                {
+                    echo "### Draft release \`$TAG\` is ready"
+                    echo ""
+                    echo "Nothing is public yet. Review the draft, then publish with:"
+                    echo ""
+                    echo '```'
+                    echo "gh release edit $TAG --draft=false"
+                    echo '```'
+                } >> "$GITHUB_STEP_SUMMARY"

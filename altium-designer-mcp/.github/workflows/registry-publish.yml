@@ -1,0 +1,102 @@
+name: Publish to MCP Registry
+
+# Lists the release's Claude Desktop bundle in the official MCP Registry
+# (https://registry.modelcontextprotocol.io) as
+# io.github.embedded-society/altium-designer-mcp, so client server browsers
+# find it. Runs when a release is published — a draft becoming public — or
+# by hand for a given tag.
+#
+# Authentication is GitHub's OIDC token: the registry grants an organisation
+# namespace to a workflow running in that organisation's own repository, so
+# no personal token or OAuth app is involved. The published server.json is
+# .github/release-assets/server.json stamped with the version and the
+# bundle's SHA-256, which is re-derived from the release asset itself and
+# checked against the SHA256SUMS.txt published beside it.
+
+permissions:
+    contents: read
+
+on:
+    release:
+        types: [published]
+    workflow_dispatch:
+        inputs:
+            tag:
+                description: "Release tag to publish (for example v1.0.0)"
+                required: true
+                type: string
+
+concurrency:
+    group: registry-publish-${{ github.event.release.tag_name || inputs.tag }}
+    cancel-in-progress: false
+
+jobs:
+    publish:
+        name: Publish server.json
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+
+        # id-token: write is what `mcp-publisher login github-oidc` needs.
+        permissions:
+            contents: read
+            id-token: write
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+            - name: Stamp server.json from the release
+              shell: bash
+              env:
+                GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                TAG: ${{ github.event.release.tag_name || inputs.tag }}
+              run: |
+                set -euo pipefail
+                VERSION="${TAG#v}"
+                gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
+                    --pattern altium-designer-mcp.mcpb --pattern SHA256SUMS.txt
+                # The asset must match the checksum published beside it.
+                sha256sum --check --ignore-missing --strict SHA256SUMS.txt
+                SHA="$(sha256sum altium-designer-mcp.mcpb | cut -d' ' -f1)"
+                sed -e "s/@VERSION@/${VERSION}/g" -e "s/@SHA256@/${SHA}/g" \
+                    .github/release-assets/server.json > server.json
+                cat server.json
+
+            # Installed from its pinned release archive with a checksum check,
+            # like lychee in CI: the repository allow-lists actions, and a
+            # binary that publishes on our behalf deserves the same pinning.
+            - name: Install mcp-publisher
+              shell: bash
+              env:
+                MCP_PUBLISHER_VERSION: "1.8.1"
+                MCP_PUBLISHER_SHA256: "a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc"
+              run: |
+                set -euo pipefail
+                curl -sSfL -o mcp-publisher.tar.gz \
+                    "https://github.com/modelcontextprotocol/registry/releases/download/v${MCP_PUBLISHER_VERSION}/mcp-publisher_linux_amd64.tar.gz"
+                echo "${MCP_PUBLISHER_SHA256}  mcp-publisher.tar.gz" | sha256sum --check --strict
+                tar -xzf mcp-publisher.tar.gz mcp-publisher
+                ./mcp-publisher --version
+
+            - name: Validate server.json
+              shell: bash
+              run: ./mcp-publisher validate server.json
+
+            - name: Publish
+              shell: bash
+              run: |
+                set -euo pipefail
+                ./mcp-publisher login github-oidc
+                ./mcp-publisher publish server.json
+
+            - name: Confirm the listing
+              shell: bash
+              env:
+                TAG: ${{ github.event.release.tag_name || inputs.tag }}
+              run: |
+                set -euo pipefail
+                VERSION="${TAG#v}"
+                LISTING="$(curl -sSf "https://registry.modelcontextprotocol.io/v0/servers?search=altium-designer-mcp")"
+                echo "$LISTING" | grep -q "\"version\":\"${VERSION}\"" \
+                    || { echo "Error: version ${VERSION} not found in the registry listing"; echo "$LISTING"; exit 1; }
+                echo "Registry lists io.github.embedded-society/altium-designer-mcp ${VERSION}."

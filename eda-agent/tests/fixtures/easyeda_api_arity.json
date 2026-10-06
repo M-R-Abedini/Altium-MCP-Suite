@@ -1,0 +1,347 @@
+{
+  "source": "https://github.com/easyeda/easyeda-api-skill references/classes",
+  "captured": "2026-08-06",
+  "note": "Required and total parameter counts for the EasyEDA methods this extension calls, read off their published signatures. Only methods whose signature was actually fetched are listed; a method absent here is not checked rather than assumed. Refresh alongside easyeda_api_surface.json.",
+  "signatures": {
+    "PCB_PrimitiveLine.create": {
+      "required": 6,
+      "total": 8
+    },
+    "PCB_PrimitiveArc.create": {
+      "required": 7,
+      "total": 10
+    },
+    "PCB_PrimitiveVia.create": {
+      "required": 5,
+      "total": 9
+    },
+    "PCB_PrimitiveString.create": {
+      "required": 13,
+      "total": 13
+    },
+    "PCB_PrimitivePour.create": {
+      "required": 3,
+      "total": 9
+    },
+    "PCB_MathPolygon.createPolygon": {
+      "required": 1,
+      "total": 1
+    },
+    "PCB_PrimitiveComponent.create": {
+      "required": 4,
+      "total": 6
+    },
+    "PCB_PrimitiveComponent.modify": {
+      "required": 2,
+      "total": 2
+    },
+    "SCH_PrimitiveComponent.create": {
+      "required": 3,
+      "total": 8
+    },
+    "SCH_PrimitiveComponent.modify": {
+      "required": 2,
+      "total": 2
+    },
+    "SCH_PrimitiveComponent.createNetPort": {
+      "required": 4,
+      "total": 6
+    },
+    "SCH_PrimitiveComponent.createNetFlag": {
+      "required": 4,
+      "total": 6
+    },
+    "SCH_PrimitiveAttribute.createNetLabel": {
+      "required": 3,
+      "total": 3
+    },
+    "SCH_PrimitiveText.create": {
+      "required": 3,
+      "total": 11
+    },
+    "SCH_PrimitiveRectangle.create": {
+      "required": 4,
+      "total": 11
+    },
+    "SCH_PrimitiveWire.create": {
+      "required": 1,
+      "total": 5
+    },
+    "PCB_Drc.createNetClass": {
+      "required": 3,
+      "total": 3
+    },
+    "PCB_Drc.addNetToNetClass": {
+      "required": 2,
+      "total": 2
+    },
+    "PCB_Drc.createDifferentialPair": {
+      "required": 3,
+      "total": 3
+    },
+    "PCB_Drc.createEqualLengthNetGroup": {
+      "required": 3,
+      "total": 3
+    },
+    "PCB_Drc.addNetToEqualLengthNetGroup": {
+      "required": 2,
+      "total": 2
+    },
+    "PCB_Drc.getNetRules": {
+      "required": 0,
+      "total": 0
+    },
+    "PCB_Layer.setTheNumberOfCopperLayers": {
+      "required": 1,
+      "total": 1
+    },
+    "PCB_Layer.addCustomLayer": {
+      "required": 0,
+      "total": 0
+    },
+    "PCB_Layer.removeLayer": {
+      "required": 1,
+      "total": 1
+    },
+    "PCB_Layer.modifyLayer": {
+      "required": 2,
+      "total": 2
+    },
+    "PCB_Layer.setLayerVisible": {
+      "required": 0,
+      "total": 2
+    },
+    "PCB_Layer.setLayerInvisible": {
+      "required": 0,
+      "total": 2
+    },
+    "PCB_Layer.lockLayer": {
+      "required": 0,
+      "total": 1
+    },
+    "PCB_Layer.unlockLayer": {
+      "required": 0,
+      "total": 1
+    },
+    "PCB_Layer.selectLayer": {
+      "required": 1,
+      "total": 1
+    },
+    "PCB_Document.importChanges": {
+      "required": 0,
+      "total": 1
+    },
+    "PCB_Document.zoomToBoardOutline": {
+      "required": 0,
+      "total": 0
+    },
+    "DMT_Project.createProject": {
+      "required": 1,
+      "total": 6
+    },
+    "DMT_Project.openProject": {
+      "required": 1,
+      "total": 1
+    },
+    "DMT_Project.getProjectInfo": {
+      "required": 1,
+      "total": 1
+    },
+    "DMT_Project.getAllProjectsUuid": {
+      "required": 0,
+      "total": 0
+    },
+    "PCB_PrimitiveLine.delete": {
+      "required": 1,
+      "total": 1
+    },
+    "PCB_PrimitiveArc.delete": {
+      "required": 1,
+      "total": 1
+    },
+    "PCB_PrimitiveVia.delete": {
+      "required": 1,
+      "total": 1
+    },
+    "PCB_PrimitiveString.delete": {
+      "required": 1,
+      "total": 1
+    },
+    "PCB_PrimitivePour.delete": {
+      "required": 1,
+      "total": 1
+    },
+    "PCB_ManufactureData.getPdfFile": {
+      "required": 0,
+      "total": 5
+    },
+    "PCB_ManufactureData.getPickAndPlaceFile": {
+      "required": 0,
+      "total": 3
+    },
+    "PCB_ManufactureData.getTestPointFile": {
+      "required": 0,
+      "total": 2
+    },
+    "PCB_ManufactureData.getDsnFile": {
+      "required": 0,
+      "total": 1
+    },
+    "PCB_ManufactureData.getFlyingProbeTestFile": {
+      "required": 0,
+      "total": 1
+    },
+    "PCB_ManufactureData.getGerberFile": {
+      "required": 0,
+      "total": 7
+    },
+    "LIB_Symbol.create": {
+      "required": 2,
+      "total": 5
+    },
+    "LIB_Footprint.create": {
+      "required": 2,
+      "total": 4
+    },
+    "LIB_Device.create": {
+      "required": 2,
+      "total": 6
+    },
+    "SCH_PrimitiveCircle.create": {
+      "required": 3,
+      "total": 8
+    },
+    "SCH_PrimitivePolygon.create": {
+      "required": 1,
+      "total": 5
+    },
+    "SCH_SelectControl.doSelectPrimitives": {
+      "required": 1,
+      "total": 1
+    },
+    "SCH_SelectControl.clearSelected": {
+      "required": 0,
+      "total": 0
+    },
+    "SCH_SelectControl.getAllSelectedPrimitives": {
+      "required": 0,
+      "total": 0
+    },
+    "LIB_Symbol.openInEditor": {
+      "required": 2,
+      "total": 3
+    },
+    "LIB_Footprint.openInEditor": {
+      "required": 2,
+      "total": 3
+    },
+    "LIB_Symbol.modify": {
+      "required": 2,
+      "total": 5
+    },
+    "LIB_Footprint.modify": {
+      "required": 2,
+      "total": 5
+    },
+    "LIB_Symbol.copy": {
+      "required": 3,
+      "total": 5
+    },
+    "LIB_Footprint.copy": {
+      "required": 3,
+      "total": 5
+    },
+    "PCB_PrimitivePolyline.create": {
+      "required": 3,
+      "total": 5
+    },
+    "PCB_SelectControl.doSelectPrimitives": {
+      "required": 1,
+      "total": 1
+    },
+    "PCB_Document.navigateToCoordinates": {
+      "required": 2,
+      "total": 2
+    },
+    "SCH_PrimitiveArc.create": {
+      "required": 6,
+      "total": 10
+    },
+    "LIB_Classification.getAllClassificationTree": {
+      "required": 2,
+      "total": 2
+    },
+    "PCB_PrimitiveObject.getAll": {
+      "required": 0,
+      "total": 2
+    },
+    "SYS_FileManager.getDocumentSource": {
+      "required": 0,
+      "total": 0
+    },
+    "SYS_FileManager.setDocumentSource": {
+      "required": 1,
+      "total": 1
+    },
+    "DMT_Schematic.createSchematic": {
+      "required": 0,
+      "total": 1
+    },
+    "DMT_Schematic.createSchematicPage": {
+      "required": 1,
+      "total": 1
+    },
+    "DMT_Schematic.modifySchematicPageTitleBlock": {
+      "required": 0,
+      "total": 2
+    },
+    "DMT_Pcb.createPcb": {
+      "required": 0,
+      "total": 1
+    },
+    "DMT_Workspace.getAllWorkspacesInfo": {
+      "required": 0,
+      "total": 0
+    },
+    "DMT_Workspace.getCurrentWorkspaceInfo": {
+      "required": 0,
+      "total": 0
+    },
+    "LIB_Device.get": {
+      "required": 1,
+      "total": 2
+    },
+    "LIB_Device.copy": {
+      "required": 3,
+      "total": 5
+    },
+    "LIB_Device.delete": {
+      "required": 2,
+      "total": 2
+    },
+    "PCB_PrimitivePad.create": {
+      "required": 4,
+      "total": 17
+    },
+    "SCH_PrimitivePin.create": {
+      "required": 3,
+      "total": 9
+    },
+    "PCB_PrimitiveFill.create": {
+      "required": 2,
+      "total": 6
+    },
+    "PCB_PrimitiveRegion.create": {
+      "required": 2,
+      "total": 6
+    },
+    "PCB_PrimitiveDimension.create": {
+      "required": 2,
+      "total": 7
+    },
+    "SCH_PrimitiveBus.create": {
+      "required": 2,
+      "total": 5
+    }
+  }
+}

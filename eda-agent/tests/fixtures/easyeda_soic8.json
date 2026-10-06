@@ -1,0 +1,41 @@
+{
+  "success": true,
+  "result": {
+    "code": "C7420",
+    "description": "Generic dual-row 8-pin test part",
+    "szlcsc": { "code": "C7420", "url": "https://example.invalid/ds.pdf" },
+    "dataStr": {
+      "head": {
+        "x": 400,
+        "y": 300,
+        "c_para": {
+          "pre": "U?",
+          "name": "TESTPART-8",
+          "Manufacturer": "ExampleSemi",
+          "Manufacturer Part": "TESTPART-8",
+          "package": "SOIC-8_TEST"
+        }
+      },
+      "shape": [
+        "R~380~280~0~0~40~60~#880000~1~0~none~gge1~0",
+        "P~show~1~1~370~290~180~gge10~0^^370~290^^M370,290h10~#880000^^1~360~290~0~IN1~end~~~#0000FF^^1~372~287~0~1~start~~~#0000FF^^0~365~290^^0~",
+        "P~show~2~2~430~290~0~gge11~0^^430~290^^M430,290h-10~#880000^^1~440~290~0~OUT1~start~~~#0000FF^^1~428~287~0~2~end~~~#0000FF^^0~435~290^^0~"
+      ]
+    },
+    "packageDetail": {
+      "title": "SOIC-8_TEST",
+      "dataStr": {
+        "head": { "x": 4000, "y": 3000 },
+        "shape": [
+          "PAD~RECT~3985~2985~20~6~1~~1~0~~0~gge100~0~~Y",
+          "PAD~RECT~4015~2985~20~6~1~~2~0~~0~gge101~0~~Y",
+          "PAD~ELLIPSE~3985~3015~12~12~11~~3~4~~0~gge102~0~~Y",
+          "TRACK~1~3~~3980 2980 4020 2980~gge200~0",
+          "CIRCLE~3975~2975~3~1~3~gge201~0",
+          "TEXT~L~3990~2970~1~0~0~3~~6~TESTPART~~1~gge202~0",
+          "HOLE~4000~3000~10~gge203~0"
+        ]
+      }
+    }
+  }
+}

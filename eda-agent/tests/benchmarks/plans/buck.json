@@ -1,0 +1,425 @@
+{
+  "spec": "12 V to 5 V / 2 A synchronous-input buck converter module",
+  "summary": "Fictional 8-pin buck controller with external inductor and catch diode; input and output capacitor banks, resistive feedback divider with feed-forward cap, bootstrap cap, and an RC snubber on the switch node.",
+  "topology": "buck",
+  "sheets": [
+    {
+      "name": "main",
+      "title": "Buck 12V->5V",
+      "size": "A4"
+    }
+  ],
+  "zones": [
+    {
+      "name": "power_in",
+      "sheet": "main",
+      "role": "power_in"
+    },
+    {
+      "name": "switcher",
+      "sheet": "main",
+      "role": "smps"
+    },
+    {
+      "name": "output",
+      "sheet": "main",
+      "role": "power_out"
+    },
+    {
+      "name": "feedback",
+      "sheet": "main",
+      "role": "feedback"
+    }
+  ],
+  "parts": [
+    {
+      "refdes": "U1",
+      "lib_ref": "BUCK8",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "FS2576",
+      "footprint": "SOIC8",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-BUCK8-U1",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "switcher",
+      "role": "ic",
+      "datasheet_url": "https://datasheets.example.com/buck8.pdf"
+    },
+    {
+      "refdes": "L1",
+      "lib_ref": "IND_PWR",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "33uH",
+      "footprint": "IND_PWR",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-IND_PWR-L1",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "switcher",
+      "role": "inductor",
+      "datasheet_url": "https://datasheets.example.com/ind_pwr.pdf"
+    },
+    {
+      "refdes": "D1",
+      "lib_ref": "DIODE_SMA",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "SS34",
+      "footprint": "SMA_DIODE",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-DIODE_SMA-D1",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "switcher",
+      "role": "catch_diode",
+      "datasheet_url": "https://datasheets.example.com/diode_sma.pdf"
+    },
+    {
+      "refdes": "C1",
+      "lib_ref": "CAP_1210",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "22uF",
+      "footprint": "CAP_1210",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-CAP_1210-C1",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "power_in",
+      "role": "cin_bulk",
+      "datasheet_url": "https://datasheets.example.com/cap_1210.pdf"
+    },
+    {
+      "refdes": "C2",
+      "lib_ref": "CAP_0603",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "100nF",
+      "footprint": "CAP_0603",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-CAP_0603-C2",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "power_in",
+      "role": "cin_hf",
+      "datasheet_url": "https://datasheets.example.com/cap_0603.pdf"
+    },
+    {
+      "refdes": "C3",
+      "lib_ref": "CAP_1210",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "47uF",
+      "footprint": "CAP_1210",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-CAP_1210-C3",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "output",
+      "role": "cout",
+      "datasheet_url": "https://datasheets.example.com/cap_1210.pdf"
+    },
+    {
+      "refdes": "C4",
+      "lib_ref": "CAP_1210",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "47uF",
+      "footprint": "CAP_1210",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-CAP_1210-C4",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "output",
+      "role": "cout",
+      "datasheet_url": "https://datasheets.example.com/cap_1210.pdf"
+    },
+    {
+      "refdes": "R1",
+      "lib_ref": "RES_0402",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "31k6",
+      "footprint": "RES_0402",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-RES_0402-R1",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "feedback",
+      "role": "rfb_top",
+      "datasheet_url": "https://datasheets.example.com/res_0402.pdf"
+    },
+    {
+      "refdes": "R2",
+      "lib_ref": "RES_0402",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "10k",
+      "footprint": "RES_0402",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-RES_0402-R2",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "feedback",
+      "role": "rfb_bot",
+      "datasheet_url": "https://datasheets.example.com/res_0402.pdf"
+    },
+    {
+      "refdes": "C5",
+      "lib_ref": "CAP_0603",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "100pF",
+      "footprint": "CAP_0603",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-CAP_0603-C5",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "feedback",
+      "role": "cff",
+      "datasheet_url": "https://datasheets.example.com/cap_0603.pdf"
+    },
+    {
+      "refdes": "C6",
+      "lib_ref": "CAP_0603",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "100nF",
+      "footprint": "CAP_0603",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-CAP_0603-C6",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "switcher",
+      "role": "cboot",
+      "datasheet_url": "https://datasheets.example.com/cap_0603.pdf"
+    },
+    {
+      "refdes": "R3",
+      "lib_ref": "RES_0402",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "10R",
+      "footprint": "RES_0402",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-RES_0402-R3",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "switcher",
+      "role": "snub_r",
+      "datasheet_url": "https://datasheets.example.com/res_0402.pdf"
+    },
+    {
+      "refdes": "C7",
+      "lib_ref": "CAP_0603",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "1nF",
+      "footprint": "CAP_0603",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-CAP_0603-C7",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "switcher",
+      "role": "snub_c",
+      "datasheet_url": "https://datasheets.example.com/cap_0603.pdf"
+    },
+    {
+      "refdes": "J1",
+      "lib_ref": "HDR_1X2",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "VIN",
+      "footprint": "HDR_1X2",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-HDR_1X2-J1",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "power_in",
+      "role": "vin_conn",
+      "datasheet_url": "https://datasheets.example.com/hdr_1x2.pdf"
+    },
+    {
+      "refdes": "J2",
+      "lib_ref": "HDR_1X2",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "VOUT",
+      "footprint": "HDR_1X2",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-HDR_1X2-J2",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "output",
+      "role": "vout_conn",
+      "datasheet_url": "https://datasheets.example.com/hdr_1x2.pdf"
+    }
+  ],
+  "nets": [
+    {
+      "name": "VIN",
+      "pins": [
+        {
+          "refdes": "J1",
+          "pin": "1"
+        },
+        {
+          "refdes": "U1",
+          "pin": "7"
+        },
+        {
+          "refdes": "U1",
+          "pin": "2"
+        },
+        {
+          "refdes": "C1",
+          "pin": "1"
+        },
+        {
+          "refdes": "C2",
+          "pin": "1"
+        }
+      ],
+      "is_power": true
+    },
+    {
+      "name": "GND",
+      "pins": [
+        {
+          "refdes": "J1",
+          "pin": "2"
+        },
+        {
+          "refdes": "J2",
+          "pin": "2"
+        },
+        {
+          "refdes": "C1",
+          "pin": "2"
+        },
+        {
+          "refdes": "C2",
+          "pin": "2"
+        },
+        {
+          "refdes": "C3",
+          "pin": "2"
+        },
+        {
+          "refdes": "C4",
+          "pin": "2"
+        },
+        {
+          "refdes": "D1",
+          "pin": "1"
+        },
+        {
+          "refdes": "U1",
+          "pin": "4"
+        },
+        {
+          "refdes": "R2",
+          "pin": "2"
+        },
+        {
+          "refdes": "C7",
+          "pin": "2"
+        }
+      ],
+      "is_ground": true
+    },
+    {
+      "name": "SW",
+      "pins": [
+        {
+          "refdes": "U1",
+          "pin": "8"
+        },
+        {
+          "refdes": "L1",
+          "pin": "1"
+        },
+        {
+          "refdes": "D1",
+          "pin": "2"
+        },
+        {
+          "refdes": "C6",
+          "pin": "2"
+        },
+        {
+          "refdes": "R3",
+          "pin": "1"
+        }
+      ],
+      "role": "switch"
+    },
+    {
+      "name": "SNUB",
+      "pins": [
+        {
+          "refdes": "R3",
+          "pin": "2"
+        },
+        {
+          "refdes": "C7",
+          "pin": "1"
+        }
+      ]
+    },
+    {
+      "name": "BOOT",
+      "pins": [
+        {
+          "refdes": "U1",
+          "pin": "1"
+        },
+        {
+          "refdes": "C6",
+          "pin": "1"
+        }
+      ]
+    },
+    {
+      "name": "VOUT",
+      "pins": [
+        {
+          "refdes": "L1",
+          "pin": "2"
+        },
+        {
+          "refdes": "C3",
+          "pin": "1"
+        },
+        {
+          "refdes": "C4",
+          "pin": "1"
+        },
+        {
+          "refdes": "J2",
+          "pin": "1"
+        },
+        {
+          "refdes": "R1",
+          "pin": "1"
+        },
+        {
+          "refdes": "C5",
+          "pin": "1"
+        }
+      ],
+      "is_power": true,
+      "role": "high_current"
+    },
+    {
+      "name": "FB",
+      "pins": [
+        {
+          "refdes": "U1",
+          "pin": "5"
+        },
+        {
+          "refdes": "R1",
+          "pin": "2"
+        },
+        {
+          "refdes": "R2",
+          "pin": "1"
+        },
+        {
+          "refdes": "C5",
+          "pin": "2"
+        }
+      ],
+      "role": "feedback"
+    }
+  ]
+}

@@ -1,0 +1,47 @@
+name: Links
+
+# External URLs in the documentation, checked on a schedule rather than on
+# every PR: third-party sites go down on their own timetable, and a broken
+# docs.example.com must not block an unrelated merge. Internal links and
+# anchors are gated per PR in ci_pr.yml (offline, deterministic).
+permissions:
+    contents: read
+
+on:
+    schedule:
+        # Mondays 06:17 UTC — off the hour to dodge the top-of-hour rush.
+        - cron: "17 6 * * 1"
+    workflow_dispatch:
+
+jobs:
+    external-links:
+        name: Check external links
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+            # lychee is installed from its pinned release archive with a checksum
+            # check rather than via lycheeverse/lychee-action: the repository
+            # allow-lists the actions it runs, and a verified download keeps
+            # that list — and the trust it represents — unchanged.
+            - name: Install lychee
+              shell: bash
+              env:
+                LYCHEE_VERSION: v0.24.2
+                LYCHEE_SHA256: 1f4e0ef7f6554a6ed33dd7ac144fb2e1bbed98598e7af973042fc5cd43951c9a
+              run: |
+                curl -sSfL -o lychee.tar.gz                     "https://github.com/lycheeverse/lychee/releases/download/lychee-${LYCHEE_VERSION}/lychee-x86_64-unknown-linux-gnu.tar.gz"
+                echo "${LYCHEE_SHA256}  lychee.tar.gz" | sha256sum --check --strict
+                tar -xzf lychee.tar.gz
+                sudo install -m 755 lychee-x86_64-unknown-linux-gnu/lychee /usr/local/bin/lychee
+                rm -rf lychee.tar.gz lychee-x86_64-unknown-linux-gnu
+                lychee --version
+
+            # Retry transient failures and accept the rate-limit status GitHub
+            # hands anonymous crawlers, so a red run means a link is actually
+            # dead rather than merely busy.
+            - name: Check every link, external included
+              run: lychee --include-fragments --no-progress --max-retries 3 --accept "200..=299,403,429" --root-dir "$(pwd)" --exclude-path node_modules --exclude-path target --exclude-path .venv --exclude-path tests/integration/.venv "./**/*.md"

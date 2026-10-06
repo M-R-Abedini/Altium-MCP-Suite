@@ -1,0 +1,1199 @@
+{
+  "design.run_erc": {
+    "id": "str",
+    "result": {
+      "failed": "str",
+      "ran": "bool"
+    }
+  },
+  "design.snapshot": {
+    "error": "str",
+    "id": "str"
+  },
+  "easyeda_audit_capacitor_voltage_margin": {
+    "capacitor_rails_checked": "int",
+    "examined": "int",
+    "finding_count": "int",
+    "findings": {
+      "len": 0,
+      "list": "empty"
+    },
+    "minimum_ratio": "float",
+    "note": "str",
+    "ok": "bool",
+    "pages_in_project": "int",
+    "rails_with_no_stated_voltage": {
+      "len": 2,
+      "list": {
+        "designator": "str",
+        "rail": "str",
+        "rated_volts": "float"
+      }
+    },
+    "schematics_in_project": "int",
+    "scope_note": "str",
+    "scope_warning": "str",
+    "verified_live": "bool",
+    "violation_count": "int"
+  },
+  "easyeda_audit_crystal_load_caps": {
+    "crystals": {
+      "len": 1,
+      "list": {
+        "designator": "str",
+        "device": "str",
+        "load_capacitors": {
+          "len": 2,
+          "list": {
+            "capacitor": "str",
+            "net": "str",
+            "pin": "str",
+            "value": "str"
+          }
+        }
+      }
+    },
+    "examined": "int",
+    "finding_count": "int",
+    "findings": {
+      "len": 0,
+      "list": "empty"
+    },
+    "note": "str",
+    "ok": "bool",
+    "pages_in_project": "int",
+    "schematics_in_project": "int",
+    "scope_note": "str",
+    "verified_live": "bool",
+    "violation_count": "int"
+  },
+  "easyeda_audit_decoupling_schematic": {
+    "examined": "int",
+    "finding_count": "int",
+    "findings": {
+      "len": 1,
+      "list": {
+        "bulk_capacitors": {
+          "len": 1,
+          "list": "str"
+        },
+        "ics": {
+          "len": 1,
+          "list": "str"
+        },
+        "problem": "str",
+        "qualifier": "str",
+        "rail": "str",
+        "severity": "str",
+        "values": {
+          "len": 1,
+          "list": "str"
+        }
+      }
+    },
+    "ics_checked": "int",
+    "ics_with_no_recognised_supply": {
+      "len": 1,
+      "list": "str"
+    },
+    "note": "str",
+    "ok": "bool",
+    "pages_in_project": "int",
+    "rails": {
+      "len": 3,
+      "list": {
+        "bulk_capacitors": {
+          "len": 1,
+          "list": "str"
+        },
+        "decoupling_capacitors": {
+          "len": 5,
+          "list": "str"
+        },
+        "ic_supply_pins": "int",
+        "ics": {
+          "len": 3,
+          "list": "str"
+        },
+        "rail": "str",
+        "values": {
+          "len": 6,
+          "list": "str"
+        }
+      }
+    },
+    "schematics_in_project": "int",
+    "scope_note": "str",
+    "scope_warning": "str",
+    "supply_rails": {
+      "len": 3,
+      "list": "str"
+    },
+    "verified_live": "bool",
+    "violation_count": "int"
+  },
+  "easyeda_audit_duplicate_designators": {
+    "components_checked": "int",
+    "finding_count": "int",
+    "findings": {
+      "len": 0,
+      "list": "empty"
+    },
+    "ok": "bool",
+    "parts_without_a_designator": "int",
+    "verified_live": "bool",
+    "violation_count": "int"
+  },
+  "easyeda_audit_missing_datasheets": {
+    "checked": "int",
+    "note": "str",
+    "ok": "bool",
+    "source": "str",
+    "verified_live": "bool",
+    "violation_count": "int",
+    "violations": {
+      "len": 0,
+      "list": "empty"
+    }
+  },
+  "easyeda_audit_mpn_inconsistencies": {
+    "blank_part_numbers": "int",
+    "checked": "int",
+    "note": "str",
+    "ok": "bool",
+    "verified_live": "bool",
+    "violation_count": "int",
+    "violations": {
+      "len": 0,
+      "list": "empty"
+    }
+  },
+  "easyeda_audit_open_drain_pullups": {
+    "bus_capacitance_pf": "null",
+    "bus_count": "int",
+    "bus_speed_khz": "int",
+    "buses_found": {
+      "len": 2,
+      "list": {
+        "net": "str",
+        "pullups": {
+          "len": 1,
+          "list": {
+            "crossover_capacitance_pf": "float",
+            "designator": "str",
+            "ohms": "float",
+            "rail": "str",
+            "rp_max_at_spec_ceiling_ohms": "int",
+            "rp_min_ohms": "int",
+            "value": "str"
+          }
+        },
+        "signal": "str"
+      }
+    },
+    "examined": "int",
+    "finding_count": "int",
+    "findings": {
+      "len": 2,
+      "list": {
+        "bus_speed_khz": "int",
+        "crossover_capacitance_pf": "float",
+        "designator": "str",
+        "net": "str",
+        "problem": "str",
+        "reference": "str",
+        "severity": "str",
+        "value": "str"
+      }
+    },
+    "note": "str",
+    "ok": "bool",
+    "pages_in_project": "int",
+    "rise_time_ns": "float",
+    "schematics_in_project": "int",
+    "scope_note": "str",
+    "verified_live": "bool",
+    "violation_count": "int"
+  },
+  "easyeda_audit_parts_excluded_from_bom": {
+    "checked": "int",
+    "excluded_total": "int",
+    "note": "str",
+    "ok": "bool",
+    "source": "str",
+    "verified_live": "bool",
+    "violation_count": "int",
+    "violations": {
+      "len": 0,
+      "list": "empty"
+    }
+  },
+  "easyeda_audit_placeholder_values_schematic": {
+    "examined": "int",
+    "fields_examined": {
+      "len": 8,
+      "list": "str"
+    },
+    "finding_count": "int",
+    "findings": {
+      "len": 6,
+      "list": {
+        "designator": "str",
+        "device": "str",
+        "problems": {
+          "len": 1,
+          "list": {
+            "field": "str",
+            "kind": "str",
+            "value": "str"
+          }
+        },
+        "severity": "str"
+      }
+    },
+    "formula_fields_counted_not_itemised": {
+      "entries": 2,
+      "map": "int"
+    },
+    "note": "str",
+    "ok": "bool",
+    "pages_in_project": "int",
+    "schematics_in_project": "int",
+    "scope_note": "str",
+    "scope_note_fields": "str",
+    "verified_live": "bool",
+    "violation_count": "int"
+  },
+  "easyeda_audit_single_pin_nets_schematic": {
+    "finding_count": "int",
+    "findings": {
+      "len": 1,
+      "list": {
+        "net": "str",
+        "pins": {
+          "len": 1,
+          "list": "str"
+        }
+      }
+    },
+    "nets_checked": "int",
+    "note": "str",
+    "ok": "bool",
+    "pages_in_project": "int",
+    "schematics_in_project": "int",
+    "scope_note": "str",
+    "verified_live": "bool",
+    "violation_count": "int"
+  },
+  "easyeda_audit_unconnected_schematic_pins": {
+    "components_checked": "int",
+    "components_skipped": "int",
+    "counts_note": "str",
+    "finding_count": "int",
+    "findings": {
+      "len": 4,
+      "list": {
+        "designator": "str",
+        "device": "str",
+        "pin_count": "int",
+        "pins": {
+          "len": 7,
+          "list": "str"
+        },
+        "unconnected_count": "int"
+      }
+    },
+    "note": "str",
+    "ok": "bool",
+    "pages_in_project": "int",
+    "pins_checked": "int",
+    "schematics_in_project": "int",
+    "scope_note": "str",
+    "unconnected_pin_count": "int",
+    "verified_live": "bool",
+    "violation_count": "int"
+  },
+  "easyeda_get_capabilities": {
+    "class_count": "int",
+    "classes": {
+      "entries": 92,
+      "map": {
+        "len": 7,
+        "list": "str"
+      }
+    },
+    "command": "str",
+    "document": "str",
+    "enumerated": {
+      "len": 93,
+      "list": "str"
+    },
+    "extapi_root": {
+      "count": "int",
+      "enumerated_count": "int",
+      "reachable": "bool",
+      "sample": {
+        "len": 12,
+        "list": "str"
+      },
+      "where": "str"
+    },
+    "ok": "bool",
+    "probed_absent": {
+      "len": 0,
+      "list": "empty"
+    },
+    "probed_present": {
+      "len": 92,
+      "list": "str"
+    },
+    "verified_live": "bool"
+  },
+  "easyeda_get_environment": {
+    "command": "str",
+    "is_client": "bool",
+    "is_jlceda_pro": "bool",
+    "is_offline": "bool",
+    "is_pro": "bool",
+    "ok": "bool",
+    "verified_live": "bool",
+    "version": "str"
+  },
+  "easyeda_get_netlist": {
+    "command": "str",
+    "netlist": {
+      "entries": 111,
+      "map": {
+        "pins": {
+          "entries": 6,
+          "map": "str"
+        },
+        "props": {
+          "entries": 37,
+          "map": "str"
+        }
+      }
+    },
+    "netlist_raw": "str",
+    "ok": "bool",
+    "part_count": "int",
+    "verified_live": "bool"
+  },
+  "easyeda_get_nets": {
+    "net_count": "int",
+    "nets": {
+      "len": 70,
+      "list": {
+        "name": "str",
+        "pin_count": "int",
+        "pins": {
+          "len": 3,
+          "list": "str"
+        }
+      }
+    },
+    "note": "str",
+    "ok": "bool",
+    "pages_in_project": "int",
+    "schematics_in_project": "int",
+    "scope_note": "str",
+    "single_pin_nets": {
+      "len": 1,
+      "list": "str"
+    },
+    "source": "str",
+    "verified_live": "bool"
+  },
+  "easyeda_get_project_info": {
+    "command": "str",
+    "ok": "bool",
+    "project": {
+      "data": {
+        "len": 4,
+        "list": {
+          "itemType": "str",
+          "name": "str",
+          "page": {
+            "len": 1,
+            "list": {
+              "itemType": "str",
+              "name": "str",
+              "parentSchematicUuid": "str",
+              "showTitleBlock": "bool",
+              "titleBlockData": {
+                "entries": 16,
+                "map": "..."
+              },
+              "uuid": "str"
+            }
+          },
+          "parentBoardUuid": "str",
+          "parentProjectUuid": "str",
+          "pcb": {
+            "itemType": "str",
+            "name": "str",
+            "parentBoardUuid": "str",
+            "parentProjectUuid": "str",
+            "uuid": "str"
+          },
+          "schematic": {
+            "itemType": "str",
+            "name": "str",
+            "page": {
+              "len": 1,
+              "list": {
+                "itemType": "...",
+                "name": "...",
+                "parentSchematicUuid": "...",
+                "showTitleBlock": "...",
+                "titleBlockData": "...",
+                "uuid": "..."
+              }
+            },
+            "parentBoardUuid": "str",
+            "parentProjectUuid": "str",
+            "uuid": "str"
+          },
+          "uuid": "str"
+        }
+      },
+      "description": "str",
+      "friendlyName": "str",
+      "itemType": "str",
+      "name": "str",
+      "teamUuid": "str",
+      "uuid": "str"
+    },
+    "verified_live": "bool"
+  },
+  "easyeda_get_schematic_buses": {
+    "buses": {
+      "len": 0,
+      "list": "empty"
+    },
+    "command": "str",
+    "ok": "bool",
+    "verified_live": "bool"
+  },
+  "easyeda_get_schematic_components": {
+    "block_count": "int",
+    "command": "str",
+    "components": {
+      "len": 5,
+      "list": {
+        "addIntoBom": "bool",
+        "addIntoPcb": "bool",
+        "async": "bool",
+        "component": {
+          "libraryUuid": "str",
+          "uuid": "str"
+        },
+        "componentType": "str",
+        "designator": "str",
+        "footprint": {
+          "libraryUuid": "str",
+          "uuid": "str"
+        },
+        "manufacturer": "str",
+        "mirror": "bool",
+        "name": "str",
+        "net": "str",
+        "otherProperty": {
+          "entries": 21,
+          "map": "str"
+        },
+        "primitiveId": "str",
+        "primitiveType": "str",
+        "rotation": "int",
+        "subPartName": "str",
+        "symbol": {
+          "libraryUuid": "str",
+          "uuid": "str"
+        },
+        "uniqueId": "str",
+        "x": "int",
+        "y": "int"
+      }
+    },
+    "count_by_type": {
+      "block_symbol": "int",
+      "part": "int",
+      "sheet": "int"
+    },
+    "hierarchy_note": "str",
+    "ok": "bool",
+    "part_count": "int",
+    "verified_live": "bool"
+  },
+  "easyeda_get_schematic_hierarchy": {
+    "block_count": "int",
+    "blocks": {
+      "len": 2,
+      "list": {
+        "designator": "str",
+        "name": "str",
+        "primitive_id": "str",
+        "symbol_uuid": "str"
+      }
+    },
+    "note": "str",
+    "ok": "bool",
+    "page_frames": "int",
+    "parts_on_this_page": "int",
+    "schematic_documents": {
+      "len": 3,
+      "list": {
+        "item_type": "str",
+        "pages": {
+          "len": 1,
+          "list": {
+            "name": "str",
+            "uuid": "str"
+          }
+        },
+        "uuid": "str"
+      }
+    },
+    "verified_live": "bool"
+  },
+  "easyeda_get_schematic_pins": {
+    "ok": "bool",
+    "pages_in_project": "int",
+    "parts_in_netlist": "int",
+    "pin_count": "int",
+    "pins": {
+      "len": 332,
+      "list": {
+        "designator": "str",
+        "net": "str",
+        "pin": "str",
+        "unique_id": "str"
+      }
+    },
+    "schematics_in_project": "int",
+    "scope_note": "str",
+    "source": "str",
+    "unconnected": {
+      "len": 13,
+      "list": {
+        "designator": "str",
+        "net": "str",
+        "pin": "str",
+        "unique_id": "str"
+      }
+    },
+    "unconnected_count": "int",
+    "verified_live": "bool"
+  },
+  "easyeda_get_schematic_wires": {
+    "command": "str",
+    "ok": "bool",
+    "verified_live": "bool",
+    "wires": {
+      "len": 7,
+      "list": {
+        "async": "bool",
+        "color": "null",
+        "line": {
+          "len": 2,
+          "list": {
+            "len": 4,
+            "list": "int"
+          }
+        },
+        "lineType": "null",
+        "lineWidth": "null",
+        "net": "str",
+        "primitiveId": "str",
+        "primitiveType": "str"
+      }
+    }
+  },
+  "easyeda_get_team": {
+    "command": "str",
+    "ok": "bool",
+    "team": {
+      "identity": "int",
+      "itemType": "str",
+      "name": "str",
+      "uuid": "str"
+    },
+    "verified_live": "bool"
+  },
+  "easyeda_get_workspaces": {
+    "command": "str",
+    "current": {
+      "itemType": "str",
+      "name": "str",
+      "uuid": "str"
+    },
+    "ok": "bool",
+    "verified_live": "bool",
+    "workspaces": {
+      "len": 1,
+      "list": {
+        "itemType": "str",
+        "name": "str",
+        "uuid": "str"
+      }
+    }
+  },
+  "easyeda_list_boards": {
+    "boards": {
+      "len": 2,
+      "list": {
+        "itemType": "str",
+        "name": "str",
+        "parentBoardName": "str",
+        "parentProjectUuid": "str",
+        "uuid": "str"
+      }
+    },
+    "command": "str",
+    "ok": "bool",
+    "verified_live": "bool"
+  },
+  "easyeda_list_libraries": {
+    "command": "str",
+    "enumeration_empty": "bool",
+    "known_library_uuids": {
+      "favorite": "str",
+      "personal": "str",
+      "project": "str",
+      "system": "str"
+    },
+    "libraries": {
+      "len": 0,
+      "list": "empty"
+    },
+    "ok": "bool",
+    "verified_live": "bool"
+  },
+  "easyeda_list_projects": {
+    "command": "str",
+    "note": "str",
+    "ok": "bool",
+    "open_project": {
+      "data": {
+        "len": 4,
+        "list": {
+          "itemType": "str",
+          "name": "str",
+          "page": {
+            "len": 1,
+            "list": {
+              "itemType": "str",
+              "name": "str",
+              "parentSchematicUuid": "str",
+              "showTitleBlock": "bool",
+              "titleBlockData": {
+                "entries": 16,
+                "map": "..."
+              },
+              "uuid": "str"
+            }
+          },
+          "parentBoardUuid": "str",
+          "parentProjectUuid": "str",
+          "pcb": {
+            "itemType": "str",
+            "name": "str",
+            "parentBoardUuid": "str",
+            "parentProjectUuid": "str",
+            "uuid": "str"
+          },
+          "schematic": {
+            "itemType": "str",
+            "name": "str",
+            "page": {
+              "len": 1,
+              "list": {
+                "itemType": "...",
+                "name": "...",
+                "parentSchematicUuid": "...",
+                "showTitleBlock": "...",
+                "titleBlockData": "...",
+                "uuid": "..."
+              }
+            },
+            "parentBoardUuid": "str",
+            "parentProjectUuid": "str",
+            "uuid": "str"
+          },
+          "uuid": "str"
+        }
+      },
+      "description": "str",
+      "friendlyName": "str",
+      "itemType": "str",
+      "name": "str",
+      "teamUuid": "str",
+      "uuid": "str"
+    },
+    "project_uuids": {
+      "len": 0,
+      "list": "empty"
+    },
+    "verified_live": "bool"
+  },
+  "easyeda_list_schematic_pages": {
+    "command": "str",
+    "ok": "bool",
+    "pages": {
+      "len": 1,
+      "list": {
+        "itemType": "str",
+        "name": "str",
+        "parentSchematicUuid": "str",
+        "showTitleBlock": "bool",
+        "titleBlockData": {
+          "entries": 16,
+          "map": {
+            "showTitle": "bool",
+            "showValue": "bool",
+            "value": "str"
+          }
+        },
+        "uuid": "str"
+      }
+    },
+    "verified_live": "bool"
+  },
+  "easyeda_list_schematics": {
+    "command": "str",
+    "ok": "bool",
+    "schematics": {
+      "len": 3,
+      "list": {
+        "itemType": "str",
+        "name": "str",
+        "page": {
+          "len": 1,
+          "list": {
+            "itemType": "str",
+            "name": "str",
+            "parentSchematicUuid": "str",
+            "showTitleBlock": "bool",
+            "titleBlockData": {
+              "entries": 16,
+              "map": {
+                "showTitle": "...",
+                "showValue": "...",
+                "value": "..."
+              }
+            },
+            "uuid": "str"
+          }
+        },
+        "parentBoardUuid": "str",
+        "parentProjectUuid": "str",
+        "uuid": "str"
+      }
+    },
+    "verified_live": "bool"
+  },
+  "easyeda_review_board": {
+    "audits_not_applicable": "int",
+    "audits_refused": "int",
+    "audits_run": "int",
+    "audits_total": "int",
+    "clean_count": "int",
+    "examined": "int",
+    "examined_by_audit": {
+      "capacitor_voltage_margin": "int",
+      "crystal_load_caps": "int",
+      "decoupling_schematic": "int",
+      "duplicate_designators": "int",
+      "missing_datasheets": "int",
+      "mpn_inconsistencies": "int",
+      "open_drain_pullups": "int",
+      "parts_excluded_from_bom": "int",
+      "placeholder_values_schematic": "int",
+      "single_pin_nets_schematic": "int",
+      "unconnected_schematic_pins": "int"
+    },
+    "findings": {
+      "len": 5,
+      "list": {
+        "audit": "str",
+        "violation_count": "int"
+      }
+    },
+    "not_applicable": {
+      "len": 19,
+      "list": {
+        "audit": "str",
+        "reason": "str"
+      }
+    },
+    "note": "str",
+    "ok": "bool",
+    "refused": {
+      "len": 0,
+      "list": "empty"
+    },
+    "scope": "str",
+    "total_violations": "int",
+    "unavailable_audits": {
+      "mirrored_text": "str"
+    },
+    "unreadable": {
+      "len": 0,
+      "list": "empty"
+    }
+  },
+  "easyeda_review_snapshot": {
+    "note": "str",
+    "ok": "bool",
+    "review_guidance": {
+      "__DATASHEET_FIRST__": "str",
+      "action_required": "str",
+      "context": "str",
+      "datasheet_rules": {
+        "len": 8,
+        "list": "str"
+      },
+      "reminder": "str",
+      "search_hints": {
+        "len": 51,
+        "list": {
+          "datasheet_query": "str",
+          "designators": "str",
+          "manufacturer": "str",
+          "part_number": "str",
+          "vendor_product_query": "str"
+        }
+      },
+      "unique_part_count": "int"
+    },
+    "rows_by_section": {
+      "netlist": "int",
+      "nets": "int",
+      "project_info": "int",
+      "schematic_components": "int"
+    },
+    "sections": {
+      "board_statistics": {
+        "complete": "bool",
+        "note": "str",
+        "ok": "bool",
+        "sections": {
+          "net_count": "int"
+        },
+        "unavailable": {
+          "board_extent": "str",
+          "components": "str",
+          "layers": "str",
+          "lines": "str",
+          "pads": "str",
+          "vias": "str"
+        }
+      },
+      "netlist": {
+        "command": "str",
+        "netlist": {
+          "entries": 111,
+          "map": {
+            "pins": {
+              "entries": 6,
+              "map": "str"
+            },
+            "props": {
+              "entries": 37,
+              "map": "str"
+            }
+          }
+        },
+        "netlist_raw": "str",
+        "ok": "bool",
+        "part_count": "int",
+        "verified_live": "bool"
+      },
+      "nets": {
+        "net_count": "int",
+        "nets": {
+          "len": 70,
+          "list": {
+            "name": "str",
+            "pin_count": "int",
+            "pins": {
+              "len": 3,
+              "list": "str"
+            }
+          }
+        },
+        "note": "str",
+        "ok": "bool",
+        "pages_in_project": "int",
+        "schematics_in_project": "int",
+        "scope_note": "str",
+        "single_pin_nets": {
+          "len": 1,
+          "list": "str"
+        },
+        "source": "str",
+        "verified_live": "bool"
+      },
+      "project_info": {
+        "command": "str",
+        "ok": "bool",
+        "project": {
+          "data": {
+            "len": 4,
+            "list": {
+              "itemType": "str",
+              "name": "str",
+              "page": {
+                "len": 1,
+                "list": "..."
+              },
+              "parentBoardUuid": "str",
+              "parentProjectUuid": "str",
+              "pcb": {
+                "itemType": "...",
+                "name": "...",
+                "parentBoardUuid": "...",
+                "parentProjectUuid": "...",
+                "uuid": "..."
+              },
+              "schematic": {
+                "itemType": "...",
+                "name": "...",
+                "page": "...",
+                "parentBoardUuid": "...",
+                "parentProjectUuid": "...",
+                "uuid": "..."
+              },
+              "uuid": "str"
+            }
+          },
+          "description": "str",
+          "friendlyName": "str",
+          "itemType": "str",
+          "name": "str",
+          "teamUuid": "str",
+          "uuid": "str"
+        },
+        "verified_live": "bool"
+      },
+      "schematic_components": {
+        "block_count": "int",
+        "command": "str",
+        "components": {
+          "len": 5,
+          "list": {
+            "addIntoBom": "bool",
+            "addIntoPcb": "bool",
+            "async": "bool",
+            "component": {
+              "libraryUuid": "str",
+              "uuid": "str"
+            },
+            "componentType": "str",
+            "designator": "str",
+            "footprint": {
+              "libraryUuid": "str",
+              "uuid": "str"
+            },
+            "manufacturer": "str",
+            "mirror": "bool",
+            "name": "str",
+            "net": "str",
+            "otherProperty": {
+              "entries": 21,
+              "map": "str"
+            },
+            "primitiveId": "str",
+            "primitiveType": "str",
+            "rotation": "int",
+            "subPartName": "str",
+            "symbol": {
+              "libraryUuid": "str",
+              "uuid": "str"
+            },
+            "uniqueId": "str",
+            "x": "int",
+            "y": "int"
+          }
+        },
+        "count_by_type": {
+          "block_symbol": "int",
+          "part": "int",
+          "sheet": "int"
+        },
+        "hierarchy_note": "str",
+        "ok": "bool",
+        "part_count": "int",
+        "verified_live": "bool"
+      }
+    },
+    "sections_failed": {
+      "len": 7,
+      "list": {
+        "error": "str",
+        "section": "str"
+      }
+    },
+    "sections_fetched": {
+      "len": 5,
+      "list": "str"
+    },
+    "sections_with_data": {
+      "len": 4,
+      "list": "str"
+    },
+    "unique_parts": {
+      "len": 51,
+      "list": {
+        "designators": "str",
+        "manufacturer": "str",
+        "part_number": "str"
+      }
+    }
+  },
+  "easyeda_search_3d_models": {
+    "capped": "bool",
+    "command": "str",
+    "library_uuid": "null",
+    "models": {
+      "len": 10,
+      "list": {
+        "ascription": "str",
+        "classification": {
+          "libraryType": "str",
+          "libraryUuid": "str",
+          "secondaryClassificationUuid": {
+            "len": 0,
+            "list": "empty"
+          }
+        },
+        "description": "str",
+        "lastModifiedBy": "str",
+        "libraryUuid": "str",
+        "name": "str",
+        "ordinal": "int",
+        "type": "int",
+        "updateTimestamp": "int",
+        "uuid": "str"
+      }
+    },
+    "ok": "bool",
+    "query": "str",
+    "result_cap": "int",
+    "result_count": "int",
+    "verified_live": "bool"
+  },
+  "easyeda_search_devices": {
+    "capped": "bool",
+    "command": "str",
+    "devices": {
+      "len": 10,
+      "list": {
+        "description": "str",
+        "footprintName": "str",
+        "footprintUuid": "str",
+        "imageUuid": "str",
+        "libraryUuid": "str",
+        "manufacturer": "str",
+        "manufacturerId": "str",
+        "model3DName": "str",
+        "model3DUuid": "str",
+        "name": "str",
+        "ordinal": "int",
+        "supplier": "str",
+        "supplierId": "str",
+        "symbolName": "str",
+        "symbolUuid": "str",
+        "uuid": "str"
+      }
+    },
+    "library_uuid": "null",
+    "ok": "bool",
+    "query": "str",
+    "result_cap": "int",
+    "result_count": "int",
+    "verified_live": "bool"
+  },
+  "easyeda_search_footprints": {
+    "capped": "bool",
+    "command": "str",
+    "footprints": {
+      "len": 10,
+      "list": {
+        "ascription": "str",
+        "classification": {
+          "libraryType": "str",
+          "libraryUuid": "str",
+          "primaryClassificationUuid": "str",
+          "secondaryClassificationUuid": {
+            "len": 0,
+            "list": "empty"
+          }
+        },
+        "description": "str",
+        "lastModifiedBy": "str",
+        "libraryUuid": "str",
+        "name": "str",
+        "ordinal": "int",
+        "type": "int",
+        "updateTimestamp": "int",
+        "uuid": "str"
+      }
+    },
+    "library_uuid": "null",
+    "ok": "bool",
+    "query": "str",
+    "result_cap": "int",
+    "result_count": "int",
+    "verified_live": "bool"
+  },
+  "easyeda_search_symbols": {
+    "capped": "bool",
+    "command": "str",
+    "library_uuid": "null",
+    "ok": "bool",
+    "query": "str",
+    "result_cap": "int",
+    "result_count": "int",
+    "symbols": {
+      "len": 10,
+      "list": {
+        "classification": {
+          "libraryType": "str",
+          "libraryUuid": "str",
+          "secondaryClassificationUuid": {
+            "len": 0,
+            "list": "empty"
+          }
+        },
+        "description": "str",
+        "libraryUuid": "str",
+        "name": "str",
+        "ordinal": "int",
+        "type": "int",
+        "updateTimestamp": "int",
+        "uuid": "str"
+      }
+    },
+    "verified_live": "bool"
+  },
+  "system.ping": {
+    "id": "str",
+    "result": {
+      "api": "str",
+      "build": "str",
+      "document": "str",
+      "pong": "bool",
+      "retry": {
+        "attach_attempts": "int",
+        "believes_connected": "bool",
+        "idle_limit": "int",
+        "idle_ticks": "int",
+        "retry_ms": "int",
+        "socket_id": "str",
+        "socket_serial": "int",
+        "timer_kind": "str"
+      }
+    }
+  }
+}

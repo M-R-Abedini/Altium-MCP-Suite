@@ -1,0 +1,1470 @@
+{
+  "spec": "Small MCU board: 32-pin MCU, parallel SRAM on an 8-bit bus, USB device port, I2C EEPROM, buttons, LEDs, GPIO header",
+  "summary": "Fictional 32-pin MCU with an external 20-pin SRAM on an 8-bit data bus, a USB transceiver behind series resistors and TVS diodes, an I2C EEPROM, an LDO power stage, crystal, buttons, LEDs and a GPIO header.",
+  "topology": "mcu_board",
+  "sheets": [
+    {
+      "name": "main",
+      "title": "MCU Board",
+      "size": "A3"
+    }
+  ],
+  "zones": [
+    {
+      "name": "power",
+      "sheet": "main",
+      "role": "power_in"
+    },
+    {
+      "name": "mcu_core",
+      "sheet": "main",
+      "role": "mcu"
+    },
+    {
+      "name": "memory",
+      "sheet": "main",
+      "role": "memory"
+    },
+    {
+      "name": "io",
+      "sheet": "main",
+      "role": "io"
+    }
+  ],
+  "parts": [
+    {
+      "refdes": "U1",
+      "lib_ref": "MCU32",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "FS32F103",
+      "footprint": "TQFP32",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-MCU32-U1",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "mcu_core",
+      "role": "ic",
+      "datasheet_url": "https://datasheets.example.com/mcu32.pdf"
+    },
+    {
+      "refdes": "U2",
+      "lib_ref": "SRAM20",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "FS62256",
+      "footprint": "SOIC20",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-SRAM20-U2",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "memory",
+      "role": "ic",
+      "datasheet_url": "https://datasheets.example.com/sram20.pdf"
+    },
+    {
+      "refdes": "U3",
+      "lib_ref": "LDO_SOT235",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "FS1117-3.3",
+      "footprint": "SOT23-5",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-LDO_SOT235-U3",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "power",
+      "role": "regulator",
+      "datasheet_url": "https://datasheets.example.com/ldo_sot235.pdf"
+    },
+    {
+      "refdes": "U4",
+      "lib_ref": "USBPHY8",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "FS1T11",
+      "footprint": "SOIC8",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-USBPHY8-U4",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "io",
+      "role": "ic",
+      "datasheet_url": "https://datasheets.example.com/usbphy8.pdf"
+    },
+    {
+      "refdes": "U5",
+      "lib_ref": "EEPROM8",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "FS24C64",
+      "footprint": "SOIC8",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-EEPROM8-U5",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "memory",
+      "role": "ic",
+      "datasheet_url": "https://datasheets.example.com/eeprom8.pdf"
+    },
+    {
+      "refdes": "Y1",
+      "lib_ref": "XTAL_3225",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "8MHz",
+      "footprint": "XTAL_3225",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-XTAL_3225-Y1",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "mcu_core",
+      "role": null,
+      "datasheet_url": "https://datasheets.example.com/xtal_3225.pdf"
+    },
+    {
+      "refdes": "C1",
+      "lib_ref": "CAP_0402",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "18pF",
+      "footprint": "CAP_0402",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-CAP_0402-C1",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "mcu_core",
+      "role": null,
+      "datasheet_url": "https://datasheets.example.com/cap_0402.pdf"
+    },
+    {
+      "refdes": "C2",
+      "lib_ref": "CAP_0402",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "18pF",
+      "footprint": "CAP_0402",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-CAP_0402-C2",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "mcu_core",
+      "role": null,
+      "datasheet_url": "https://datasheets.example.com/cap_0402.pdf"
+    },
+    {
+      "refdes": "C3",
+      "lib_ref": "CAP_0402",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "100nF",
+      "footprint": "CAP_0402",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-CAP_0402-C3",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "mcu_core",
+      "role": "decoup_cap",
+      "datasheet_url": "https://datasheets.example.com/cap_0402.pdf"
+    },
+    {
+      "refdes": "C4",
+      "lib_ref": "CAP_0402",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "100nF",
+      "footprint": "CAP_0402",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-CAP_0402-C4",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "mcu_core",
+      "role": "decoup_cap",
+      "datasheet_url": "https://datasheets.example.com/cap_0402.pdf"
+    },
+    {
+      "refdes": "C5",
+      "lib_ref": "CAP_0402",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "100nF",
+      "footprint": "CAP_0402",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-CAP_0402-C5",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "memory",
+      "role": "decoup_cap",
+      "datasheet_url": "https://datasheets.example.com/cap_0402.pdf"
+    },
+    {
+      "refdes": "C6",
+      "lib_ref": "CAP_0402",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "100nF",
+      "footprint": "CAP_0402",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-CAP_0402-C6",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "io",
+      "role": "decoup_cap",
+      "datasheet_url": "https://datasheets.example.com/cap_0402.pdf"
+    },
+    {
+      "refdes": "C7",
+      "lib_ref": "CAP_0402",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "100nF",
+      "footprint": "CAP_0402",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-CAP_0402-C7",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "memory",
+      "role": "decoup_cap",
+      "datasheet_url": "https://datasheets.example.com/cap_0402.pdf"
+    },
+    {
+      "refdes": "C8",
+      "lib_ref": "CAP_0402",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "100nF",
+      "footprint": "CAP_0402",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-CAP_0402-C8",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "mcu_core",
+      "role": "decoup_cap",
+      "datasheet_url": "https://datasheets.example.com/cap_0402.pdf"
+    },
+    {
+      "refdes": "C9",
+      "lib_ref": "CAP_0805",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "10uF",
+      "footprint": "CAP_0805",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-CAP_0805-C9",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "power",
+      "role": "cin",
+      "datasheet_url": "https://datasheets.example.com/cap_0805.pdf"
+    },
+    {
+      "refdes": "C10",
+      "lib_ref": "CAP_0805",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "10uF",
+      "footprint": "CAP_0805",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-CAP_0805-C10",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "power",
+      "role": "cout",
+      "datasheet_url": "https://datasheets.example.com/cap_0805.pdf"
+    },
+    {
+      "refdes": "C11",
+      "lib_ref": "CAP_0402",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "100nF",
+      "footprint": "CAP_0402",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-CAP_0402-C11",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "mcu_core",
+      "role": "filter_cap",
+      "datasheet_url": "https://datasheets.example.com/cap_0402.pdf"
+    },
+    {
+      "refdes": "C13",
+      "lib_ref": "CAP_0402",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "1uF",
+      "footprint": "CAP_0402",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-CAP_0402-C13",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "mcu_core",
+      "role": "filter_cap",
+      "datasheet_url": "https://datasheets.example.com/cap_0402.pdf"
+    },
+    {
+      "refdes": "C14",
+      "lib_ref": "CAP_0402",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "10nF",
+      "footprint": "CAP_0402",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-CAP_0402-C14",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "io",
+      "role": "filter_cap",
+      "datasheet_url": "https://datasheets.example.com/cap_0402.pdf"
+    },
+    {
+      "refdes": "C15",
+      "lib_ref": "CAP_0402",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "10nF",
+      "footprint": "CAP_0402",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-CAP_0402-C15",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "io",
+      "role": "filter_cap",
+      "datasheet_url": "https://datasheets.example.com/cap_0402.pdf"
+    },
+    {
+      "refdes": "FB1",
+      "lib_ref": "FB_0603",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "600R@100MHz",
+      "footprint": "FB_0603",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-FB_0603-FB1",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "mcu_core",
+      "role": "ferrite",
+      "datasheet_url": "https://datasheets.example.com/fb_0603.pdf"
+    },
+    {
+      "refdes": "R1",
+      "lib_ref": "RES_0402",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "22R",
+      "footprint": "RES_0402",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-RES_0402-R1",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "io",
+      "role": "series_term",
+      "datasheet_url": "https://datasheets.example.com/res_0402.pdf"
+    },
+    {
+      "refdes": "R2",
+      "lib_ref": "RES_0402",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "22R",
+      "footprint": "RES_0402",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-RES_0402-R2",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "io",
+      "role": "series_term",
+      "datasheet_url": "https://datasheets.example.com/res_0402.pdf"
+    },
+    {
+      "refdes": "R3",
+      "lib_ref": "RES_0402",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "10k",
+      "footprint": "RES_0402",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-RES_0402-R3",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "mcu_core",
+      "role": "pullup",
+      "datasheet_url": "https://datasheets.example.com/res_0402.pdf"
+    },
+    {
+      "refdes": "R4",
+      "lib_ref": "RES_0402",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "33R",
+      "footprint": "RES_0402",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-RES_0402-R4",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "io",
+      "role": null,
+      "datasheet_url": "https://datasheets.example.com/res_0402.pdf"
+    },
+    {
+      "refdes": "R5",
+      "lib_ref": "RES_0402",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "33R",
+      "footprint": "RES_0402",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-RES_0402-R5",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "io",
+      "role": null,
+      "datasheet_url": "https://datasheets.example.com/res_0402.pdf"
+    },
+    {
+      "refdes": "R6",
+      "lib_ref": "RES_0402",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "33R",
+      "footprint": "RES_0402",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-RES_0402-R6",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "io",
+      "role": null,
+      "datasheet_url": "https://datasheets.example.com/res_0402.pdf"
+    },
+    {
+      "refdes": "R7",
+      "lib_ref": "RES_0402",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "33R",
+      "footprint": "RES_0402",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-RES_0402-R7",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "io",
+      "role": null,
+      "datasheet_url": "https://datasheets.example.com/res_0402.pdf"
+    },
+    {
+      "refdes": "R8",
+      "lib_ref": "RES_0402",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "1k",
+      "footprint": "RES_0402",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-RES_0402-R8",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "io",
+      "role": null,
+      "datasheet_url": "https://datasheets.example.com/res_0402.pdf"
+    },
+    {
+      "refdes": "R9",
+      "lib_ref": "RES_0402",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "1k",
+      "footprint": "RES_0402",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-RES_0402-R9",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "io",
+      "role": null,
+      "datasheet_url": "https://datasheets.example.com/res_0402.pdf"
+    },
+    {
+      "refdes": "R11",
+      "lib_ref": "RES_0402",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "4k7",
+      "footprint": "RES_0402",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-RES_0402-R11",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "memory",
+      "role": null,
+      "datasheet_url": "https://datasheets.example.com/res_0402.pdf"
+    },
+    {
+      "refdes": "R12",
+      "lib_ref": "RES_0402",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "4k7",
+      "footprint": "RES_0402",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-RES_0402-R12",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "memory",
+      "role": null,
+      "datasheet_url": "https://datasheets.example.com/res_0402.pdf"
+    },
+    {
+      "refdes": "R21",
+      "lib_ref": "RES_0402",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "10k",
+      "footprint": "RES_0402",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-RES_0402-R21",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "io",
+      "role": "pullup",
+      "datasheet_url": "https://datasheets.example.com/res_0402.pdf"
+    },
+    {
+      "refdes": "R22",
+      "lib_ref": "RES_0402",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "10k",
+      "footprint": "RES_0402",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-RES_0402-R22",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "io",
+      "role": "pullup",
+      "datasheet_url": "https://datasheets.example.com/res_0402.pdf"
+    },
+    {
+      "refdes": "R23",
+      "lib_ref": "RES_0402",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "47k",
+      "footprint": "RES_0402",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-RES_0402-R23",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "io",
+      "role": "div_top",
+      "datasheet_url": "https://datasheets.example.com/res_0402.pdf"
+    },
+    {
+      "refdes": "R24",
+      "lib_ref": "RES_0402",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "22k",
+      "footprint": "RES_0402",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-RES_0402-R24",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "io",
+      "role": "div_bot",
+      "datasheet_url": "https://datasheets.example.com/res_0402.pdf"
+    },
+    {
+      "refdes": "LED1",
+      "lib_ref": "LED_0603",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "LED_GRN",
+      "footprint": "LED_0603",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-LED_0603-LED1",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "io",
+      "role": null,
+      "datasheet_url": "https://datasheets.example.com/led_0603.pdf"
+    },
+    {
+      "refdes": "LED2",
+      "lib_ref": "LED_0603",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "LED_YEL",
+      "footprint": "LED_0603",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-LED_0603-LED2",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "io",
+      "role": null,
+      "datasheet_url": "https://datasheets.example.com/led_0603.pdf"
+    },
+    {
+      "refdes": "D1",
+      "lib_ref": "TVS_SOD323",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "ESD5V0",
+      "footprint": "SOD_323",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-TVS_SOD323-D1",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "io",
+      "role": null,
+      "datasheet_url": "https://datasheets.example.com/tvs_sod323.pdf"
+    },
+    {
+      "refdes": "D2",
+      "lib_ref": "TVS_SOD323",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "ESD5V0",
+      "footprint": "SOD_323",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-TVS_SOD323-D2",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "io",
+      "role": null,
+      "datasheet_url": "https://datasheets.example.com/tvs_sod323.pdf"
+    },
+    {
+      "refdes": "SW1",
+      "lib_ref": "SW_SMD",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "TACT",
+      "footprint": "SW_SMD",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-SW_SMD-SW1",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "io",
+      "role": null,
+      "datasheet_url": "https://datasheets.example.com/sw_smd.pdf"
+    },
+    {
+      "refdes": "SW2",
+      "lib_ref": "SW_SMD",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "TACT",
+      "footprint": "SW_SMD",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-SW_SMD-SW2",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "io",
+      "role": null,
+      "datasheet_url": "https://datasheets.example.com/sw_smd.pdf"
+    },
+    {
+      "refdes": "J1",
+      "lib_ref": "HDR_1X2",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "PWR_IN",
+      "footprint": "HDR_1X2",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-HDR_1X2-J1",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "power",
+      "role": "vin_conn",
+      "datasheet_url": "https://datasheets.example.com/hdr_1x2.pdf"
+    },
+    {
+      "refdes": "J2",
+      "lib_ref": "USB_CONN",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "USB_B",
+      "footprint": "USB_CONN",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-USB_CONN-J2",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "io",
+      "role": null,
+      "datasheet_url": "https://datasheets.example.com/usb_conn.pdf"
+    },
+    {
+      "refdes": "J3",
+      "lib_ref": "HDR_1X8",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "GPIO_HDR",
+      "footprint": "HDR_1X8",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-HDR_1X8-J3",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "io",
+      "role": null,
+      "datasheet_url": "https://datasheets.example.com/hdr_1x8.pdf"
+    }
+  ],
+  "nets": [
+    {
+      "name": "VDD_3V3",
+      "pins": [
+        {
+          "refdes": "U1",
+          "pin": "1"
+        },
+        {
+          "refdes": "U1",
+          "pin": "17"
+        },
+        {
+          "refdes": "U2",
+          "pin": "20"
+        },
+        {
+          "refdes": "U4",
+          "pin": "1"
+        },
+        {
+          "refdes": "U5",
+          "pin": "8"
+        },
+        {
+          "refdes": "U3",
+          "pin": "5"
+        },
+        {
+          "refdes": "C10",
+          "pin": "1"
+        },
+        {
+          "refdes": "C3",
+          "pin": "1"
+        },
+        {
+          "refdes": "C4",
+          "pin": "1"
+        },
+        {
+          "refdes": "C5",
+          "pin": "1"
+        },
+        {
+          "refdes": "C6",
+          "pin": "1"
+        },
+        {
+          "refdes": "C7",
+          "pin": "1"
+        },
+        {
+          "refdes": "C8",
+          "pin": "1"
+        },
+        {
+          "refdes": "R3",
+          "pin": "1"
+        },
+        {
+          "refdes": "R11",
+          "pin": "1"
+        },
+        {
+          "refdes": "R12",
+          "pin": "1"
+        },
+        {
+          "refdes": "R21",
+          "pin": "1"
+        },
+        {
+          "refdes": "R22",
+          "pin": "1"
+        },
+        {
+          "refdes": "FB1",
+          "pin": "1"
+        },
+        {
+          "refdes": "J3",
+          "pin": "7"
+        }
+      ],
+      "is_power": true
+    },
+    {
+      "name": "GND",
+      "pins": [
+        {
+          "refdes": "U1",
+          "pin": "16"
+        },
+        {
+          "refdes": "U1",
+          "pin": "32"
+        },
+        {
+          "refdes": "U2",
+          "pin": "10"
+        },
+        {
+          "refdes": "U4",
+          "pin": "2"
+        },
+        {
+          "refdes": "U5",
+          "pin": "4"
+        },
+        {
+          "refdes": "U5",
+          "pin": "7"
+        },
+        {
+          "refdes": "U3",
+          "pin": "2"
+        },
+        {
+          "refdes": "J1",
+          "pin": "2"
+        },
+        {
+          "refdes": "J2",
+          "pin": "4"
+        },
+        {
+          "refdes": "C9",
+          "pin": "2"
+        },
+        {
+          "refdes": "C10",
+          "pin": "2"
+        },
+        {
+          "refdes": "C3",
+          "pin": "2"
+        },
+        {
+          "refdes": "C4",
+          "pin": "2"
+        },
+        {
+          "refdes": "C5",
+          "pin": "2"
+        },
+        {
+          "refdes": "C6",
+          "pin": "2"
+        },
+        {
+          "refdes": "C7",
+          "pin": "2"
+        },
+        {
+          "refdes": "C8",
+          "pin": "2"
+        },
+        {
+          "refdes": "C11",
+          "pin": "2"
+        },
+        {
+          "refdes": "C13",
+          "pin": "2"
+        },
+        {
+          "refdes": "C1",
+          "pin": "2"
+        },
+        {
+          "refdes": "C2",
+          "pin": "2"
+        },
+        {
+          "refdes": "C14",
+          "pin": "2"
+        },
+        {
+          "refdes": "C15",
+          "pin": "2"
+        },
+        {
+          "refdes": "SW1",
+          "pin": "2"
+        },
+        {
+          "refdes": "SW2",
+          "pin": "2"
+        },
+        {
+          "refdes": "LED1",
+          "pin": "2"
+        },
+        {
+          "refdes": "LED2",
+          "pin": "2"
+        },
+        {
+          "refdes": "D1",
+          "pin": "2"
+        },
+        {
+          "refdes": "D2",
+          "pin": "2"
+        },
+        {
+          "refdes": "R24",
+          "pin": "2"
+        },
+        {
+          "refdes": "J3",
+          "pin": "8"
+        }
+      ],
+      "is_ground": true
+    },
+    {
+      "name": "VIN",
+      "pins": [
+        {
+          "refdes": "J1",
+          "pin": "1"
+        },
+        {
+          "refdes": "U3",
+          "pin": "1"
+        },
+        {
+          "refdes": "U3",
+          "pin": "3"
+        },
+        {
+          "refdes": "C9",
+          "pin": "1"
+        }
+      ],
+      "is_power": true
+    },
+    {
+      "name": "AVDD",
+      "pins": [
+        {
+          "refdes": "FB1",
+          "pin": "2"
+        },
+        {
+          "refdes": "C13",
+          "pin": "1"
+        },
+        {
+          "refdes": "U1",
+          "pin": "2"
+        }
+      ],
+      "is_power": true,
+      "role": "analog_sensitive"
+    },
+    {
+      "name": "XIN",
+      "pins": [
+        {
+          "refdes": "U1",
+          "pin": "5"
+        },
+        {
+          "refdes": "Y1",
+          "pin": "1"
+        },
+        {
+          "refdes": "C1",
+          "pin": "1"
+        }
+      ],
+      "role": "clock"
+    },
+    {
+      "name": "XOUT",
+      "pins": [
+        {
+          "refdes": "U1",
+          "pin": "6"
+        },
+        {
+          "refdes": "Y1",
+          "pin": "2"
+        },
+        {
+          "refdes": "C2",
+          "pin": "1"
+        }
+      ],
+      "role": "clock"
+    },
+    {
+      "name": "NRST",
+      "pins": [
+        {
+          "refdes": "U1",
+          "pin": "7"
+        },
+        {
+          "refdes": "R3",
+          "pin": "2"
+        },
+        {
+          "refdes": "C11",
+          "pin": "1"
+        }
+      ]
+    },
+    {
+      "name": "MEM_CS",
+      "pins": [
+        {
+          "refdes": "U1",
+          "pin": "18"
+        },
+        {
+          "refdes": "U2",
+          "pin": "1"
+        }
+      ]
+    },
+    {
+      "name": "MEM_OE",
+      "pins": [
+        {
+          "refdes": "U1",
+          "pin": "19"
+        },
+        {
+          "refdes": "U2",
+          "pin": "11"
+        }
+      ]
+    },
+    {
+      "name": "SDA",
+      "pins": [
+        {
+          "refdes": "U1",
+          "pin": "22"
+        },
+        {
+          "refdes": "U5",
+          "pin": "5"
+        },
+        {
+          "refdes": "R11",
+          "pin": "2"
+        }
+      ]
+    },
+    {
+      "name": "SCL",
+      "pins": [
+        {
+          "refdes": "U1",
+          "pin": "23"
+        },
+        {
+          "refdes": "U5",
+          "pin": "6"
+        },
+        {
+          "refdes": "R12",
+          "pin": "2"
+        }
+      ]
+    },
+    {
+      "name": "USB_DP_MCU",
+      "pins": [
+        {
+          "refdes": "U1",
+          "pin": "20"
+        },
+        {
+          "refdes": "R1",
+          "pin": "1"
+        }
+      ],
+      "role": "differential"
+    },
+    {
+      "name": "USB_DM_MCU",
+      "pins": [
+        {
+          "refdes": "U1",
+          "pin": "21"
+        },
+        {
+          "refdes": "R2",
+          "pin": "1"
+        }
+      ],
+      "role": "differential"
+    },
+    {
+      "name": "USB_DP_M",
+      "pins": [
+        {
+          "refdes": "R1",
+          "pin": "2"
+        },
+        {
+          "refdes": "U4",
+          "pin": "3"
+        }
+      ],
+      "role": "differential"
+    },
+    {
+      "name": "USB_DM_M",
+      "pins": [
+        {
+          "refdes": "R2",
+          "pin": "2"
+        },
+        {
+          "refdes": "U4",
+          "pin": "4"
+        }
+      ],
+      "role": "differential"
+    },
+    {
+      "name": "USB_DP",
+      "pins": [
+        {
+          "refdes": "U4",
+          "pin": "5"
+        },
+        {
+          "refdes": "J2",
+          "pin": "2"
+        },
+        {
+          "refdes": "D1",
+          "pin": "1"
+        }
+      ],
+      "role": "differential"
+    },
+    {
+      "name": "USB_DM",
+      "pins": [
+        {
+          "refdes": "U4",
+          "pin": "6"
+        },
+        {
+          "refdes": "J2",
+          "pin": "3"
+        },
+        {
+          "refdes": "D2",
+          "pin": "1"
+        }
+      ],
+      "role": "differential"
+    },
+    {
+      "name": "VBUS",
+      "pins": [
+        {
+          "refdes": "J2",
+          "pin": "1"
+        },
+        {
+          "refdes": "R23",
+          "pin": "1"
+        }
+      ]
+    },
+    {
+      "name": "VBUS_SENSE",
+      "pins": [
+        {
+          "refdes": "R23",
+          "pin": "2"
+        },
+        {
+          "refdes": "R24",
+          "pin": "1"
+        },
+        {
+          "refdes": "U1",
+          "pin": "3"
+        }
+      ]
+    },
+    {
+      "name": "BTN1",
+      "pins": [
+        {
+          "refdes": "U1",
+          "pin": "30"
+        },
+        {
+          "refdes": "R21",
+          "pin": "2"
+        },
+        {
+          "refdes": "SW1",
+          "pin": "1"
+        },
+        {
+          "refdes": "C14",
+          "pin": "1"
+        },
+        {
+          "refdes": "J3",
+          "pin": "5"
+        }
+      ]
+    },
+    {
+      "name": "BTN2",
+      "pins": [
+        {
+          "refdes": "U1",
+          "pin": "31"
+        },
+        {
+          "refdes": "R22",
+          "pin": "2"
+        },
+        {
+          "refdes": "SW2",
+          "pin": "1"
+        },
+        {
+          "refdes": "C15",
+          "pin": "1"
+        },
+        {
+          "refdes": "J3",
+          "pin": "6"
+        }
+      ]
+    },
+    {
+      "name": "LED1_DRV",
+      "pins": [
+        {
+          "refdes": "U1",
+          "pin": "28"
+        },
+        {
+          "refdes": "R8",
+          "pin": "1"
+        }
+      ]
+    },
+    {
+      "name": "LED1_A",
+      "pins": [
+        {
+          "refdes": "R8",
+          "pin": "2"
+        },
+        {
+          "refdes": "LED1",
+          "pin": "1"
+        }
+      ]
+    },
+    {
+      "name": "LED2_DRV",
+      "pins": [
+        {
+          "refdes": "U1",
+          "pin": "29"
+        },
+        {
+          "refdes": "R9",
+          "pin": "1"
+        }
+      ]
+    },
+    {
+      "name": "LED2_A",
+      "pins": [
+        {
+          "refdes": "R9",
+          "pin": "2"
+        },
+        {
+          "refdes": "LED2",
+          "pin": "1"
+        }
+      ]
+    },
+    {
+      "name": "D0",
+      "pins": [
+        {
+          "refdes": "U1",
+          "pin": "8"
+        },
+        {
+          "refdes": "U2",
+          "pin": "2"
+        }
+      ]
+    },
+    {
+      "name": "D1",
+      "pins": [
+        {
+          "refdes": "U1",
+          "pin": "9"
+        },
+        {
+          "refdes": "U2",
+          "pin": "3"
+        }
+      ]
+    },
+    {
+      "name": "D2",
+      "pins": [
+        {
+          "refdes": "U1",
+          "pin": "10"
+        },
+        {
+          "refdes": "U2",
+          "pin": "4"
+        }
+      ]
+    },
+    {
+      "name": "D3",
+      "pins": [
+        {
+          "refdes": "U1",
+          "pin": "11"
+        },
+        {
+          "refdes": "U2",
+          "pin": "5"
+        }
+      ]
+    },
+    {
+      "name": "D4",
+      "pins": [
+        {
+          "refdes": "U1",
+          "pin": "12"
+        },
+        {
+          "refdes": "U2",
+          "pin": "6"
+        }
+      ]
+    },
+    {
+      "name": "D5",
+      "pins": [
+        {
+          "refdes": "U1",
+          "pin": "13"
+        },
+        {
+          "refdes": "U2",
+          "pin": "7"
+        }
+      ]
+    },
+    {
+      "name": "D6",
+      "pins": [
+        {
+          "refdes": "U1",
+          "pin": "14"
+        },
+        {
+          "refdes": "U2",
+          "pin": "8"
+        }
+      ]
+    },
+    {
+      "name": "D7",
+      "pins": [
+        {
+          "refdes": "U1",
+          "pin": "15"
+        },
+        {
+          "refdes": "U2",
+          "pin": "9"
+        }
+      ]
+    },
+    {
+      "name": "GPIO1_M",
+      "pins": [
+        {
+          "refdes": "U1",
+          "pin": "24"
+        },
+        {
+          "refdes": "R4",
+          "pin": "1"
+        }
+      ]
+    },
+    {
+      "name": "GPIO1",
+      "pins": [
+        {
+          "refdes": "R4",
+          "pin": "2"
+        },
+        {
+          "refdes": "J3",
+          "pin": "1"
+        }
+      ]
+    },
+    {
+      "name": "GPIO2_M",
+      "pins": [
+        {
+          "refdes": "U1",
+          "pin": "25"
+        },
+        {
+          "refdes": "R5",
+          "pin": "1"
+        }
+      ]
+    },
+    {
+      "name": "GPIO2",
+      "pins": [
+        {
+          "refdes": "R5",
+          "pin": "2"
+        },
+        {
+          "refdes": "J3",
+          "pin": "2"
+        }
+      ]
+    },
+    {
+      "name": "GPIO3_M",
+      "pins": [
+        {
+          "refdes": "U1",
+          "pin": "26"
+        },
+        {
+          "refdes": "R6",
+          "pin": "1"
+        }
+      ]
+    },
+    {
+      "name": "GPIO3",
+      "pins": [
+        {
+          "refdes": "R6",
+          "pin": "2"
+        },
+        {
+          "refdes": "J3",
+          "pin": "3"
+        }
+      ]
+    },
+    {
+      "name": "GPIO4_M",
+      "pins": [
+        {
+          "refdes": "U1",
+          "pin": "27"
+        },
+        {
+          "refdes": "R7",
+          "pin": "1"
+        }
+      ]
+    },
+    {
+      "name": "GPIO4",
+      "pins": [
+        {
+          "refdes": "R7",
+          "pin": "2"
+        },
+        {
+          "refdes": "J3",
+          "pin": "4"
+        }
+      ]
+    }
+  ]
+}

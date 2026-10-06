@@ -1,0 +1,271 @@
+# Error Reference
+
+This document is a consolidated catalogue of every error this MCP server can surface, the
+condition that produces it, and how to resolve it. It complements the operational hints in
+[CLIENT_SETUP.md § Troubleshooting](CLIENT_SETUP.md#troubleshooting), which covers
+client-side setup problems, [USAGE.md § When Something Goes Wrong](USAGE.md#when-something-goes-wrong),
+which covers problems once connected, and the tool reference in
+[README § MCP Tools](../README.md#mcp-tools), which it does not repeat here.
+
+---
+
+## How Errors Surface
+
+Errors reach the client through two distinct channels, and the channel determines both the
+shape of the payload and how a client should react.
+
+- **Protocol errors** are JSON-RPC 2.0 error objects. They indicate that the request itself
+    could not be processed at the protocol layer: malformed JSON, a missing `jsonrpc` field, an
+    unknown method, or invalid parameters. These are returned in the top-level `error` field of
+    a JSON-RPC response and never reach a tool handler.
+- **Tool-call results** are successful JSON-RPC responses whose `result` is a `ToolCallResult`
+    carrying `isError: true`. The request was well-formed and dispatched to a tool, but the
+    operation failed (for example, a component was not found or a file could not be written).
+    This is the standard MCP convention so that the model can read and reason about the failure
+    rather than having the call aborted at the protocol layer.
+
+In short: a protocol error means *the server could not understand the request*; an
+`isError: true` result means *the server understood the request but the operation failed*.
+
+---
+
+## JSON-RPC Protocol Error Codes
+
+These codes come from the `ErrorCode` enum in `src/mcp/protocol.rs`. The numeric value is
+returned in the `code` field of the JSON-RPC error object.
+
+| Code | Name | When It Occurs |
+|------|------|----------------|
+| `-32700` | Parse error | The request body was not valid JSON, or the top-level value was not a JSON object. |
+| `-32600` | Invalid Request | The JSON parsed but is not a valid Request object: the `jsonrpc` field is missing, is not `"2.0"`, or the `method` field is empty. |
+| `-32601` | Method not found | The `method` does not exist or is not available on the server. The offending method name is included in the message. |
+| `-32602` | Invalid params | The method parameters are invalid (wrong type, missing required argument, and so on). |
+| `-32603` | Internal error | An unexpected internal failure occurred while handling an otherwise valid request. |
+| any `i32` | Server error | A server-defined error. `ServerError(i32)` carries an arbitrary implementation-defined code. |
+
+### Request-ID Preservation on Invalid Request
+
+When an *Invalid Request* (`-32600`) is raised, the server makes a best effort to echo the
+original request `id` back in the error response so that a strict client can correlate the
+failure with its outstanding request. The `id` is recovered up front, before validation
+fails.
+
+- A valid string or integer `id` is preserved and returned.
+- A non-conforming `id` (`null`, a float, an array, or an object) is **not** a valid
+    JSON-RPC id and is dropped — the error response carries no `id`.
+- A *Parse error* (`-32700`) never carries an `id`, because the request could not be parsed
+    far enough to recover one.
+- Notifications (messages with no `id`) that fail validation also carry no `id`.
+
+---
+
+## Configuration Errors (`ConfigError`)
+
+These errors come from `src/error.rs` and occur while loading or validating the server
+configuration at start-up. A configuration error prevents the server from starting.
+
+| Variant | Cause | Remedy |
+|---------|-------|--------|
+| `ReadError` | The configuration file exists but could not be read (for example, permission denied). Wraps the underlying I/O error. | Check the file permissions and that the path is accessible to the process. |
+| `ParseError` | The configuration file is not valid JSON. Wraps the underlying `serde_json` error. | Fix the JSON syntax. Note that unknown fields are rejected, so remove any stray keys. |
+| `NotFound` | No configuration file was found at the expected path. | Create a `config.json` at the expected location, or point the server at an existing one. |
+| `ValidationError` | The configuration parsed but failed a semantic check (see the validation rules below). | Correct the offending value as described in the message. |
+
+### Validation Rules
+
+`Config::validate` in `src/config/settings.rs` enforces the following. A breach of any rule
+produces a `ValidationError` whose `message` names the offending field.
+
+- **Log level.** `logging.level` must be one of `trace`, `debug`, `info`, `warn`, or
+    `error` (matched case-insensitively). The default is `warn`.
+- **Rate-limit burst.** `rate_limit.max_burst` must be greater than `0`; a zero burst would
+    block every mutating operation. The default is `120`.
+- **Rate-limit refill.** `rate_limit.refill_per_sec` must be a finite, non-negative number.
+    A value of `0.0` is valid and permits a single burst with no refill. The default is
+    `30.0`.
+
+Rate limiting applies only to destructive (file-mutating) operations; read-only tools are
+never rate limited.
+
+---
+
+## Altium File Errors (`AltiumError`)
+
+These errors come from `src/altium/error.rs` and occur during `.PcbLib` / `.SchLib` file
+operations. They are surfaced to the client as tool-call results with `isError: true`.
+
+| Variant | Cause | Remedy |
+|---------|-------|--------|
+| `FileRead` | The library file could not be opened or read. Wraps the underlying I/O error. | Confirm the file exists, is readable, and lies within an allowed path. |
+| `FileWrite` | The library file (or its atomic-write temporary file) could not be written. Wraps the underlying I/O error. | Confirm the target directory is writable and within an allowed path, and that there is sufficient disk space. |
+| `InvalidOle` | The file is not a valid OLE compound document, or its structure is malformed. | Verify the file is a genuine Altium library and is not truncated or corrupt. |
+| `MissingStream` | A required stream is absent from the OLE document. The stream name is included. | The file is incomplete or not a recognised Altium library; regenerate or replace it. |
+| `ParseError` | Binary data could not be parsed at a given byte offset. Both the offset and a description are included. | The file is corrupt or uses an unexpected layout; verify it opens in Altium Designer. |
+| `InvalidParameter` | A parameter value supplied to a primitive or operation is invalid. The parameter name and reason are included. | Correct the named parameter to a valid value. |
+| `ComponentNotFound` | The requested component does not exist in the library. The component name is included. | Check the component name and list the library's components first. |
+| `UnsupportedVersion` | The file declares a version this implementation does not support. The version string is included. | Open and re-save the library in a supported Altium Designer version. |
+| `CompressionError` | Compression or decompression of stream data failed. Optionally wraps an underlying I/O error. | The stream is corrupt or uses an unexpected encoding; verify the source file. |
+| `WrongFileType` | The file is the wrong kind (for example, a `.SchLib` opened as a `.PcbLib`). The expected and actual types are included. | Call the tool that matches the file type, or supply the correct file. |
+
+---
+
+## Path Validation Errors
+
+Every file-touching tool routes its `filepath` argument through `validate_path`
+(`src/mcp/server.rs`) before any I/O. When validation fails, the message below is returned
+to the client as a tool-call result with `isError: true` (see
+[How Errors Surface](#how-errors-surface)). Only the sanitised file name (`{name}`) ever
+appears — never a full path.
+
+| Message | When It Occurs | Remedy |
+|---------|----------------|--------|
+| `Access denied: no allowed directories are configured` | The server was constructed with an empty allow-list, so every path is denied (fail closed). The CLI substitutes the current directory when the config omits `allowed_paths`, so this normally only affects embedders. | Configure at least one `allowed_paths` entry. |
+| `Access denied: path is outside the configured allowed directories` | The canonicalised path is not within any configured allowed path. The message is deliberately generic — it discloses no path, allow-list contents, or OS error text. | Use a path inside a configured allowed directory, or add the directory to `allowed_paths`. |
+| `Failed to resolve path '{name}'` | The path exists but could not be canonicalised (for example, permission denied on a component of the path). | Check the path's permissions and that every component is accessible. |
+| `Invalid path '{name}': cannot create a file at the filesystem root` | A new-file path has no parent directory (it points at the filesystem root). | Supply a path inside a directory, not at the root. |
+| `Invalid path '{name}': no filename specified` | A new-file path has no final file-name component. | Supply a path that ends in a file name. |
+| `Parent directory of '{name}' does not exist or is inaccessible` | For a file that does not yet exist, the parent directory could not be canonicalised — it is missing or unreadable. | Create the parent directory first, or correct the path. |
+
+---
+
+## Tool-Call Result and Error-Context Shapes
+
+When a tool fails, the handler returns a `ToolCallResult` (defined in `src/mcp/server.rs`).
+The envelope serialises to the standard MCP shape: a `content` array of typed items plus an
+`isError` flag that is present only when `true`.
+
+```json
+{
+    "content": [
+        {
+            "type": "text",
+            "text": "Component 'SOIC-99' not found in library. Available: SOIC-8, SOIC-14, SOIC-16"
+        }
+    ],
+    "isError": true
+}
+```
+
+For richer diagnostics, a handler may build the text payload from an `ErrorContext`. This
+produces a structured, pretty-printed JSON document inside the `text` field, with consistent
+keys across operations. Optional fields are emitted as `null` when not set.
+
+```json
+{
+    "content": [
+        {
+            "type": "text",
+            "text": "{\n  \"status\": \"error\",\n  \"operation\": \"write_pcblib\",\n  \"error\": \"Failed to write file: MyLibrary.PcbLib\",\n  \"filepath\": \"MyLibrary.PcbLib\",\n  \"component\": \"SOIC-8\",\n  \"details\": \"atomic write failed\"\n}"
+        }
+    ],
+    "isError": true
+}
+```
+
+The structured document inside `text` always carries these keys:
+
+- **`status`** — always `"error"` for a failed call.
+- **`operation`** — the operation being performed, for example `write_pcblib` or
+    `delete_component`.
+- **`error`** — the human-readable error message.
+- **`filepath`** — the file being operated on, or `null` if not applicable.
+- **`component`** — the component being processed, or `null` if not applicable.
+- **`details`** — additional context about what was happening, or `null`.
+
+### Unknown-Argument and Unknown-Field Rejection
+
+Every `tools/call` is first checked against the called tool's own schema (the one
+`tools/list` serves): an argument the schema does not document —
+`Unknown argument 'dryrun' for tool 'update_pad'. Accepted arguments are: [...]` — is
+refused before the handler runs, because every handler would otherwise ignore it and
+silently take the default (`src/mcp/server.rs`, `check_tool_arguments`). So is a value
+of the wrong JSON type anywhere in the arguments, named by its path —
+`Argument 'footprints[0].pads[1].width' must be a number, got string "1.5"` — since a
+handler reading `"true"` where it expects `true`, or `"1.5"` where it expects `1.5`,
+would likewise take the default without a word. A whole number is accepted wherever an
+integer is expected (`2` and `2.0` alike, up to 2^53) and handed to the tool as the
+integer it is, so `"limit": 2.0` pages by two; a field the schema types as several kinds
+(`flags`, a region's `kind`) accepts any of them. A page is asked for with a `limit` of
+1 or more and an `offset` of 0 or more — `limit must be a whole number of 1 or more, got 0`
+— since a zero page would never advance and a negative one used to read as absent. A
+range the schema states (`minimum` / `maximum`, shown in `docs/TOOLS.md`) is checked at
+the same point — `Argument 'symbols[0].labels[0].font_id' must be between 1 and 255, got 0`
+— since a negative under an unsigned field, or a byte over 255, used to read as absent.
+The parsers judge the rest of the *values* — spellings, geometry, layer names — and say
+so in their own errors. A pad or
+via stack is held to what the record stores — the entry count its stack mode takes
+(3 for `top_middle_bottom`, 32 for `full_stack`; 32 diameters for a stacked via), a shape
+per entry, a whole-number 0-100 corner radius —
+`Pad '1' per_layer_shapes[2] 'oblongish' is not a shape` — rather than filling a
+missing layer from the main size or ignoring an extra one. A `rounded_rectangle` slot is
+`full_stack`-only, because the rounding lives in per-layer corner-radius bytes that a
+`top_middle_bottom` stack has nowhere to store —
+`Pad '1' per_layer_shapes[1]: rounded_rectangle needs a per-layer corner radius, which
+only a full_stack pad stores; a top_middle_bottom stack cannot hold it`. A text's
+`font_name` or `barcode_font_name` is held to the 31 UTF-16 units its field carries —
+`Text font_name '…' is 32 UTF-16 units long; a Windows font face name has at most 31` —
+rather than written cut short.
+
+`write_pcblib`, `write_schlib`, `update_component`, `update_pad`, `update_primitive` and
+`batch_update` refuse any JSON object key they do not know —
+`Unknown field 'widht'. Allowed fields are: [...]` — rather than ignoring it, because an
+ignored typo is a pad of the wrong shape or a track on the wrong layer, found only in Altium.
+Every object is checked: footprints and symbols, each primitive kind, 3D-model and
+component-body objects, footprint links, and the `updates` / `parameters` objects of the
+in-place tools (per primitive kind and per batch operation). The accepted keys are the fields the read tools
+emit for that object plus its authoring-only spellings (`step_model`, `vertices`, `hidden`,
+`designator_prefix`, …), so anything a read returned can be passed straight back
+(`src/mcp/tools/allowed_keys.rs`). A footprint or symbol is parsed by one routine whichever
+tool receives it (`parse_footprint_json` / `parse_symbol_json`, `src/mcp/tools/parsing.rs`),
+so `update_component` accepts exactly what `write_pcblib` / `write_schlib` do.
+
+A record the parser cannot build — a required field missing or of the wrong type — is
+likewise refused, never silently left out: the error names the kind and index
+(`Failed to parse region at index 2`, `Failed to parse footprint link at index 0`) in the
+structured context above, and nothing is written. An enum-valued field spelt in a way no
+accepted name matches is refused the same way —
+`Pin '7' orientation 'sideways' is not recognised. Accepted values: left, right, up, down`
+— with names matched in any case, with or without separators, plus the documented
+synonyms (`tristate` for `hi_z`).
+
+No text field may contain `|`: it is the separator of Altium's pipe-delimited records,
+and the format has no way to escape it, so the text would come back cut at that point.
+Altium's own editors confirm the rule — the schematic editor stores such a `|` as `¦`
+(U+00A6), the PCB editor writes it raw and then reads the text back cut (measured in
+AD24; `scripts/samples/manual/pipe.*`) — so both writers and the write tools refuse it by
+field: `Symbol 'X' parameters[].value contains '|', the separator of Altium's record
+format, which cannot hold it (Altium's own schematic editor stores it as '¦', U+00A6 —
+send that character if it is what you mean)`. Strings kept in binary fields — a pad
+designator, a PCB text's string, a pin's name and designator — may carry one.
+
+### Component Names Are Case-Insensitive
+
+A component name is resolved regardless of case — `get_component` for `lm358` finds
+`LM358`, as does the `component_name` filter of `read_pcblib` / `read_schlib` — because
+that is how the file's own OLE directory compares the storage names a component becomes,
+and how Altium resolves one. A name the library does not hold is an error that names what
+it does — `Component 'LM385' not found in library. Available: LM358, LM324 ... and 12 more`
+— from every tool that looks one up, never an empty success. Every tool that creates a name
+(`copy_component`, `rename_component`, `bulk_rename`, `write_*` append, `import_library`,
+`merge_libraries`, `update_component` with a new name) therefore treats a name differing
+from an existing one only in case as taken, and says so with the spelling on file:
+`Component 'res_0402' already exists in library as 'RES_0402' (component names are
+case-insensitive)`. Renaming a component to its own name in another case is allowed,
+however the request spells the old name. Naming a component in another case when
+referring to it (`update_component`, `update_pad`, …) never changes the spelling on file:
+only an explicit new name renames. Two such names within one `write_*` request are
+reported as a duplicate. A rename keeps the component's position in the library.
+
+---
+
+## Path Sanitisation
+
+Internal file paths are never disclosed in client-facing error messages. The `FileRead` and
+`FileWrite` variants of `AltiumError` deliberately render only the final path component (the
+file name) in their `Display` output, via `sanitise_path_for_client`. This prevents leaking
+internal directory structure and atomic-write temporary paths (for example,
+`…/MyLib.pcblib.tmp`) to the client.
+
+The full path remains available in the structured error field for server-side `tracing` at
+debug level — it is simply never sent to the client. When a path has no final component, the
+sanitised value falls back to `<file>`.

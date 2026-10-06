@@ -1,0 +1,188 @@
+{
+  "name": "eda-agent-bridge",
+  "uuid": "2530edab303a4c3cabf72ffed20d5b9b",
+  "displayName": "eda-agent bridge",
+  "version": "0.9.27",
+  "entry": "./dist/index",
+  "description": "Serves eda-agent commands to a local MCP server over a WebSocket the editor dials out to.",
+  "publisher": "George Saliba",
+  "license": "Apache-2.0",
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "automation",
+    "mcp",
+    "agent",
+    "bridge"
+  ],
+  "headerMenus": {
+    "home": [
+      {
+        "id": "EdaAgent",
+        "title": "eda-agent",
+        "menuItems": [
+          {
+            "id": "connect",
+            "title": "Connect to eda-agent",
+            "registerFn": "connect"
+          },
+          {
+            "id": "disconnect",
+            "title": "Disconnect",
+            "registerFn": "disconnect"
+          },
+          {
+            "id": "status",
+            "title": "Connection status",
+            "registerFn": "status"
+          }
+        ]
+      }
+    ],
+    "blank": [
+      {
+        "id": "EdaAgent",
+        "title": "eda-agent",
+        "menuItems": [
+          {
+            "id": "connect",
+            "title": "Connect to eda-agent",
+            "registerFn": "connect"
+          },
+          {
+            "id": "disconnect",
+            "title": "Disconnect",
+            "registerFn": "disconnect"
+          },
+          {
+            "id": "status",
+            "title": "Connection status",
+            "registerFn": "status"
+          }
+        ]
+      }
+    ],
+    "schematic": [
+      {
+        "id": "EdaAgent",
+        "title": "eda-agent",
+        "menuItems": [
+          {
+            "id": "connect",
+            "title": "Connect to eda-agent",
+            "registerFn": "connect"
+          },
+          {
+            "id": "disconnect",
+            "title": "Disconnect",
+            "registerFn": "disconnect"
+          },
+          {
+            "id": "status",
+            "title": "Connection status",
+            "registerFn": "status"
+          }
+        ]
+      }
+    ],
+    "symbol": [
+      {
+        "id": "EdaAgent",
+        "title": "eda-agent",
+        "menuItems": [
+          {
+            "id": "connect",
+            "title": "Connect to eda-agent",
+            "registerFn": "connect"
+          },
+          {
+            "id": "disconnect",
+            "title": "Disconnect",
+            "registerFn": "disconnect"
+          },
+          {
+            "id": "status",
+            "title": "Connection status",
+            "registerFn": "status"
+          }
+        ]
+      }
+    ],
+    "pcb": [
+      {
+        "id": "EdaAgent",
+        "title": "eda-agent",
+        "menuItems": [
+          {
+            "id": "connect",
+            "title": "Connect to eda-agent",
+            "registerFn": "connect"
+          },
+          {
+            "id": "disconnect",
+            "title": "Disconnect",
+            "registerFn": "disconnect"
+          },
+          {
+            "id": "status",
+            "title": "Connection status",
+            "registerFn": "status"
+          }
+        ]
+      }
+    ],
+    "footprint": [
+      {
+        "id": "EdaAgent",
+        "title": "eda-agent",
+        "menuItems": [
+          {
+            "id": "connect",
+            "title": "Connect to eda-agent",
+            "registerFn": "connect"
+          },
+          {
+            "id": "disconnect",
+            "title": "Disconnect",
+            "registerFn": "disconnect"
+          },
+          {
+            "id": "status",
+            "title": "Connection status",
+            "registerFn": "status"
+          }
+        ]
+      }
+    ],
+    "panel": [
+      {
+        "id": "EdaAgent",
+        "title": "eda-agent",
+        "menuItems": [
+          {
+            "id": "connect",
+            "title": "Connect to eda-agent",
+            "registerFn": "connect"
+          },
+          {
+            "id": "disconnect",
+            "title": "Disconnect",
+            "registerFn": "disconnect"
+          },
+          {
+            "id": "status",
+            "title": "Connection status",
+            "registerFn": "status"
+          }
+        ]
+      }
+    ]
+  },
+  "activationEvents": {
+    "onStartupFinished": "activate"
+  },
+  "engines": {
+    "eda": "^2.2.0"
+  }
+}

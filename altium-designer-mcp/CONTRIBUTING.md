@@ -1,0 +1,355 @@
+# Contributing to altium-designer-mcp
+
+Thank you for your interest in contributing to altium-designer-mcp! This document provides guidelines and information for contributors.
+
+## Table of Contents
+
+- [Code of Conduct](#code-of-conduct)
+- [Security Considerations](#security-considerations)
+- [How to Contribute](#how-to-contribute)
+    - [Reporting Bugs](#reporting-bugs)
+    - [Suggesting Features](#suggesting-features)
+    - [Pull Requests](#pull-requests)
+- [Development Setup](#development-setup)
+- [Coding Standards](#coding-standards)
+- [Commit Messages](#commit-messages)
+- [Testing](#testing)
+- [Documentation](#documentation)
+    - [Single Source of Truth](#single-source-of-truth)
+
+---
+
+## Code of Conduct
+
+This project adheres to the Contributor Covenant Code of Conduct.
+By participating, you are expected to uphold this code. Please see [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for details.
+
+---
+
+## Security Considerations
+
+This is a local file-I/O tool: it reads and writes Altium library files on the user's machine, gated by the
+`allowed_paths` configuration. Most of its risk surface is path handling, so keep these rules in mind when
+contributing code that touches files:
+
+- **Validate every path before reading or writing.** Resolve and canonicalise the path, then confirm it
+    falls within a configured `allowed_paths` entry before any I/O. Never act on a caller-supplied path directly.
+- **Never widen the `allowed_paths` semantics.** Do not add escape hatches, implicit fallbacks, or "convenience"
+    defaults that let operations reach outside the configured directories.
+- **Keep internal paths out of user-facing errors.** Error messages must reference only the file name, never an
+    absolute or otherwise internal path. See [STYLE.md](STYLE.md) for wording conventions.
+- **Add path-traversal tests when adding a tool that touches files.** Cover `..` segments, absolute paths,
+    symlinks, and paths outside `allowed_paths`, asserting that each is rejected.
+
+To report a vulnerability, do **not** open a public issue. Follow the disclosure process in the root
+[SECURITY.md](SECURITY.md); the threat model and security design rationale live in [docs/SECURITY.md](docs/SECURITY.md).
+
+---
+
+## How to Contribute
+
+### Reporting Bugs
+
+Before submitting a bug report:
+
+1. Check the [existing issues](https://github.com/embedded-society/altium-designer-mcp/issues) to avoid duplicates
+2. Ensure you're using the latest version
+3. Collect relevant information:
+    - Operating system and version
+    - Rust version (`rustc --version`)
+    - altium-designer-mcp version
+    - Steps to reproduce
+    - Expected vs actual behaviour
+
+When submitting:
+
+- Use the bug report template
+- Provide a clear, descriptive title
+- Include minimal reproduction steps
+
+### Suggesting Features
+
+We welcome feature suggestions! Before submitting:
+
+1. Check [existing issues](https://github.com/embedded-society/altium-designer-mcp/issues) and
+   [discussions](https://github.com/embedded-society/altium-designer-mcp/discussions) for similar ideas
+2. Consider how the feature fits the project's goals
+3. Think about backwards compatibility
+
+When submitting:
+
+- Use the feature request template
+- Explain the problem you're trying to solve
+- Describe your proposed solution
+- Consider alternatives you've thought about
+
+### Pull Requests
+
+#### Before You Start
+
+1. Open an issue first to discuss significant changes
+2. Fork the repository
+3. Create a feature branch from `main`
+4. Make your changes following our [coding standards](#coding-standards)
+
+#### PR Requirements
+
+- [ ] Code compiles without warnings (`cargo build`)
+- [ ] All tests pass (`cargo test`)
+- [ ] Code is formatted (`cargo fmt --all --check`)
+- [ ] Clippy passes (`cargo clippy --all-targets --all-features -- -D warnings`)
+- [ ] Markdown lints cleanly (`markdownlint-cli2 "**/*.md"`)
+- [ ] Internal links and anchors resolve (`lychee --offline --include-fragments "./**/*.md"`; `cargo install lychee`)
+- [ ] File paths are validated and path-traversal tests cover any new file-touching tool (see [Security Considerations](#security-considerations))
+- [ ] Documentation is updated if needed
+- [ ] CHANGELOG.md is updated for user-facing changes (add to the `## [Unreleased]` section)
+- [ ] Commit messages follow [conventional commits](#commit-messages)
+
+#### PR Process
+
+1. Submit your PR against the `main` branch
+2. Fill out the PR template completely
+3. Wait for CI to pass
+4. Address any review feedback
+5. Once approved, a maintainer will merge
+
+---
+
+## Development Setup
+
+### Prerequisites
+
+- Rust 1.75+ (see `Cargo.toml` for minimum version, `rust-toolchain.toml` for channel)
+
+### Setup
+
+```bash
+# Clone the repository
+git clone https://github.com/embedded-society/altium-designer-mcp.git
+cd altium-designer-mcp
+
+# Install Rust (if not already installed)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# Build the project
+cargo build
+
+# Run tests
+cargo test
+
+# Check formatting
+cargo fmt --all --check
+
+# Run clippy
+cargo clippy --all-targets --all-features -- -D warnings
+```
+
+---
+
+## Coding Standards
+
+### Rust Style
+
+- Follow `rustfmt` formatting (run `cargo fmt --all --check` before committing)
+- Follow `clippy` recommendations (run `cargo clippy --all-targets --all-features -- -D warnings`)
+- Write idiomatic Rust code
+- Prefer safe Rust — `unsafe` code is forbidden (see `Cargo.toml` lints)
+
+### Documentation
+
+- Add rustdoc comments (`///`) to all public items
+- Include examples in documentation where helpful
+- Keep comments up to date with code changes
+
+### British Spelling
+
+Use British spelling in all documentation and user-facing text:
+
+| American | British |
+|----------|---------|
+| color | colour |
+| behavior | behaviour |
+| organization | organisation |
+| center | centre |
+| license (noun) | licence |
+| analyze | analyse |
+| initialize | initialise |
+
+**Note:** Code identifiers may use American spelling where it matches Rust/library conventions.
+
+---
+
+## Commit Messages
+
+We use [Conventional Commits](https://www.conventionalcommits.org/). Format:
+
+```text
+<type>(<scope>): <description>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+### Types
+
+| Type | Description |
+|------|-------------|
+| `feat` | New feature |
+| `fix` | Bug fix |
+| `docs` | Documentation only |
+| `style` | Formatting, no code change |
+| `refactor` | Code change that neither fixes a bug nor adds a feature |
+| `perf` | Performance improvement |
+| `test` | Adding or updating tests |
+| `chore` | Maintenance tasks |
+| `ci` | CI/CD changes |
+
+### Examples
+
+```text
+feat(altium): implement pad primitive encoding
+
+fix(pcblib): correct binary format for track records
+
+docs: update README with installation instructions
+
+chore: update dependencies
+```
+
+### Rules
+
+- Use imperative mood ("Add feature" not "Added feature")
+- Don't capitalise the first letter of the description
+- No period at the end of the subject line
+- Keep the subject line under 72 characters
+- Reference issues in the footer: `Fixes #123`
+
+---
+
+## Testing
+
+### Running Tests
+
+```bash
+# Run all tests
+cargo test
+
+# Run tests with output
+cargo test -- --nocapture
+
+# Run a specific test
+cargo test test_name
+
+# Run tests for a specific module
+cargo test module_name::
+```
+
+### Writing Tests
+
+- Write unit tests for new functionality
+- Place unit tests in the same file as the code, in a `#[cfg(test)]` module
+- Place integration tests in the `tests/` directory
+- Use descriptive test names that explain what's being tested
+- Test both success and failure cases
+
+### Coverage
+
+The project holds **99% line coverage on production code** (`main.rs` excluded — it is
+exercised end-to-end across a process boundary instrumentation cannot see; measured with
+`cargo llvm-cov --all-features --workspace --ignore-filename-regex '(^|[/\\])main\.rs$'`).
+Two facts worth knowing when reading figures near the gate: the measured total flaps by a
+few lines between identical runs, so treat small movements as noise; and the remaining
+uncovered lines are, on inspection, ones a passing test cannot reach — assertion-failure
+formatting, `cfg(unix)` signal handling, manual-tooling branches and defence-in-depth
+behind the writers' own guarantees — so a new test should target a seam, not the number.
+
+---
+
+## Documentation
+
+### Types of Documentation
+
+| Location | Purpose |
+|----------|--------|
+| `README.md` | User-facing overview and quick start |
+| `CONTRIBUTING.md` | This file — contributor guidelines |
+| `STYLE.md` | Code and documentation style conventions |
+| `CODE_OF_CONDUCT.md` | Community standards and expected behaviour |
+| `SECURITY.md` | Security policy and vulnerability reporting |
+| `CHANGELOG.md` | User-facing change history |
+| `docs/VISION.md` | Core principle and architectural rationale |
+| `docs/ARCHITECTURE.md` | System architecture and module layout |
+| `docs/AI_WORKFLOW.md` | AI usage workflow, symbol pin conventions, IPC reference |
+| `docs/AGENT_GUIDE.md` | Invariants for an agent driving the server (units, pin geometry, sandbox) |
+| `docs/CLIENT_SETUP.md` | Setup for every MCP client (Claude Code, Claude Desktop, Antigravity, Cursor, VS Code, Windsurf, Cline, Zed, JetBrains, Gemini CLI, Codex CLI, …) + troubleshooting — the single place a client's wiring is described |
+| `docs/USAGE.md` | What to ask for once connected: workflows, prompts, tips — client-neutral |
+| `docs/SECURITY.md` | Security threat model and design rationale |
+| `docs/RELEASING.md` | Release runbook: dry run, tag-day steps, draft review, rollback |
+| `docs/errors.md` | Error reference catalogue |
+| `docs/TOOLS.md` | Generated tool reference (source of truth: `src/mcp/tool_definitions.rs`) |
+| `docs/PCBLIB_FORMAT.md` | `.PcbLib` binary format reference |
+| `docs/SCHLIB_FORMAT.md` | `.SchLib` binary format reference |
+| `scripts/samples/COVERAGE.md` | Golden-fixture coverage map, verified Altium negatives and the scripting-name checks |
+| Rustdoc comments | API documentation |
+
+### Updating Documentation
+
+- Update `README.md` for user-facing changes
+- Update `CHANGELOG.md` for all notable changes (add to the `## [Unreleased]` section)
+- Update rustdoc comments when changing public APIs
+- Keep examples up to date and working
+
+### Single Source of Truth
+
+Avoid duplicating information across files. Each piece of information should have one canonical location.
+
+| Information | Canonical Source |
+|-------------|------------------|
+| British spelling | `CONTRIBUTING.md` § British Spelling |
+| Build commands | `CONTRIBUTING.md` § Development Setup |
+| Coding standards | `CONTRIBUTING.md` § Coding Standards |
+| Commit conventions | `CONTRIBUTING.md` § Commit Messages |
+| PR requirements | `CONTRIBUTING.md` § Pull Requests |
+| Path-safety rules for contributors | `CONTRIBUTING.md` § Security Considerations |
+| Security policy and vulnerability reporting | `SECURITY.md` |
+| Security threat model and design | `docs/SECURITY.md` |
+| Error reference catalogue | `docs/errors.md` |
+| Formatting rules | `.editorconfig` and `STYLE.md` |
+| MCP tools reference | `docs/TOOLS.md` (generated from `src/mcp/tool_definitions.rs`; `README.md` § MCP Tools is the categorised overview) |
+| Primitive types | `README.md` § Primitive Types |
+| Altium layers | `README.md` § Standard Altium Layers |
+| Configuration options | `README.md` § Configuration |
+| Core principle/vision | `docs/VISION.md` |
+| Source tree / module layout | `docs/ARCHITECTURE.md` § Component Overview |
+| Primitive JSON schemas | `docs/TOOLS.md` (generated from `src/mcp/tool_definitions.rs`) |
+| Symbol pin conventions | `docs/AI_WORKFLOW.md` § Symbol Pin Conventions |
+| IPC standards reference | `docs/AI_WORKFLOW.md` § IPC Standards Reference |
+| `.PcbLib` binary format | `docs/PCBLIB_FORMAT.md` |
+| `.SchLib` binary format | `docs/SCHLIB_FORMAT.md` |
+
+**Guidelines:**
+
+- Reference the canonical source instead of duplicating content
+- If information must appear in multiple places (e.g., PR template checklists), keep it minimal
+- When updating information, update the canonical source first
+- Cross-reference using `filename` § Section Name format
+
+---
+
+## Areas Needing Help
+
+- **Testing**: Test with real Altium libraries across different versions
+- **Documentation**: Improve user guides and API documentation
+- **Edge cases**: Handle unusual primitive configurations and older file formats
+- **3D models**: Improve STEP model attachment and component body support
+
+---
+
+## Questions?
+
+- Open a [Discussion](https://github.com/embedded-society/altium-designer-mcp/discussions) for questions
+- Check existing issues and discussions first
+- Be patient — maintainers are volunteers
+
+Thank you for contributing!

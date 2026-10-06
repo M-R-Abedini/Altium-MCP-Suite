@@ -1,0 +1,79 @@
+version: 2
+updates:
+    # GitHub Actions: a small, stable surface (checkout, setup-node, cache,
+    # rust-toolchain, install-action, attest-build-provenance). Individually
+    # they are trivial to review, but daily ungrouped updates produced a
+    # steady drip of near-identical PRs — mostly install-action patch bumps —
+    # each needing its own CI run and merge. One grouped weekly PR keeps the
+    # same freshness with a fraction of the churn.
+    #
+    # Cadence does not delay security fixes: Dependabot security updates are
+    # raised as soon as an advisory lands, independently of this schedule.
+    - package-ecosystem: "github-actions"
+      directory: "/"
+      schedule:
+        interval: "weekly"
+        day: "saturday"
+        time: "00:00"
+        timezone: "Europe/Ljubljana"
+      groups:
+        github-actions:
+          patterns: ["*"]
+          update-types: ["major", "minor", "patch"]
+      labels: ["dependencies", "github_actions"]
+
+    # npm: markdownlint-cli2 tooling only. Same weekly batch as Actions —
+    # it is lint tooling, so there is nothing to gain from same-day bumps.
+    - package-ecosystem: "npm"
+      directory: "/"
+      schedule:
+        interval: "weekly"
+        day: "saturday"
+        time: "00:00"
+        timezone: "Europe/Ljubljana"
+      groups:
+        npm:
+          patterns: ["*"]
+          update-types: ["major", "minor", "patch"]
+      labels: ["dependencies", "javascript"]
+
+    # Docker: the two Debian base images in the Dockerfile. The builder's
+    # `rust` image is ignored here on purpose: its tag is held to
+    # rust-toolchain.toml by check-toolchain-pin.sh, so a lone bump of it
+    # can only fail that check — a Rust update is a deliberate three-place
+    # change (toolchain file, the dtolnay/rust-toolchain workflow pins, the
+    # Dockerfile). The Debian runtime image stays covered, same weekly batch.
+    - package-ecosystem: "docker"
+      directory: "/"
+      schedule:
+        interval: "weekly"
+        day: "saturday"
+        time: "00:00"
+        timezone: "Europe/Ljubljana"
+      groups:
+        docker:
+          patterns: ["*"]
+          update-types: ["major", "minor", "patch"]
+      ignore:
+        - dependency-name: "rust"
+      labels: ["dependencies", "docker"]
+
+    # Cargo: large transitive dependency surface. Weekly cadence +
+    # grouping keeps PR noise manageable while still catching security
+    # advisories within ~7 days. Grouping all updates into one PR per
+    # week avoids the rebase-cascade that a per-crate flow produces.
+    # Kept on Monday, away from the two light PRs above, because a grouped
+    # crate bump is the one that occasionally needs real review.
+    - package-ecosystem: "cargo"
+      directory: "/"
+      schedule:
+        interval: "weekly"
+        day: "monday"
+        time: "00:00"
+        timezone: "Europe/Ljubljana"
+      open-pull-requests-limit: 5
+      groups:
+        cargo-dependencies:
+          patterns:
+            - "*"
+      labels: ["dependencies", "rust"]

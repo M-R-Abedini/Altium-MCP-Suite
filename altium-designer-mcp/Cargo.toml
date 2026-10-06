@@ -1,0 +1,120 @@
+[package]
+name = "altium-designer-mcp"
+version = "1.0.1"
+edition = "2021"
+rust-version = "1.75"
+license = "GPL-3.0-or-later"
+description = "MCP server for AI-assisted Altium Designer component library management"
+repository = "https://github.com/embedded-society/altium-designer-mcp"
+readme = "README.md"
+keywords = ["mcp", "altium", "pcb", "eda", "footprint"]
+categories = ["development-tools", "command-line-utilities"]
+authors = ["The Embedded Society"]
+
+[lib]
+name = "altium_designer_mcp"
+path = "src/lib.rs"
+
+[[bin]]
+name = "altium-designer-mcp"
+path = "src/main.rs"
+
+[dependencies]
+# Async runtime (minimal features for MCP server)
+# - rt: basic runtime for block_on
+# - io-util: AsyncBufReadExt, AsyncWriteExt, BufReader
+# - io-std: stdin(), stdout()
+# - macros: #[tokio::test] attribute
+# - time: timeout for operations
+# - signal: graceful shutdown handling (SIGTERM/SIGINT/Ctrl+C)
+# - fs: async file operations for library I/O
+tokio = { version = "1", features = ["rt", "io-util", "io-std", "macros", "time", "signal", "fs"] }
+
+# Serialisation
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# CLI argument parsing
+clap = { version = "4", features = ["derive"] }
+
+# Logging
+tracing = "0.1"
+# env-filter: enables RUST_LOG per-module verbosity control at runtime
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Error handling
+thiserror = "2.0"
+
+# Platform-specific directories
+dirs = "6.0"
+
+# OLE Compound File Binary format (for Altium files)
+cfb = "0.14"
+
+# CSV handling for component database
+csv = "1.3"
+
+# Glob pattern matching
+glob = "0.3"
+
+# Zlib decompression (for embedded 3D models)
+flate2 = "1.0"
+
+# Bitflags for PCB primitive flags
+bitflags = { version = "2.6", features = ["serde"] }
+
+# Character encoding (for Windows-1252 in legacy Altium files)
+encoding_rs = "0.8"
+
+# UUID generation (for 3D model GUIDs)
+uuid = { version = "1.11", features = ["v4"] }
+
+# Regex for pattern matching (batch_update symbol filter)
+regex = "1.11"
+
+# Base64 encoding (for STEP model extraction)
+base64 = "0.23"
+
+# Ordered hash map (preserves insertion order for SchLib symbols)
+indexmap = { version = "2.7", features = ["serde"] }
+
+# Date/time handling (for timestamped backups)
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+
+[dev-dependencies]
+# Async testing utilities
+tokio-test = "0.4"
+# Temporary directories for tests
+tempfile = "3.15"
+# Property-based testing: no-panic fuzzing of the binary parsers and
+# partition testing of the coordinate validators.
+proptest = "1.6"
+
+[profile.release]
+opt-level = 3
+lto = true
+strip = true
+# Unwinding (the default) is deliberate: the tool dispatcher catches a panic
+# and answers the call with an error result, so one failing tool cannot take
+# the server — and the assistant's whole session — down. `panic = "abort"`
+# would make that safety net impossible.
+codegen-units = 1
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+cargo = { level = "warn", priority = -1 }
+# Allow multiple versions of transitive dependencies (we can't control these)
+multiple_crate_versions = "allow"
+
+# cfb 0.14.0 walks the whole mini-stream FAT chain on every access to a small
+# stream and every path lookup walks an unbalanced tree, so a library of n
+# components costs O(n^2) to read or write. Fixed upstream in
+# mdsteele/rust-cfb#81 (merged 2026-08-28); pinned to that merge until a
+# release carries it — then bump `cfb` above and delete this block.
+[patch.crates-io]
+cfb = { git = "https://github.com/mdsteele/rust-cfb", rev = "8c1ec76" }

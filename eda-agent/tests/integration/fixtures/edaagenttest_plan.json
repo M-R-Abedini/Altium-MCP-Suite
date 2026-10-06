@@ -1,0 +1,25 @@
+{
+  "spec": "Integration-test fixture: 2-resistor voltage divider with VCC bypass cap and midpoint decoupling cap on a VCC/GND rail.",
+  "summary": "R1+R2 form a 10k/10k divider between VCC and GND, generating a VCC/2 reference at VMID. C1 (100nF) decouples VMID to GND. C2 (100nF) bypasses VCC to GND close to the divider. Used by tests/integration/test_round_trip.py to assert on a known small project.",
+  "sheets": [
+    {"name": "EDAAgentTest", "title": "EDAAgentTest", "size": "A4"}
+  ],
+  "zones": [],
+  "parts": [
+    {"refdes": "R1", "lib_ref": "RES 10K 1% 100mW 0603", "lib_path": "C:\\path\\to\\StdLib\\StdLib_RESISTORS\\StdLib_RESISTORS.SchLib", "value": "10k", "status": "existing", "sheet": "EDAAgentTest", "rationale": "Top half of divider"},
+    {"refdes": "R2", "lib_ref": "RES 10K 1% 100mW 0603", "lib_path": "C:\\path\\to\\StdLib\\StdLib_RESISTORS\\StdLib_RESISTORS.SchLib", "value": "10k", "status": "existing", "sheet": "EDAAgentTest", "rationale": "Bottom half of divider"},
+    {"refdes": "C1", "lib_ref": "CAP 100nF 50V X5R 10% 0603", "lib_path": "C:\\path\\to\\StdLib\\StdLib_CAPACITORS\\StdLib_CAPACITORS.SchLib", "value": "100nF", "status": "existing", "sheet": "EDAAgentTest", "rationale": "VMID decoupling"},
+    {"refdes": "C2", "lib_ref": "CAP 100nF 50V X5R 10% 0603", "lib_path": "C:\\path\\to\\StdLib\\StdLib_CAPACITORS\\StdLib_CAPACITORS.SchLib", "value": "100nF", "status": "existing", "sheet": "EDAAgentTest", "rationale": "VCC bypass"}
+  ],
+  "nets": [
+    {"name": "VCC", "is_power": true, "pins": [{"refdes": "R1", "pin": "1"}, {"refdes": "C2", "pin": "1"}]},
+    {"name": "GND", "is_ground": true, "pins": [{"refdes": "R2", "pin": "2"}, {"refdes": "C1", "pin": "2"}, {"refdes": "C2", "pin": "2"}]},
+    {"name": "VMID", "pins": [{"refdes": "R1", "pin": "2"}, {"refdes": "R2", "pin": "1"}, {"refdes": "C1", "pin": "1"}]}
+  ],
+  "bom": [
+    {"refdes_list": ["R1", "R2"], "mpn": "RES 10K 1% 100mW 0603", "qty": 2, "description": "10k 1% 0603 resistor"},
+    {"refdes_list": ["C1", "C2"], "mpn": "CAP 100nF 50V X5R 10% 0603", "qty": 2, "description": "100nF X7R 0603 capacitor"}
+  ],
+  "design_rules": [],
+  "open_questions": []
+}

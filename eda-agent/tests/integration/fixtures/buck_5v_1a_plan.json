@@ -1,0 +1,455 @@
+{
+  "spec": "Step-down (buck) DC-DC converter. Input: 12V nominal. Output: 5V at 1A maximum load. Target: high efficiency, ceramic-friendly, low BOM count.",
+  "topology": "buck",
+  "summary": "TPS54331 controller (TI, SLVS839H datasheet, fixed 570 kHz, Vref=0.8V, Vin range 3.5-28V) chosen for 3x Iout headroom over 1A and well-documented design procedure. Component values derived from Section 8.2.2 (pages 15-19): inductor by Eq. 8 with Kind=0.3; output cap by Eq. 12; input cap per Section 8.2.2.4; feedback divider by Eq. 4. With R_top=10.0k and the in-stock R_bot=1.82k (the ideal 1.91k is not in inventory), Vout = 5.196V (3.9% above 5.000V). For exactly 5.000V, add a 1.91k 0603 1% resistor (e.g. Yageo RC0603FR-071K91L) and substitute R2.",
+  "open_questions": [
+    "R_bot ideal value is 1.91 kOhm (E96) but only 1.82k is in inventory. Plan accepts Vout=5.196V; add 1.91k to library for exact 5.000V.",
+    "R_comp ideal value from datasheet example is 29.4 kOhm but 30.1 kOhm substituted (closest in-stock, well within Type II compensation tolerance).",
+    "TPS54331D and SS14 are status=needs_creation. The executor will halt; author symbols via lib_create_symbol + lib_add_pin OR add to an existing IC/diode library before re-running execute_plan.",
+    "EN pin floats to enable (datasheet pin 3 description) and SS pin uses internal default rise time. Both pins will be unconnected; if ERC flags them, add NoERC directives or tie EN to VIN."
+  ],
+  "sheets": [
+    {
+      "name": "main",
+      "title": "12V to 5V Buck",
+      "size": "A4"
+    }
+  ],
+  "zones": [],
+  "parts": [
+    {
+      "refdes": "U1",
+      "status": "existing",
+      "value": "TPS54331D",
+      "manufacturer": "Texas Instruments",
+      "mpn": "TPS54331DR",
+      "footprint": "SOIC-8",
+      "datasheet_url": "https://www.ti.com/lit/ds/symlink/tps54331.pdf",
+      "lib_ref": "TPS54331D",
+      "lib_path": "C:\\path\\to\\eda-agent\\tests\\integration\\fixtures\\EDAAgentTest_ICs.SchLib",
+      "role": "ic",
+      "sheet": "main",
+      "rationale": "Step-down DC-DC controller, 3.5-28V Vin, 3A max (3x headroom for 1A), fixed 570 kHz, Vref=0.8V, SOIC-8. Pin Functions per datasheet section 5 page 3: 1=BOOT 2=VIN 3=EN 4=SS 5=VSENSE 6=COMP 7=GND 8=PH."
+    },
+    {
+      "refdes": "D1",
+      "status": "existing",
+      "value": "SS14",
+      "manufacturer": "Onsemi",
+      "mpn": "SS14",
+      "footprint": "SMA",
+      "datasheet_url": "https://www.onsemi.com/pdf/datasheet/ss12-d.pdf",
+      "lib_ref": "SS14",
+      "lib_path": "C:\\path\\to\\eda-agent\\tests\\integration\\fixtures\\EDAAgentTest_ICs.SchLib",
+      "role": "diode",
+      "sheet": "main",
+      "rationale": "Catch diode for asynchronous buck. 40V/1A Schottky, low Vf. Pin 1=A (anode), pin 2=K (cathode)."
+    },
+    {
+      "refdes": "L1",
+      "status": "existing",
+      "value": "22uH",
+      "footprint": "IND_SMD",
+      "lib_ref": "IND 22uH 6.5A",
+      "role": "inductor",
+      "sheet": "main",
+      "rationale": "L_min = Vout*(Vin-Vout)/(Vin*Kind*Iout*fsw) = 5*7/(12*0.3*1*570k) = 17.1 uH; pick 22 uH (Eq. 8, p16). 6.5A Isat gives 5.8x margin over 1.12A peak inductor current.",
+      "lib_path": "C:\\path\\to\\StdLib\\StdLib_INDUCTORS\\StdLib_INDUCTORS.SchLib"
+    },
+    {
+      "refdes": "C1",
+      "status": "existing",
+      "value": "10uF",
+      "footprint": "0805",
+      "lib_ref": "CAP 10uF 25V X5R 10% 0805",
+      "role": "cin_bulk",
+      "sheet": "main",
+      "rationale": "Cin bulk decoupling per datasheet section 8.2.2.4 (p15). 25V rating gives 2x margin over 12V Vin.",
+      "lib_path": "C:\\path\\to\\StdLib\\StdLib_CAPACITORS\\StdLib_CAPACITORS.SchLib"
+    },
+    {
+      "refdes": "C2",
+      "status": "existing",
+      "value": "100nF",
+      "footprint": "0805",
+      "lib_ref": "CAP 100nF 50V X7R 10% 0805",
+      "role": "cin_hf",
+      "sheet": "main",
+      "rationale": "Cin high-frequency filter per datasheet section 8.2.2.4 (p15).",
+      "lib_path": "C:\\path\\to\\StdLib\\StdLib_CAPACITORS\\StdLib_CAPACITORS.SchLib"
+    },
+    {
+      "refdes": "C3",
+      "status": "existing",
+      "value": "22uF",
+      "footprint": "1206",
+      "lib_ref": "CAP 22uF 35V X5R 20% 1206",
+      "role": "cout",
+      "sheet": "main",
+      "rationale": "Output filter cap. Co_min per Eq. 12 (p17) = 1/(2*pi*5*25k) = 1.3 uF; pick 22 uF for ripple + transient margin. 35V rating is overkill but in-stock.",
+      "lib_path": "C:\\path\\to\\StdLib\\StdLib_CAPACITORS\\StdLib_CAPACITORS.SchLib"
+    },
+    {
+      "refdes": "C4",
+      "status": "existing",
+      "value": "100nF",
+      "footprint": "0805",
+      "lib_ref": "CAP 100nF 50V X7R 10% 0805",
+      "role": "cboot",
+      "sheet": "main",
+      "rationale": "Bootstrap capacitor BOOT-PH. Datasheet pin 1 description (p3) requires 0.1 uF.",
+      "lib_path": "C:\\path\\to\\StdLib\\StdLib_CAPACITORS\\StdLib_CAPACITORS.SchLib"
+    },
+    {
+      "refdes": "C5",
+      "status": "existing",
+      "value": "1nF",
+      "footprint": "0603",
+      "lib_ref": "CAP 1nF 50V X7R 10% 0603",
+      "role": "cz_comp",
+      "sheet": "main",
+      "rationale": "Type II compensation zero cap (Cz). Value per Typical Application (p14).",
+      "lib_path": "C:\\path\\to\\StdLib\\StdLib_CAPACITORS\\StdLib_CAPACITORS.SchLib"
+    },
+    {
+      "refdes": "C6",
+      "status": "existing",
+      "value": "47pF",
+      "footprint": "0603",
+      "lib_ref": "CAP 47pF 50V C0G 5% 0603",
+      "role": "cp_comp",
+      "sheet": "main",
+      "rationale": "Type II compensation high-frequency pole cap (Cp). C0G for tight tolerance per Typical Application (p14).",
+      "lib_path": "C:\\path\\to\\StdLib\\StdLib_CAPACITORS\\StdLib_CAPACITORS.SchLib"
+    },
+    {
+      "refdes": "R1",
+      "status": "existing",
+      "value": "10k",
+      "footprint": "0603",
+      "lib_ref": "RES 10K 1% 100mW 0603",
+      "role": "rfb_top",
+      "sheet": "main",
+      "rationale": "Feedback divider top. Eq. 4 (p15) recommends R5 ~ 10 kOhm.",
+      "lib_path": "C:\\path\\to\\StdLib\\StdLib_RESISTORS\\StdLib_RESISTORS.SchLib"
+    },
+    {
+      "refdes": "R2",
+      "status": "existing",
+      "value": "1.82k",
+      "footprint": "0603",
+      "lib_ref": "RES 1.82K 1% 100mW 0603",
+      "role": "rfb_bot",
+      "sheet": "main",
+      "rationale": "Feedback divider bottom. Ideal value R6 = R5*Vref/(Vout-Vref) = 10k*0.8/4.2 = 1.905 kOhm; 1.91k E96 ideal but not in inventory. 1.82k yields Vout = 0.8*(10/1.82 + 1) = 5.196 V (+3.9% from 5.000V).",
+      "lib_path": "C:\\path\\to\\StdLib\\StdLib_RESISTORS\\StdLib_RESISTORS.SchLib"
+    },
+    {
+      "refdes": "R3",
+      "status": "existing",
+      "value": "30.1k",
+      "footprint": "0603",
+      "lib_ref": "RES 30.1K 1% 100mW 0603",
+      "role": "rcomp",
+      "sheet": "main",
+      "rationale": "Type II compensation Rz. Datasheet example uses 29.4 kOhm; 30.1 kOhm is the closest E96 in inventory. Type II compensation is tolerant of small deviation.",
+      "lib_path": "C:\\path\\to\\StdLib\\StdLib_RESISTORS\\StdLib_RESISTORS.SchLib"
+    },
+    {
+      "refdes": "J1",
+      "status": "existing",
+      "value": "VIN 2pin",
+      "footprint": "TB_3.5mm_2P",
+      "lib_ref": "Phoenix Connector 1985195, 2 Pole, 3.5mm, Spring-cage, Terminal Block",
+      "role": "vin_conn",
+      "sheet": "main",
+      "rationale": "VIN input terminal block.",
+      "lib_path": "C:\\path\\to\\StdLib\\StdLib_CONNECTORS\\StdLib_CONNECTORS.SchLib"
+    },
+    {
+      "refdes": "J2",
+      "status": "existing",
+      "value": "VOUT 2pin",
+      "footprint": "TB_3.5mm_2P",
+      "lib_ref": "Phoenix Connector 1985195, 2 Pole, 3.5mm, Spring-cage, Terminal Block",
+      "role": "vout_conn",
+      "sheet": "main",
+      "rationale": "VOUT output terminal block.",
+      "lib_path": "C:\\path\\to\\StdLib\\StdLib_CONNECTORS\\StdLib_CONNECTORS.SchLib"
+    }
+  ],
+  "nets": [
+    {
+      "name": "VIN",
+      "is_power": true,
+      "role": "high_current",
+      "pins": [
+        {
+          "refdes": "J1",
+          "pin": "1"
+        },
+        {
+          "refdes": "C1",
+          "pin": "1"
+        },
+        {
+          "refdes": "C2",
+          "pin": "1"
+        },
+        {
+          "refdes": "U1",
+          "pin": "2"
+        }
+      ]
+    },
+    {
+      "name": "GND",
+      "is_ground": true,
+      "pins": [
+        {
+          "refdes": "J1",
+          "pin": "2"
+        },
+        {
+          "refdes": "J2",
+          "pin": "2"
+        },
+        {
+          "refdes": "C1",
+          "pin": "2"
+        },
+        {
+          "refdes": "C2",
+          "pin": "2"
+        },
+        {
+          "refdes": "C3",
+          "pin": "2"
+        },
+        {
+          "refdes": "C6",
+          "pin": "2"
+        },
+        {
+          "refdes": "R2",
+          "pin": "2"
+        },
+        {
+          "refdes": "R3",
+          "pin": "2"
+        },
+        {
+          "refdes": "D1",
+          "pin": "1"
+        },
+        {
+          "refdes": "U1",
+          "pin": "7"
+        }
+      ]
+    },
+    {
+      "name": "SW",
+      "role": "switch",
+      "pins": [
+        {
+          "refdes": "U1",
+          "pin": "8"
+        },
+        {
+          "refdes": "L1",
+          "pin": "1"
+        },
+        {
+          "refdes": "D1",
+          "pin": "2"
+        },
+        {
+          "refdes": "C4",
+          "pin": "2"
+        }
+      ]
+    },
+    {
+      "name": "BST",
+      "role": "control",
+      "pins": [
+        {
+          "refdes": "U1",
+          "pin": "1"
+        },
+        {
+          "refdes": "C4",
+          "pin": "1"
+        }
+      ]
+    },
+    {
+      "name": "VOUT",
+      "is_power": true,
+      "role": "high_current",
+      "pins": [
+        {
+          "refdes": "L1",
+          "pin": "2"
+        },
+        {
+          "refdes": "C3",
+          "pin": "1"
+        },
+        {
+          "refdes": "R1",
+          "pin": "1"
+        },
+        {
+          "refdes": "J2",
+          "pin": "1"
+        }
+      ]
+    },
+    {
+      "name": "FB",
+      "role": "feedback",
+      "pins": [
+        {
+          "refdes": "R1",
+          "pin": "2"
+        },
+        {
+          "refdes": "R2",
+          "pin": "1"
+        },
+        {
+          "refdes": "U1",
+          "pin": "5"
+        }
+      ]
+    },
+    {
+      "name": "COMP",
+      "role": "feedback",
+      "pins": [
+        {
+          "refdes": "U1",
+          "pin": "6"
+        },
+        {
+          "refdes": "C5",
+          "pin": "1"
+        },
+        {
+          "refdes": "C6",
+          "pin": "1"
+        }
+      ]
+    },
+    {
+      "name": "COMP_RC",
+      "role": "feedback",
+      "pins": [
+        {
+          "refdes": "C5",
+          "pin": "2"
+        },
+        {
+          "refdes": "R3",
+          "pin": "1"
+        }
+      ]
+    }
+  ],
+  "bom": [
+    {
+      "refdes_list": [
+        "U1"
+      ],
+      "manufacturer": "Texas Instruments",
+      "mpn": "TPS54331DR",
+      "description": "Buck DC-DC 28V 3A SOIC-8",
+      "qty": 1
+    },
+    {
+      "refdes_list": [
+        "D1"
+      ],
+      "manufacturer": "Onsemi",
+      "mpn": "SS14",
+      "description": "Schottky 40V 1A SMA",
+      "qty": 1
+    },
+    {
+      "refdes_list": [
+        "L1"
+      ],
+      "description": "22uH 6.5A SMD inductor",
+      "qty": 1
+    },
+    {
+      "refdes_list": [
+        "C1"
+      ],
+      "description": "10uF 25V X5R 0805",
+      "qty": 1
+    },
+    {
+      "refdes_list": [
+        "C2",
+        "C4"
+      ],
+      "description": "100nF 50V X7R 0805",
+      "qty": 2
+    },
+    {
+      "refdes_list": [
+        "C3"
+      ],
+      "description": "22uF 35V X5R 1206",
+      "qty": 1
+    },
+    {
+      "refdes_list": [
+        "C5"
+      ],
+      "description": "1nF 50V X7R 0603",
+      "qty": 1
+    },
+    {
+      "refdes_list": [
+        "C6"
+      ],
+      "description": "47pF 50V C0G 0603",
+      "qty": 1
+    },
+    {
+      "refdes_list": [
+        "R1"
+      ],
+      "description": "10k 1% 0603",
+      "qty": 1
+    },
+    {
+      "refdes_list": [
+        "R2"
+      ],
+      "description": "1.82k 1% 0603",
+      "qty": 1
+    },
+    {
+      "refdes_list": [
+        "R3"
+      ],
+      "description": "30.1k 1% 0603",
+      "qty": 1
+    },
+    {
+      "refdes_list": [
+        "J1",
+        "J2"
+      ],
+      "manufacturer": "Phoenix Contact",
+      "mpn": "1985195",
+      "description": "Terminal block 2P 3.5mm",
+      "qty": 2
+    }
+  ]
+}

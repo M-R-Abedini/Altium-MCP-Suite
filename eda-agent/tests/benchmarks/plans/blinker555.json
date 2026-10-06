@@ -1,0 +1,261 @@
+{
+  "spec": "555 astable LED blinker, ~1 Hz, 9 V input",
+  "summary": "NE555 astable multivibrator; R1/R2/C1 set the period, the output drives an LED through a series resistor.",
+  "topology": "555_astable",
+  "sheets": [
+    {
+      "name": "main",
+      "title": "Blinker",
+      "size": "A4"
+    }
+  ],
+  "zones": [
+    {
+      "name": "power",
+      "sheet": "main",
+      "role": "power_in"
+    },
+    {
+      "name": "timing",
+      "sheet": "main",
+      "role": "oscillator"
+    },
+    {
+      "name": "output",
+      "sheet": "main",
+      "role": "indicator"
+    }
+  ],
+  "parts": [
+    {
+      "refdes": "U1",
+      "lib_ref": "NE555",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "NE555",
+      "footprint": "SOIC8",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-NE555-U1",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "timing",
+      "role": "ic",
+      "datasheet_url": "https://datasheets.example.com/ne555.pdf"
+    },
+    {
+      "refdes": "R1",
+      "lib_ref": "RES_0402",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "4k7",
+      "footprint": "RES_0402",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-RES_0402-R1",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "timing",
+      "role": null,
+      "datasheet_url": "https://datasheets.example.com/res_0402.pdf"
+    },
+    {
+      "refdes": "R2",
+      "lib_ref": "RES_0402",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "100k",
+      "footprint": "RES_0402",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-RES_0402-R2",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "timing",
+      "role": null,
+      "datasheet_url": "https://datasheets.example.com/res_0402.pdf"
+    },
+    {
+      "refdes": "C1",
+      "lib_ref": "CAP_0402",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "10uF",
+      "footprint": "CAP_0402",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-CAP_0402-C1",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "timing",
+      "role": null,
+      "datasheet_url": "https://datasheets.example.com/cap_0402.pdf"
+    },
+    {
+      "refdes": "C2",
+      "lib_ref": "CAP_0402",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "100nF",
+      "footprint": "CAP_0402",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-CAP_0402-C2",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "timing",
+      "role": "decoup_cap",
+      "datasheet_url": "https://datasheets.example.com/cap_0402.pdf"
+    },
+    {
+      "refdes": "R3",
+      "lib_ref": "RES_0402",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "470R",
+      "footprint": "RES_0402",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-RES_0402-R3",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "output",
+      "role": null,
+      "datasheet_url": "https://datasheets.example.com/res_0402.pdf"
+    },
+    {
+      "refdes": "D1",
+      "lib_ref": "LED_0603",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "LED_RED",
+      "footprint": "LED_0603",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-LED_0603-D1",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "output",
+      "role": null,
+      "datasheet_url": "https://datasheets.example.com/led_0603.pdf"
+    },
+    {
+      "refdes": "J1",
+      "lib_ref": "HDR_1X2",
+      "lib_path": "C:/benchmarks/fictional.SchLib",
+      "value": "PWR_IN",
+      "footprint": "HDR_1X2",
+      "manufacturer": "Fictional Semiconductor",
+      "mpn": "FS-HDR_1X2-J1",
+      "status": "existing",
+      "sheet": "main",
+      "zone": "power",
+      "role": "vin_conn",
+      "datasheet_url": "https://datasheets.example.com/hdr_1x2.pdf"
+    }
+  ],
+  "nets": [
+    {
+      "name": "VCC",
+      "pins": [
+        {
+          "refdes": "U1",
+          "pin": "8"
+        },
+        {
+          "refdes": "U1",
+          "pin": "4"
+        },
+        {
+          "refdes": "R1",
+          "pin": "1"
+        },
+        {
+          "refdes": "J1",
+          "pin": "1"
+        },
+        {
+          "refdes": "C2",
+          "pin": "1"
+        }
+      ],
+      "is_power": true
+    },
+    {
+      "name": "GND",
+      "pins": [
+        {
+          "refdes": "U1",
+          "pin": "1"
+        },
+        {
+          "refdes": "J1",
+          "pin": "2"
+        },
+        {
+          "refdes": "C1",
+          "pin": "2"
+        },
+        {
+          "refdes": "C2",
+          "pin": "2"
+        },
+        {
+          "refdes": "D1",
+          "pin": "2"
+        }
+      ],
+      "is_ground": true
+    },
+    {
+      "name": "THR",
+      "pins": [
+        {
+          "refdes": "U1",
+          "pin": "6"
+        },
+        {
+          "refdes": "U1",
+          "pin": "2"
+        },
+        {
+          "refdes": "C1",
+          "pin": "1"
+        },
+        {
+          "refdes": "R2",
+          "pin": "2"
+        }
+      ]
+    },
+    {
+      "name": "DIS",
+      "pins": [
+        {
+          "refdes": "U1",
+          "pin": "7"
+        },
+        {
+          "refdes": "R1",
+          "pin": "2"
+        },
+        {
+          "refdes": "R2",
+          "pin": "1"
+        }
+      ]
+    },
+    {
+      "name": "OUT",
+      "pins": [
+        {
+          "refdes": "U1",
+          "pin": "3"
+        },
+        {
+          "refdes": "R3",
+          "pin": "1"
+        }
+      ]
+    },
+    {
+      "name": "LED_A",
+      "pins": [
+        {
+          "refdes": "R3",
+          "pin": "2"
+        },
+        {
+          "refdes": "D1",
+          "pin": "1"
+        }
+      ]
+    }
+  ]
+}

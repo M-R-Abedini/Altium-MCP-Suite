@@ -1,0 +1,401 @@
+name: CI - Main Branch
+
+# Workflow-level permissions are read-only by default. Jobs that need
+# elevated scope (cache cleanup needs `actions: write`) declare it on
+# the job itself, following least-privilege.
+permissions:
+    contents: read
+
+on:
+    push:
+        branches: [main]
+
+    workflow_dispatch:
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+
+env:
+    CARGO_TERM_COLOR: always
+    RUSTFLAGS: "-Dwarnings"
+
+jobs:
+    quick-checks:
+        name: Quick Checks (fmt, docs, markdown)
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+            - name: Verify Rust toolchain pin consistency
+              run: bash .github/scripts/check-toolchain-pin.sh
+
+            - name: Install Rust toolchain
+              uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # v1.95.0 (latest stable)
+              with:
+                components: rustfmt
+
+            - name: Setup Node.js
+              id: setup-node
+              uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+              with:
+                node-version: "lts/*"
+
+            - name: Get markdownlint-cli2 version
+              id: mdlint-version
+              run: echo "version=$(npm view markdownlint-cli2 version)" >> "$GITHUB_OUTPUT"
+
+            - name: Restore npm cache
+              id: npm-cache-restore
+              uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+              with:
+                path: ~/.npm
+                key: npm-markdownlint-${{ runner.os }}-node-${{ steps.setup-node.outputs.node-version }}-mdlint-${{ steps.mdlint-version.outputs.version }}
+
+            - name: Install markdownlint-cli2
+              run: npm install -g markdownlint-cli2
+
+            - name: Check formatting
+              run: cargo fmt --all --check
+
+            - name: Lint markdown
+              run: markdownlint-cli2 "**/*.md"
+
+            # Offline: every relative link and #anchor across the Markdown must
+            # resolve. No network, so it is deterministic and safe to gate on;
+            # external URLs are checked by the scheduled links.yml instead,
+            # because third-party sites go down independently of this repo.
+            # lychee is installed from its pinned release archive with a checksum
+            # check rather than via lycheeverse/lychee-action: the repository
+            # allow-lists the actions it runs, and a verified download keeps
+            # that list — and the trust it represents — unchanged.
+            - name: Install lychee
+              shell: bash
+              env:
+                LYCHEE_VERSION: v0.24.2
+                LYCHEE_SHA256: 1f4e0ef7f6554a6ed33dd7ac144fb2e1bbed98598e7af973042fc5cd43951c9a
+              run: |
+                curl -sSfL -o lychee.tar.gz                     "https://github.com/lycheeverse/lychee/releases/download/lychee-${LYCHEE_VERSION}/lychee-x86_64-unknown-linux-gnu.tar.gz"
+                echo "${LYCHEE_SHA256}  lychee.tar.gz" | sha256sum --check --strict
+                tar -xzf lychee.tar.gz
+                sudo install -m 755 lychee-x86_64-unknown-linux-gnu/lychee /usr/local/bin/lychee
+                rm -rf lychee.tar.gz lychee-x86_64-unknown-linux-gnu
+                lychee --version
+
+            - name: Check internal links and anchors
+              run: lychee --offline --include-fragments --no-progress --root-dir "$(pwd)" --exclude-path node_modules --exclude-path target --exclude-path .venv --exclude-path tests/integration/.venv "./**/*.md"
+
+            - name: Save npm cache
+              if: steps.npm-cache-restore.outputs.cache-hit != 'true'
+              uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+              with:
+                path: ~/.npm
+                key: npm-markdownlint-${{ runner.os }}-node-${{ steps.setup-node.outputs.node-version }}-mdlint-${{ steps.mdlint-version.outputs.version }}
+
+            - name: Check documentation
+              run: cargo doc --no-deps --document-private-items
+              env:
+                RUSTDOCFLAGS: "-Dwarnings"
+
+    build:
+        name: Build (${{ matrix.os }})
+        needs: quick-checks
+        timeout-minutes: 20
+
+        strategy:
+            fail-fast: false
+            matrix:
+                os: [ubuntu-latest, macos-latest, windows-latest]
+
+        runs-on: ${{ matrix.os }}
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+            - name: Install Rust toolchain
+              uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # v1.95.0 (latest stable)
+              with:
+                components: clippy
+
+            - name: Get Rust version
+              id: rust-version
+              shell: bash
+              run: |
+                # Cross-platform: use shasum on macOS, sha256sum elsewhere
+                if command -v sha256sum &> /dev/null; then
+                    HASH_CMD="sha256sum"
+                else
+                    HASH_CMD="shasum -a 256"
+                fi
+                echo "version=$(rustc --version | $HASH_CMD | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+            - name: Restore Rust cache
+              id: cache-restore
+              uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+              with:
+                path: |
+                    ~/.cargo/bin/
+                    ~/.cargo/registry/index/
+                    ~/.cargo/registry/cache/
+                    ~/.cargo/git/db/
+                    target/.rustc_info.json
+                    target/.cargo-lock
+                    target/debug/deps/
+                    target/debug/build/
+                    target/debug/.fingerprint/
+                    target/debug/incremental/
+                    target/release/deps/
+                    target/release/build/
+                    target/release/.fingerprint/
+                    target/release/incremental/
+                key: rust-${{ runner.os }}-${{ steps.rust-version.outputs.version }}-${{ hashFiles('Cargo.toml') }}
+                restore-keys: |
+                    rust-${{ runner.os }}-${{ steps.rust-version.outputs.version }}-
+
+            - name: Run Clippy
+              run: cargo clippy --locked --all-targets --all-features -- -D warnings
+
+            - name: Build (debug)
+              run: cargo build --locked --verbose
+
+            - name: Build (release)
+              run: cargo build --locked --release --verbose
+
+            # Includes tests/mcp_e2e.rs, which spawns the built binary over
+            # stdio and drives tool dispatch + the request/response envelope
+            # (formerly the Python tests/integration/test_mcp_tools.py harness).
+            - name: Run tests
+              run: cargo test --locked --verbose
+
+            # The absolute timing bounds in tests/perf_tests.rs are asserted
+            # only in an optimised build (a debug build measures the build,
+            # not the code); the release artefacts above make this cheap.
+            - name: Run performance bounds (release)
+              run: cargo test --locked --release --test perf_tests -- --nocapture
+
+            # Independent-reader check that generated files are Altium-readable
+            # (issue #68). Install is best-effort; the harness skips cleanly if
+            # pyaltiumlib is unavailable and only fails on a NEW regression.
+            - name: Run Altium-readability oracle
+              if: runner.os == 'Linux'
+              run: |
+                  python3 -m pip install --user --quiet pyaltiumlib olefile \
+                    || python3 -m pip install --user --quiet --break-system-packages pyaltiumlib olefile \
+                    || echo "pyaltiumlib install failed; oracle will skip"
+                  python3 tests/integration/test_altium_readability.py
+
+            # Save cache only on cache miss (tooling version changed)
+            # continue-on-error suppresses "unable to reserve cache" warnings
+            # when multiple jobs race to save (harmless, one will succeed)
+            - name: Save Rust cache
+              if: steps.cache-restore.outputs.cache-hit != 'true'
+              continue-on-error: true
+              uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+              with:
+                path: |
+                    ~/.cargo/bin/
+                    ~/.cargo/registry/index/
+                    ~/.cargo/registry/cache/
+                    ~/.cargo/git/db/
+                    target/.rustc_info.json
+                    target/.cargo-lock
+                    target/debug/deps/
+                    target/debug/build/
+                    target/debug/.fingerprint/
+                    target/debug/incremental/
+                    target/release/deps/
+                    target/release/build/
+                    target/release/.fingerprint/
+                    target/release/incremental/
+                key: rust-${{ runner.os }}-${{ steps.rust-version.outputs.version }}-${{ hashFiles('Cargo.toml') }}
+
+    coverage:
+        name: Code Coverage
+        needs: build
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+            - name: Install Rust toolchain
+              uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # v1.95.0 (latest stable)
+              with:
+                components: llvm-tools-preview
+
+            - name: Install cargo-llvm-cov
+              uses: taiki-e/install-action@1ed6d7be6168f6c9046541087ff549b6bc581fdf # v2.87.2
+              with:
+                tool: cargo-llvm-cov
+
+            - name: Get Rust version
+              id: rust-version
+              shell: bash
+              run: echo "version=$(rustc --version | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+            - name: Restore Rust cache
+              id: cache-restore
+              uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+              with:
+                path: |
+                    ~/.cargo/registry/index/
+                    ~/.cargo/registry/cache/
+                    ~/.cargo/git/db/
+                    target/
+                key: rust-coverage-${{ runner.os }}-${{ steps.rust-version.outputs.version }}-${{ hashFiles('Cargo.toml') }}
+                restore-keys: |
+                    rust-coverage-${{ runner.os }}-${{ steps.rust-version.outputs.version }}-
+
+            - name: Generate coverage report (lcov)
+              # main.rs is excluded from the metric, not from testing: the whole
+              # mcp_e2e suite drives the shipped binary through it, but
+              # instrumentation cannot see across the process boundary, so its
+              # lines read as uncovered no matter how tested they are. Everything
+              # else counts, including in-file #[cfg(test)] modules (their only
+              # uncovered lines are assertion-failure branches — noise that biases
+              # the number DOWN, which is the safe direction). Integration files
+              # under tests/ were never part of the report.
+              run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info --ignore-filename-regex '(^|[/\\])main\.rs$'
+
+            - name: Generate coverage summary
+              run: cargo llvm-cov report --summary-only --ignore-filename-regex '(^|[/\\])main\.rs$'
+
+            - name: Save Rust cache
+              if: steps.cache-restore.outputs.cache-hit != 'true'
+              continue-on-error: true
+              uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+              with:
+                path: |
+                    ~/.cargo/registry/index/
+                    ~/.cargo/registry/cache/
+                    ~/.cargo/git/db/
+                    target/
+                key: rust-coverage-${{ runner.os }}-${{ steps.rust-version.outputs.version }}-${{ hashFiles('Cargo.toml') }}
+
+            # The token is mandatory despite the org's "upload tokens not
+            # required" setting: Codecov rejects tokenless uploads for a
+            # protected branch ("Token required because branch is protected").
+            - name: Upload coverage to Codecov
+              if: github.actor != 'dependabot[bot]'
+              uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+              with:
+                files: lcov.info
+                fail_ci_if_error: true
+                verbose: true
+              env:
+                CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+    ci-success:
+        name: CI Success
+        needs: [quick-checks, build, coverage]
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+        if: always()
+
+        # Cache cleanup deletes stale Actions caches via the REST API.
+        permissions:
+            contents: read
+            actions: write
+
+        steps:
+            - name: Check if all jobs succeeded
+              id: check-results
+              run: |
+                # Coverage may be skipped on forks/Dependabot lacking the
+                # CODECOV_TOKEN secret, so treat "skipped" as acceptable.
+                if [[ "${{ needs.quick-checks.result }}" != "success" ]] ||
+                   [[ "${{ needs.build.result }}" != "success" ]] ||
+                   [[ "${{ needs.coverage.result }}" != "success" &&
+                      "${{ needs.coverage.result }}" != "skipped" ]]; then
+                    echo "One or more jobs failed"
+                    exit 1
+                fi
+                echo "All jobs completed successfully"
+
+            - name: Checkout repository
+              if: success()
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+            - name: Cleanup stale caches
+              if: success()
+              uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+              with:
+                script: |
+                    const owner = context.repo.owner;
+                    const repo = context.repo.repo;
+
+                    // Get current cache keys (just created by this workflow run)
+                    const response = await github.rest.actions.getActionsCacheList({
+                        owner,
+                        repo,
+                        per_page: 100,
+                        sort: 'last_accessed_at',
+                        direction: 'desc',
+                    });
+
+                    const caches = response.data.actions_caches;
+                    if (caches.length === 0) {
+                        core.info('No caches found');
+                        return;
+                    }
+
+                    // Group caches by type and OS
+                    // Rust caches: rust-{OS}-{rustc-hash}-{cargo-lock-hash}
+                    // npm caches: npm-markdownlint-{OS}-node-{version}-mdlint-{version}
+                    const cacheGroups = {};
+                    for (const cache of caches) {
+                        let prefix;
+                        if (cache.key.startsWith('rust-')) {
+                            // Group by rust-{OS} (e.g., rust-Linux, rust-Windows, rust-macOS)
+                            const parts = cache.key.split('-');
+                            prefix = `${parts[0]}-${parts[1]}`;
+                        } else if (cache.key.startsWith('npm-markdownlint-')) {
+                            // Group by npm-markdownlint-{OS} (e.g., npm-markdownlint-Linux)
+                            const parts = cache.key.split('-');
+                            prefix = `${parts[0]}-${parts[1]}-${parts[2]}`;
+                        } else {
+                            // Unknown cache type, use full key as prefix (won't group)
+                            prefix = cache.key;
+                        }
+
+                        if (!cacheGroups[prefix]) {
+                            cacheGroups[prefix] = [];
+                        }
+                        cacheGroups[prefix].push(cache);
+                    }
+
+                    // For each group, keep only the most recently accessed cache
+                    let deletedCount = 0;
+                    let freedBytes = 0;
+
+                    for (const [prefix, groupCaches] of Object.entries(cacheGroups)) {
+                        // Sort by last_accessed_at descending (most recent first)
+                        groupCaches.sort((a, b) =>
+                            new Date(b.last_accessed_at) - new Date(a.last_accessed_at)
+                        );
+
+                        // Delete all but the first (most recent) cache
+                        for (let i = 1; i < groupCaches.length; i++) {
+                            const cache = groupCaches[i];
+                            try {
+                                await github.rest.actions.deleteActionsCacheById({
+                                    owner,
+                                    repo,
+                                    cache_id: cache.id,
+                                });
+                                core.info(`Deleted stale cache: ${cache.key}`);
+                                deletedCount++;
+                                freedBytes += cache.size_in_bytes;
+                            } catch (error) {
+                                core.warning(`Failed to delete cache ${cache.key}: ${error.message}`);
+                            }
+                        }
+                    }
+
+                    const freedMB = (freedBytes / (1024 * 1024)).toFixed(2);
+                    core.info(`Cleanup complete: deleted ${deletedCount} stale cache(s), freed ${freedMB} MB`);

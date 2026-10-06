@@ -1,0 +1,18 @@
+# Python-generated files
+Useful_Altium_Scripts
+server/lib/
+*__pycache__/
+*__Previews/
+*History/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+*.log
+*.json
+*.png
+*.dxt
+
+# Virtual environments
+.venv

@@ -1,0 +1,139 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2026 George Saliba <george.saliba@salitronic.com>
+"""The provider that reads the Altium libraries already on this machine.
+
+It answers a question no other source can: do I ALREADY own this part?
+Every other provider proposes something to import, and importing a part
+you already have produces a second symbol with a slightly different
+name, which is how a library rots.
+
+It is also the only source with no network, no login, no rate limit and
+no third party, so it keeps working when every remote one is
+unreachable. That matters more than it looks: with the registry
+unconfigured and EasyEDA's search endpoint withdrawn upstream, the
+remote sources answer very little.
+
+Most assertions here run on a synthetic root rather than the binary
+fixture, because ``EDAAgentTest_ICs.SchLib`` is local-only and absent
+from a fresh clone. The one test that needs a real OLE library skips
+when it is missing, the same way ``test_fileio_schdoc.py`` does.
+"""
+
+from __future__ import annotations
+
+import os
+import pathlib
+
+import pytest
+
+from eda_agent.libimport.providers.altium_local import AltiumLocalProvider
+from eda_agent.libimport.providers.base import (
+    ProviderError,
+    ProviderUnavailable,
+)
+
+_FIXTURE = (pathlib.Path(__file__).resolve().parents[1]
+            / "tests" / "integration" / "fixtures"
+            / "EDAAgentTest_ICs.SchLib")
+
+
+def test_no_libraries_is_unavailable_not_empty(tmp_path, monkeypatch):
+    """"I found nothing" and "I could not look" are different answers.
+
+    An empty result would tell the caller the part does not exist
+    anywhere, when in fact this source never ran.
+    """
+    monkeypatch.setenv("EDA_AGENT_ALTIUM_LIBRARIES", str(tmp_path))
+
+    with pytest.raises(ProviderUnavailable) as excinfo:
+        AltiumLocalProvider().search("anything")
+
+    assert "EDA_AGENT_ALTIUM_LIBRARIES" in str(excinfo.value), (
+        "the message must say how to point it somewhere useful")
+    assert str(tmp_path) in str(excinfo.value), (
+        "it must name where it looked, or the user cannot tell whether "
+        "the setting took effect")
+
+
+def test_an_unreadable_library_does_not_hide_the_others(tmp_path,
+                                                        monkeypatch):
+    """A corrupt or locked file is normal on a shared library drive."""
+    (tmp_path / "Broken.SchLib").write_text("not an OLE file",
+                                            encoding="utf-8")
+    monkeypatch.setenv("EDA_AGENT_ALTIUM_LIBRARIES", str(tmp_path))
+
+    # The broken file is skipped rather than raising: with only a broken
+    # one present the result is empty, but the call still completes.
+    assert AltiumLocalProvider().search("x") == []
+
+
+def test_the_roots_are_configurable_and_not_a_whole_drive_scan(monkeypatch):
+    """Searching every drive behind the user's back is not acceptable."""
+    from eda_agent.libimport.providers import altium_local
+
+    monkeypatch.setenv("EDA_AGENT_ALTIUM_LIBRARIES",
+                       os.pathsep.join(["A:/one", "B:/two"]))
+    roots = [str(r) for r in altium_local._roots()]
+
+    assert len(roots) == 2
+    assert any("one" in r for r in roots)
+    assert any("two" in r for r in roots)
+
+
+def test_a_malformed_part_id_is_refused_clearly():
+    provider = AltiumLocalProvider()
+    with pytest.raises(ProviderError) as excinfo:
+        provider.fetch("no-separator-here")
+    assert "::" in str(excinfo.value), (
+        "the error must show the expected shape, not just reject")
+
+
+def test_it_offers_no_download_format():
+    """Not an omission: a hit is ALREADY an Altium symbol.
+
+    Advertising a convertible format would invite a caller to import a
+    part that is by definition already installed.
+    """
+    provider = AltiumLocalProvider()
+    assert provider.formats == ()
+    assert provider.usable_in == ("altium",)
+
+
+@pytest.mark.skipif(not _FIXTURE.exists(),
+                    reason="needs the local-only binary fixture "
+                           "EDAAgentTest_ICs.SchLib")
+def test_it_reads_a_real_schlib(monkeypatch):
+    """The claim that matters, against a real OLE compound file."""
+    monkeypatch.setenv("EDA_AGENT_ALTIUM_LIBRARIES", str(_FIXTURE.parent))
+    provider = AltiumLocalProvider()
+
+    hits = provider.search("", limit=20)
+    assert hits, "the fixture library has components"
+    names = {h.extra["component"] for h in hits}
+    assert "TPS54331D" in names
+
+    one = next(h for h in hits if h.extra["component"] == "TPS54331D")
+    assert one.provider == "altium_local"
+    assert one.part_id == "EDAAgentTest_ICs.SchLib::TPS54331D"
+    assert "already installed" in one.provenance
+
+    detail = provider.fetch(one.part_id)
+    assert detail["component"] == "TPS54331D"
+    assert detail["library_path"].endswith("EDAAgentTest_ICs.SchLib")
+    assert detail["files"] == {}, "nothing is downloaded"
+
+
+@pytest.mark.skipif(not _FIXTURE.exists(),
+                    reason="needs the local-only binary fixture")
+def test_search_filters_on_name_and_description(monkeypatch):
+    monkeypatch.setenv("EDA_AGENT_ALTIUM_LIBRARIES", str(_FIXTURE.parent))
+    provider = AltiumLocalProvider()
+
+    by_name = provider.search("TPS54331", limit=20)
+    assert [h.extra["component"] for h in by_name] == ["TPS54331D"]
+
+    # The fixture's SS14 carries "Schottky diode" in its description.
+    by_description = provider.search("schottky", limit=20)
+    assert any(h.extra["component"] == "SS14" for h in by_description), (
+        "description text must be searchable; a part is often known by "
+        "what it is rather than by its symbol name")

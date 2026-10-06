@@ -1,0 +1,21 @@
+{
+    "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+    "name": "io.github.embedded-society/altium-designer-mcp",
+    "description": "Lets an AI read, write and edit Altium Designer .PcbLib/.SchLib component libraries byte-exactly.",
+    "version": "@VERSION@",
+    "repository": {
+        "url": "https://github.com/embedded-society/altium-designer-mcp",
+        "source": "github"
+    },
+    "websiteUrl": "https://github.com/embedded-society/altium-designer-mcp/blob/main/docs/USAGE.md",
+    "packages": [
+        {
+            "registryType": "mcpb",
+            "identifier": "https://github.com/embedded-society/altium-designer-mcp/releases/download/v@VERSION@/altium-designer-mcp.mcpb",
+            "fileSha256": "@SHA256@",
+            "transport": {
+                "type": "stdio"
+            }
+        }
+    ]
+}

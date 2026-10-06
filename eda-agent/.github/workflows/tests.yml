@@ -1,0 +1,223 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push makes an older run's answer worthless, and both compete
+# for the same runner. Superseded runs are cancelled so the queue is not
+# spent finishing work nobody will read.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # The Pascal cross-validation needs a 300 MB compiler that takes seven
+  # minutes to install, and nothing else in the suite touches it. Run it
+  # beside the main suite rather than in front of it: the wall clock
+  # becomes the longer of the two instead of their sum.
+  cross-validate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install package with dev extras
+        run: python -m pip install -e ".[dev]"
+
+      # Free Pascal lets the cross-validation suite actually run instead
+      # of self-skipping: it compiles the real Pascal string/JSON/unit
+      # helpers with fpc and asserts byte-for-byte parity with their
+      # Python mirrors.
+      # THE COMPILER COMES FROM SOURCEFORGE AND SOURCEFORGE IS NOT
+      # RELIABLE. Measured: one run downloaded 51 MB in 6m05s, and a
+      # later one spent 11 minutes before failing with a 404 and
+      # "unexpected EOF from the transport stream". The suite had
+      # already passed; the run was red because somebody else's file
+      # server had a bad night.
+      #
+      # Caching the install means that after the first success this
+      # never asks again. It is only safe to do because the two
+      # assertions below already exist: a cache that restores to the
+      # wrong place, or restores something broken, fails on `fpc -iV`
+      # or on the skip check. Without those, this optimisation would be
+      # indistinguishable from deleting the job.
+      - name: Cache Free Pascal
+        id: fpc-cache
+        uses: actions/cache@v4
+        with:
+          path: C:\tools\freepascal
+          key: freepascal-3.2.2-${{ runner.os }}
+
+      - name: Install Free Pascal Compiler
+        if: steps.fpc-cache.outputs.cache-hit != 'true'
+        run: |
+          # Retried, because the observed failure was a truncated
+          # transfer rather than a missing package. Three attempts with
+          # a pause, then give up honestly.
+          $ok = $false
+          foreach ($attempt in 1..3) {
+            Write-Host "freepascal install attempt $attempt"
+            choco install freepascal --version 3.2.2 --no-progress -y
+            if ($LASTEXITCODE -eq 0) { $ok = $true; break }
+            Write-Host "attempt $attempt failed with $LASTEXITCODE"
+            Start-Sleep -Seconds 20
+          }
+          if (-not $ok) {
+            Write-Error "freepascal could not be installed after 3 attempts"
+            exit 1
+          }
+
+      # CHOCO DOES NOT PUT FPC ON THE PATH THAT LATER STEPS SEE. It
+      # deploys to C:\tools\freepascal and updates the machine PATH, but
+      # the runner captured the environment when the job began, so every
+      # following step still looks at the old one.
+      #
+      # This is why the cross-validation had never run. `choco install`
+      # reported success, the tests found no fpc, skipped themselves,
+      # and a skip is green. Measured on the run before this one: 138
+      # skipped, and these 37 were among them.
+      #
+      # The bin directory is found rather than hardcoded, since it
+      # carries the target triple (bin\i386-win32) and would move with a
+      # compiler version.
+      - name: Put fpc on PATH
+        run: |
+          $fpc = Get-ChildItem -Path 'C:\tools\freepascal' -Filter fpc.exe -Recurse -ErrorAction SilentlyContinue |
+                 Select-Object -First 1
+          if (-not $fpc) {
+            Write-Error "fpc.exe not found under C:\tools\freepascal after a successful install"
+            exit 1
+          }
+          Add-Content -Path $env:GITHUB_PATH -Value $fpc.Directory.FullName
+
+      # WITHOUT THIS, SPEEDING THIS JOB UP IS INDISTINGUISHABLE FROM
+      # DELETING IT. The cross-validation tests skip themselves when fpc
+      # is not on PATH, and a skip is green. So any change that breaks
+      # the install (a cache restoring to the wrong place, a package
+      # rename, a choco failure that still exits zero) would read as a
+      # large saving and actually be a silent loss of the only check
+      # that compares the shipped Pascal against its Python mirror.
+      #
+      # Assert the compiler is reachable, and then assert the tests did
+      # not skip, before believing anything this job reports.
+      - name: Fail if fpc is not actually on PATH
+        run: fpc -iV
+
+      # BOTH fpc-dependent files, not just the cross-validation.
+      # test_pascal_runner.py compiles the Pascal too and skips itself
+      # the same way, so leaving it in the other job would have kept it
+      # unrun for exactly the reason this job exists.
+      - name: Pascal and Python helpers agree
+        run: |
+          python -m pytest tests/test_cross_validate.py tests/test_pascal_runner.py -q -rs --durations=10 | Tee-Object -Variable captured
+          # Read the exit code BEFORE anything else runs. Piping a native
+          # command into Tee-Object means the step's own success is the
+          # pipeline's, not pytest's, so without this a failing
+          # cross-validation would report green.
+          $code = $LASTEXITCODE
+          if ($code -ne 0) {
+            Write-Error "cross-validation tests failed"
+            exit $code
+          }
+          if ($captured -match "skipped") {
+            Write-Error "cross-validation tests skipped; fpc is on PATH but they did not run"
+            exit 1
+          }
+
+  test:
+    # windows-latest matches the only supported runtime (the bridge drives
+    # Altium Designer on Windows); the offline engines are platform-neutral
+    # but there is no reason to certify a platform we never run on.
+    runs-on: windows-latest
+    steps:
+      # fetch-depth: 0 brings the tags along. The default shallow fetch
+      # brings none, and tests/test_version_is_unreleased.py compares the
+      # declared version against the tags: with no tags it has nothing to
+      # compare and passes vacuously. That would leave the one check that
+      # catches a release number which has already shipped inert in CI,
+      # which is the only place it runs unattended.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install package with dev extras
+        run: python -m pip install -e ".[dev]"
+
+      # THE EASYEDA API GUARDS READ THE VENDOR'S OWN CLASS REFERENCE:
+      # every eda.* call is a documented method, and every call passes
+      # the arguments its signature requires. Both checks exist because
+      # they caught real shipped bugs.
+      #
+      # reference/ is gitignored on purpose, so a runner has none of it,
+      # and 29 tests were skipping for want of a 3 MB public repo. The
+      # checks this project relies on for EasyEDA correctness were
+      # running on developer machines and nowhere else.
+      #
+      # A clone that fails takes the job down, which is the right
+      # direction to fail in: the alternative is what was happening
+      # already, a green run that checked nothing.
+      - name: Clone the official EasyEDA API reference
+        run: |
+          git clone --depth 1 https://github.com/easyeda/easyeda-api-skill.git reference/easyeda-api-skill
+          $classes = 'reference/easyeda-api-skill/references/classes'
+          if (-not (Test-Path $classes)) {
+            Write-Error "cloned, but $classes is missing, so the API guards would skip"
+            exit 1
+          }
+          $n = (Get-ChildItem $classes -File).Count
+          if ($n -lt 50) {
+            Write-Error "only $n class references found; expected the full set"
+            exit 1
+          }
+          Write-Host "$n class references available"
+
+      # The two extension-build tests need dist/, which is not committed.
+      # Building here is not circular: what they assert is that after a
+      # successful build the health check can reach PASS, which it could
+      # not before, and that main.js and BUILD_STAMP.json agree.
+      - name: Build the EasyEDA extension
+        run: python extensions/easyeda/build.py
+
+      - name: DelphiScript lint
+        run: python scripts/altium/lint.py
+
+      - name: Pascal bundle consistency
+        run: python scripts/altium/build.py
+
+      # Cross-validation runs in its own job with the compiler it needs.
+      # Ignored here rather than left to skip, so the count this job
+      # reports is the work it actually did.
+      #
+      # --durations names what the time is being spent on. The suite is
+      # thousands of tests and a single slow one is invisible in a total.
+      # -rs NAMES EVERY SKIP AND WHY.
+      #
+      # A skip is green, and a count is not a reason. This suite skips
+      # 119 tests on a CI runner and 9 on a developer machine, so 110 of
+      # them are decided by what the runner does not have, and nothing
+      # in the log said which or why.
+      #
+      # That is exactly how the Pascal cross-validation sat unrun for
+      # its whole life: `choco install` succeeded, fpc was not on the
+      # PATH later steps saw, 37 tests skipped themselves, and the run
+      # was green. The count was in the log the entire time and told
+      # nobody anything.
+      - name: Run test suite
+        run: >
+          python -m pytest tests/ -q -rs
+          --ignore=tests/test_cross_validate.py
+          --ignore=tests/test_pascal_runner.py
+          --durations=25

@@ -1,0 +1,227 @@
+# Style Guide
+
+Code style conventions for altium-designer-mcp.
+
+**Single source of truth:** see the documentation registry in `CONTRIBUTING.md` § Single Source of Truth for the canonical location of each kind of information.
+
+---
+
+## General Rules
+
+| Rule | Setting |
+|------|--------|
+| Indentation | 4 spaces (no tabs) |
+| Max line length | 170 characters |
+| Charset | UTF-8 |
+| Final newline | Always |
+| Trailing whitespace | Trim (except Markdown) |
+
+These rules are enforced by `.editorconfig`. Install the EditorConfig plugin for your editor:
+
+- **VS Code:** [EditorConfig for VS Code](https://marketplace.visualstudio.com/items?itemName=EditorConfig.EditorConfig)
+
+VS Code also displays a ruler at 170 characters (configured in `.vscode/settings.json`).
+
+---
+
+## Language
+
+Use **British English** in all documentation and user-facing text.
+
+See `CONTRIBUTING.md` § British Spelling for the full spelling guide.
+
+**Exceptions:**
+
+- Code identifiers matching Rust/library conventions (e.g., `Color` in external APIs)
+- Protocol-defined terms (e.g., `initialize` in MCP specification)
+- Standard file names (e.g., `LICENSE` if required by tooling)
+- External legal documents (e.g., GPL licence text)
+
+---
+
+## Rust
+
+Standard Rust conventions, enforced by CI:
+
+- **Formatting:** `rustfmt` with default settings.
+- **Linting:** `clippy` with warnings as errors.
+
+The exact commands are canonical in [`CONTRIBUTING.md` § Development Setup](CONTRIBUTING.md#setup) — this guide does not repeat them.
+
+### Naming Conventions
+
+| Item | Convention | Example |
+|------|------------|--------|
+| Crates | snake_case | `altium_designer_mcp` |
+| Modules | snake_case | `pcblib` |
+| Types | PascalCase | `Footprint` |
+| Functions | snake_case | `write_pcblib` |
+| Constants | SCREAMING_SNAKE_CASE | `DEFAULT_LINE_WIDTH` |
+| Variables | snake_case | `pad_width` |
+
+### Documentation
+
+- All public items must have doc comments (`///`)
+- CI checks documentation builds without warnings
+
+---
+
+## Python
+
+The repository ships git-tracked Python helper scripts under `scripts/` and the MCP integration harness under
+`tests/integration/`. Follow these conventions:
+
+- Follow [PEP 8](https://peps.python.org/pep-0008/).
+- **4-space indentation** (no tabs) — aligned with the project-wide convention.
+- Use `snake_case` for functions and variables, `PascalCase` for classes, `SCREAMING_SNAKE_CASE` for constants.
+- Add a module-level docstring describing what each script does.
+- Prefer the standard library; keep helper scripts dependency-free so they run without a virtual environment.
+
+---
+
+## YAML (GitHub Actions)
+
+### Indentation
+
+**4 spaces** for structure levels — aligned with project-wide convention.
+
+```yaml
+jobs:
+    build:
+        name: Build
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Build
+              run: cargo build
+```
+
+### List Item Indentation
+
+List items use **2-space continuation** from the `-` character (standard YAML behaviour):
+
+```yaml
+updates:
+    - package-ecosystem: "github-actions"
+      directory: "/"
+      schedule:
+        interval: "daily"
+```
+
+### Multi-line Scripts (`run: |`)
+
+Shell script content inside `run: |` blocks uses **4-space indentation** for shell constructs (if/else, loops):
+
+```yaml
+            - name: Example step
+              shell: bash
+              run: |
+                if [[ -n "$VAR" ]]; then
+                    echo "Variable is set"
+                else
+                    echo "Variable is not set"
+                fi
+```
+
+### Formatter
+
+**Format-on-save is disabled** for YAML files in VS Code (configured in `.vscode/settings.json`).
+
+---
+
+## JSON
+
+### Indentation
+
+**4 spaces**.
+
+```json
+{
+    "key": "value",
+    "nested": {
+        "item": 123
+    }
+}
+```
+
+### Formatter
+
+VS Code uses the built-in JSON formatter (`vscode.json-language-features`).
+
+---
+
+## TOML
+
+### Indentation
+
+**4 spaces**.
+
+```toml
+[package]
+name = "altium-designer-mcp"
+version = "0.1.0"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+```
+
+### Formatter
+
+Use [Even Better TOML](https://marketplace.visualstudio.com/items?itemName=tamasfe.even-better-toml) for VS Code.
+Column width is set to 170 characters (configured in `.vscode/settings.json`).
+
+---
+
+## Markdown
+
+### Headings
+
+Use ATX-style headings with blank lines before and after:
+
+```markdown
+## Section Title
+
+Content here.
+```
+
+### Lists
+
+Use `-` for unordered lists, `1.` for ordered lists.
+
+### Code Blocks
+
+Always specify the language:
+
+````markdown
+```rust
+fn main() {
+    println!("Hello!");
+}
+```
+````
+
+### Trailing Whitespace
+
+Markdown files are exempt from trailing whitespace trimming (needed for line breaks).
+
+---
+
+## Commit Messages
+
+See `CONTRIBUTING.md` § Commit Messages for conventions and allowed types.
+
+---
+
+## Primitives & Dimensions
+
+- All dimensions in millimetres (mm)
+- Use `f64` for dimensional values
+- Document units in variable names or comments when not obvious
+- For the complete primitive types reference, see `README.md` § Primitive Types
+
+---
+
+*Last updated: 2026-01-24*

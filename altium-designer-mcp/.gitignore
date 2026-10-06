@@ -1,0 +1,23 @@
+target/
+.claude/settings.json
+.claude/settings.local.json
+nul
+.venv/
+# Reserve the oracle's venv location (the .gitkeep placeholder) while still
+# ignoring the venv's own contents.
+!tests/integration/.venv/
+tests/integration/.venv/*
+!tests/integration/.venv/.gitkeep
+node_modules/
+.tmp/
+__pycache__/
+.env.local
+.claude/worktrees/
+
+# Altium writes per-document undo history beside the scripts it opens; these
+# are local editor state, not sources.
+scripts/altium/generate/History/
+
+# Coverage and gate artefacts
+lcov.info
+*.log

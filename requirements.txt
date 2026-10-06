@@ -1,0 +1,3 @@
+-c constraints-windows-py312.txt
+-e ./eda-agent[dev]
+pillow>=11.1,<12

@@ -1,0 +1,53 @@
+{
+    "$schema": "https://raw.githubusercontent.com/anthropics/mcpb/main/schemas/mcpb-manifest-v0.3.schema.json",
+    "manifest_version": "0.3",
+    "name": "altium-designer-mcp",
+    "display_name": "Altium Designer MCP",
+    "version": "@VERSION@",
+    "description": "MCP server for AI-assisted Altium Designer component library management",
+    "long_description": "File I/O and primitive placement for Altium Designer `.PcbLib`/`.SchLib` component libraries: the AI calculates footprint and symbol geometry, this server reads and writes the binary library files. 34 tools covering read, write, update, compare, diff, merge, validation and repair. Only the folders granted below are ever touched.",
+    "author": {
+        "name": "The Embedded Society",
+        "url": "https://github.com/embedded-society"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/embedded-society/altium-designer-mcp"
+    },
+    "homepage": "https://github.com/embedded-society/altium-designer-mcp",
+    "documentation": "https://github.com/embedded-society/altium-designer-mcp/blob/main/docs/USAGE.md",
+    "support": "https://github.com/embedded-society/altium-designer-mcp/issues",
+    "license": "GPL-3.0-or-later",
+    "icon": "icon.png",
+    "privacy_policies": ["https://github.com/embedded-society/altium-designer-mcp/blob/main/README.md#privacy-policy"],
+    "keywords": ["altium", "pcb", "eda", "footprint", "schematic", "library"],
+    "server": {
+        "type": "binary",
+        "entry_point": "server/linux/altium-designer-mcp",
+        "mcp_config": {
+            "command": "${__dirname}/server/linux/altium-designer-mcp",
+            "args": ["--allow", "${user_config.library_paths}"],
+            "platform_overrides": {
+                "win32": {
+                    "command": "${__dirname}/server/win32/altium-designer-mcp.exe"
+                },
+                "darwin": {
+                    "command": "${__dirname}/server/darwin/altium-designer-mcp"
+                }
+            }
+        }
+    },
+    "tools_generated": true,
+    "user_config": {
+        "library_paths": {
+            "type": "directory",
+            "title": "Library folders",
+            "description": "The folders holding your .PcbLib/.SchLib libraries. The server refuses to touch any file outside them, so keep the list narrow.",
+            "multiple": true,
+            "required": true
+        }
+    },
+    "compatibility": {
+        "platforms": ["darwin", "win32", "linux"]
+    }
+}
