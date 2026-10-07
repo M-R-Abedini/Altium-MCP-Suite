@@ -1,5 +1,9 @@
 # Local changes — 2026-10-06
 
+## Added 2026-10-07
+
+- Independent MIT-licensed connectivity verification modules and four read-only MCP tools: canonical snapshots, exact pin contracts, connectivity diffs, and bidirectional schematic/PCB pad parity. Full net names are preserved; incomplete inputs cannot pass; NC and extra-pad waivers require explicit intent. Registered with the existing Altium full/minimal toolsets, with no new dependencies or Pascal changes. See `CONNECTIVITY_VERIFICATION.md` and `eda-agent/tests/design/test_connectivity_contracts.py`.
+
 Upstream authorship and license files are retained. `UPSTREAM.json` records the source snapshots imported into this repository. The following changes were made for this distribution by M-R-Abedini:
 
 - `eda-agent/src/eda_agent/bridge/process_manager.py`: select the visible Altium editor instead of the first transient X2 process.

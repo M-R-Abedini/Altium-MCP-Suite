@@ -32,6 +32,35 @@ async def main(live=False):
                             listing = await client.list_tools()
                             assert listing.tools
                             print(json.dumps({'server':name, 'tools':len(listing.tools), 'initialized':True}), flush=True)
+                            if name == 'eda':
+                                # Pure verification calls: no document or bridge access.
+                                async def verify_call(tool, arguments):
+                                    response = await client.call_tool(tool, arguments)
+                                    assert not response.isError, response
+                                    return response.structuredContent or json.loads(
+                                        next(block.text for block in response.content if block.type == 'text'))
+                                sample = {'pins': [
+                                    {'component':'J1', 'pin':'1', 'net':'/Cam0/RESET'},
+                                    {'component':'J2', 'pin':'1', 'net':'/Cam1/RESET'}], 'count':2}
+                                captured = await verify_call('design_connectivity_snapshot',
+                                                             {'data':sample, 'complete':True})
+                                assert captured['count'] == 2
+                                mismatch = await verify_call('design_check_pin_contracts', {
+                                    'actual':captured, 'contracts':[
+                                        {'component':'J2', 'pin':'1', 'net':'/Cam0/RESET'}]})
+                                assert mismatch['status'] == 'failed'
+                                assert mismatch['finding_count'] == 1
+                                same = await verify_call('design_diff_connectivity',
+                                                         {'before':captured, 'after':captured})
+                                assert same['complete'] and same['change_count'] == 0
+                                parity = await verify_call('design_check_schematic_pcb_parity', {
+                                    'schematic':captured, 'board':{'complete':True, 'components':[
+                                        {'designator':pin['component'], 'pads':[
+                                            {'name':pin['pin'], 'net':pin['net']}]} for pin in sample['pins']]}})
+                                assert parity['status'] == 'passed'
+                                invalid = await verify_call('design_connectivity_snapshot', {'data':{}})
+                                assert invalid['status'] == 'invalid_input'
+                                print(json.dumps({'server':name, 'connectivity_tools_verified':4}), flush=True)
                             if name == 'legacy':
                                 reply = await client.call_tool('get_server_status', {})
                                 assert not reply.isError

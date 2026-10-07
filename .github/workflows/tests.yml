@@ -15,6 +15,9 @@ jobs:
       - run: python -m pytest tests -q
       - run: python -m pytest tests/test_bridge.py tests/test_recovery.py tests/test_workspace_pointer_isolation.py tests/test_timeout_looks_for_a_dialog.py tests/test_units.py tests/test_websocket_framing.py -q
         working-directory: eda-agent
+      - name: Connectivity verification and MCP discovery
+        run: python -m pytest tests/design/test_connectivity_contracts.py tests/design/test_verify_nets.py tests/test_tool_registration_consistency.py tests/test_tool_metadata.py tests/test_tool_catalog.py tests/test_minimal_toolset.py -q
+        working-directory: eda-agent
   rust:
     runs-on: ubuntu-latest
     timeout-minutes: 30

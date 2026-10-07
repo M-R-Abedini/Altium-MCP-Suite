@@ -41,8 +41,11 @@ X پنجرهٔ وضعیت فقط آن را مخفی می‌کند؛ Detach تو�
 
 ## آزمون‌ها
 
+چهار ابزار جدید کنترل اتصال، snapshot نت‌لیست، قرارداد هر پایه، مقایسهٔ تغییرات و تطبیق دوسویهٔ شماتیک/پد PCB را بدون وابستگی KiCad انجام می‌دهند. نام کامل نت‌های سلسله‌مراتبی حفظ می‌شود و دادهٔ ناقص نتیجهٔ قبول نمی‌گیرد. [راهنما و نمونهٔ ورودی](CONNECTIVITY_VERIFICATION.md).
+
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests -q
+.\.venv\Scripts\python.exe -m pytest eda-agent/tests/design/test_connectivity_contracts.py -q
 .\.venv\Scripts\python.exe tests/smoke_stdio.py
 Set-Location eda-agent
 ..\.venv\Scripts\python.exe -m pytest tests/test_bridge.py tests/test_recovery.py tests/test_workspace_pointer_isolation.py tests/test_timeout_looks_for_a_dialog.py tests/test_units.py tests/test_websocket_framing.py -q
