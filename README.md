@@ -1,56 +1,105 @@
 # Altium MCP Suite
 
-مجموعهٔ سورس سه MCP برای Altium Designer، به‌همراه هماهنگ‌کنندهٔ اجرای اسکریپت‌ها، بازیابی اتصال و آزمون‌های اصلاحات. این مخزن snapshot قابل‌ساخت از پروژه‌های اصلی است؛ نویسندگان و مجوزهای اصلی در هر زیرپوشه حفظ شده‌اند.
+**[English](README.md) · [فارسی](docs/README.fa.md) · [简体中文](docs/README.zh-CN.md)**
 
-| بخش | کاربرد | مجوز اصلی |
+[![Suite tests](https://github.com/M-R-Abedini/Altium-MCP-Suite/actions/workflows/tests.yml/badge.svg)](https://github.com/M-R-Abedini/Altium-MCP-Suite/actions/workflows/tests.yml)
+
+Connect an MCP-compatible AI assistant to Altium Designer for schematic, PCB and library work. This suite brings three open-source servers together with coordinated script execution, connection recovery and explicit connectivity checks.
+
+**Windows · Live integration tested on Altium Designer 26 · Python 3.12**
+
+## What you can do
+
+| Area | Capabilities |
+| --- | --- |
+| Schematics | Inspect components and nets, place and edit objects, build schematics from structured plans, review connectivity and layout |
+| PCB | Inspect geometry and rules, place components and copper, plan routes, calculate trace widths, impedance and length budgets |
+| Libraries | Create and edit symbols and footprints; compare footprint geometry with a manufacturer-derived land-pattern specification |
+| Connectivity | Capture pin-to-net snapshots, check expected nets and intentional NCs, compare revisions, and check schematic pins against PCB pads |
+| Review and outputs | Generate visual previews, review reports and BOMs; invoke Altium output jobs |
+
+Connectivity checks preserve full hierarchical net names and reject malformed input. Matching but incomplete captures cannot pass verification. See [examples and input requirements](CONNECTIVITY_VERIFICATION.md).
+
+## What the suite adds
+
+The underlying design tools come from the included projects. The suite adds a common deployment and coordination layer, plus four connectivity verification tools.
+
+| Using the projects separately | With this suite |
+| --- | --- |
+| Separate entry points and configuration | One Windows setup generates MCP JSON and Codex TOML configuration |
+| Each Python bridge manages its own script execution | A shared lock and handover coordinate access to Altium's scripting engine |
+| Separate bridge lifecycles | Health checks and guarded recovery; timed-out editing commands are not replayed automatically |
+| Different verification surfaces | One workflow for snapshots, pin contracts, connectivity diffs and bidirectional schematic/PCB pad checks |
+| Separate sources and test instructions | Recorded upstream commits, retained licenses and a suite-level CI workflow |
+
+This comparison describes the bundled snapshots, not every current version of another MCP. The original projects remain useful independently:
+
+| Included project | Role | License |
 | --- | --- | --- |
-| [eda-agent](eda-agent/README.md) | کنترل شماتیک، PCB و کتابخانه در Altium؛ ورودی هماهنگ‌شده: `eda_stdio.py` | Apache-2.0 |
-| [coffeenmusic](coffeenmusic/README.md) | ابزارهای پل قدیمی Altium؛ ورودی: `coffeenmusic/server/codex_stdio.py` | MIT |
-| [altium-designer-mcp](altium-designer-mcp/README.md) | خواندن و نوشتن فایل‌های کتابخانهٔ Altium با سرور Rust | GPL-3.0-or-later |
+| [eda-agent](eda-agent/README.md) | Main schematic, PCB and library automation | Apache-2.0 |
+| [coffeenmusic/altium-mcp](coffeenmusic/README.md) | Additional Altium commands through the legacy bridge | MIT |
+| [altium-designer-mcp](altium-designer-mcp/README.md) | Independent Rust server for Altium library-file operations | GPL-3.0-or-later |
 
-منبع و commit هر snapshot در [UPSTREAM.json](UPSTREAM.json) ثبت شده‌اند. کدهای هماهنگ‌کنندهٔ جدید تحت [MIT](LICENSE) هستند؛ این مجوز جایگزین مجوز زیرپروژه‌ها نیست. [یادداشت تغییرات](MODIFICATIONS.md) و [گزارش بررسی](REVIEW.md) محدوده و نتیجهٔ کنترل‌ها را توضیح می‌دهند.
+Exact source repositories and commits are listed in [UPSTREAM.json](UPSTREAM.json).
 
-## نصب در Windows
+## Quick start
 
-Python 3.12، Git و Altium Designer لازم‌اند. کنترل زنده روی AD26 آزمایش شده است. دستورها را از ریشهٔ همین مخزن اجرا کنید:
+Install Git, Python 3.12 and Altium Designer on Windows. A working Altium installation is required for live design operations.
 
 ```powershell
+git clone https://github.com/M-R-Abedini/Altium-MCP-Suite.git
+Set-Location Altium-MCP-Suite
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe setup.py --altium-exe "C:\Program Files\Altium\AD26\X2.EXE"
+```
+
+Use the actual path to your Altium executable. Setup writes `mcp.local.json` and `codex.local.toml`; merge the relevant entries into your client's settings and restart its MCP connections. Existing client settings are not overwritten.
+
+Open your project in Altium, then ask your assistant to call `app_context` before editing. It reports the active document and bridge/script state. Use the generated coordinated entry points rather than running a second copy of the old bridges alongside them.
+
+### Optional library-file server
+
+The Rust server is a separate build. It uses the pinned Rust 1.95.0 toolchain and requires Visual Studio C++ build tools on Windows.
+
+```powershell
+Push-Location altium-designer-mcp
+cargo build --release --locked
+Pop-Location
 .\.venv\Scripts\python.exe setup.py --altium-exe "C:\Program Files\Altium\AD26\X2.EXE" --library-dir "D:\MyProject\Libraries"
 ```
 
-مسیرها را برای رایانهٔ خود تنظیم کنید. `--library-dir` اختیاری است و می‌تواند چند بار تکرار شود. خروجی‌های `mcp.local.json` و `codex.local.toml` تنظیمات آمادهٔ کلاینت هستند؛ بخش‌های آن‌ها را در تنظیمات کلاینت خود ادغام و سرورهای MCP را یک بار دوباره راه‌اندازی کنید. نصب‌کننده تنظیمات فعلی کلاینت را بازنویسی نمی‌کند. سرورهای قدیمی همان مجموعه را هم‌زمان با این ورودی‌ها فعال نگه ندارید.
+Replace the library path with an existing directory. `--library-dir` may be repeated; setup adds the library server to the generated configuration. The executable is built at `altium-designer-mcp/target/release/altium-designer-mcp.exe`.
 
-برای ساخت سرور کتابخانه، Rust 1.95.0 و ابزار C++ ویژوال استودیو روی Windows لازم‌اند:
+### Smaller tool discovery
+
+For clients that load every tool schema into context, append `--toolset`, `minimal` to the generated **eda-agent** argument list. This exposes `tool_catalog` and `tool_invoke` for discovery and execution while retaining access to the full tool collection. Append `--no-dashboard` if you do not want the local review dashboard.
+
+## Operating limits
+
+- Live Altium control is Windows-only and has been exercised on AD26. Other Altium releases are not verified by this suite.
+- Modal dialogs can block the bridge. Complete or close the dialog before retrying. After an editing timeout, inspect the design before retrying: the command may already have changed it.
+- A clean connectivity report does not establish ERC/DRC, footprint geometry, copper connectivity or manufacturing readiness. Capture completeness and freshness must be established by the caller.
+- Some tools plan or calculate a change; others apply it. Check the tool's result and scope. The suite is not a guarantee of a fully autonomous, fabrication-ready design.
+
+## Documentation and validation
+
+- [Connectivity verification](CONNECTIVITY_VERIFICATION.md) — tool inputs, examples and acceptance rules.
+- [Review and validation scope](REVIEW.md) — publication evidence and known limits.
+- [Local changes](MODIFICATIONS.md) — changes to the bundled projects.
+- [CI workflow](.github/workflows/tests.yml) — Python regression/discovery tests and Rust tests.
+
+From the repository root:
 
 ```powershell
-Set-Location altium-designer-mcp
-cargo build --release --locked
-```
-
-فایل ساخته‌شده در `altium-designer-mcp/target/release/altium-designer-mcp.exe` قرار می‌گیرد. سورس کامل Rust و `Cargo.lock` در مخزن هستند؛ محیط Python و باینری‌های نصب محلی در Git نگهداری نمی‌شوند.
-
-## رفتار اتصال
-
-Altium و پروژهٔ موردنظر را باز کنید. برای عملیات زنده، ابتدا `app_context` را بخوانید تا نوع سند فعال و نسخهٔ اسکریپت مشخص شود. در صورت توقف پل، درخواست بعدی آن را پیش از ارسال فرمان بازیابی می‌کند. هماهنگ‌کننده، موتور مشترک اسکریپت را میان دو پل Python نوبتی در اختیارشان می‌گذارد. ابزار کتابخانهٔ Rust مستقل است.
-
-X پنجرهٔ وضعیت فقط آن را مخفی می‌کند؛ Detach توقف صریح است. keepalive پل متوقف‌شده را پشت صحنه راه‌اندازی نمی‌کند. اگر پنجرهٔ modal باز باشد، خطای مشخص گزارش می‌شود؛ پس از تکمیل یا بستن آن درخواست را تکرار کنید. فرمان ویرایشِ timeoutشده خودکار تکرار نمی‌شود.
-
-فایل‌های runtime به‌صورت پیش‌فرض در `%LOCALAPPDATA%/AltiumMCPSuite` ساخته می‌شوند. اسکریپت‌ها در مسیر دارای هش محتوا کپی می‌شوند تا cache اسکریپت Altium نسخهٔ قدیمی را نگه ندارد. مسیر تبادل پل قدیمی نیز در همین فضای کاربری است. `ALTIUM_EXE`، `ALTIUM_MCP_RUNTIME` و `EDA_AGENT_WORKSPACE` برای نصب سفارشی قابل تنظیم‌اند. برای چند نسخهٔ نصب‌شدهٔ Altium، مسیر executable را صریح مشخص کنید.
-
-## آزمون‌ها
-
-چهار ابزار جدید کنترل اتصال، snapshot نت‌لیست، قرارداد هر پایه، مقایسهٔ تغییرات و تطبیق دوسویهٔ شماتیک/پد PCB را بدون وابستگی KiCad انجام می‌دهند. نام کامل نت‌های سلسله‌مراتبی حفظ می‌شود و دادهٔ ناقص نتیجهٔ قبول نمی‌گیرد. [راهنما و نمونهٔ ورودی](CONNECTIVITY_VERIFICATION.md).
-
-```powershell
-.\.venv\Scripts\python.exe -m pytest tests -q
-.\.venv\Scripts\python.exe -m pytest eda-agent/tests/design/test_connectivity_contracts.py -q
+.\.venv\Scripts\python.exe -m pytest tests eda-agent/tests/design/test_connectivity_contracts.py -q
 .\.venv\Scripts\python.exe tests/smoke_stdio.py
-Set-Location eda-agent
-..\.venv\Scripts\python.exe -m pytest tests/test_bridge.py tests/test_recovery.py tests/test_workspace_pointer_isolation.py tests/test_timeout_looks_for_a_dialog.py tests/test_units.py tests/test_websocket_framing.py -q
 ```
 
-آزمون `tests/smoke_stdio.py --live` اختیاری است و پل Altium باز را برای کنترل بازیابی متوقف و دوباره راه‌اندازی می‌کند؛ پس از پایان عملیات جاری اجرا شود. تست‌های کامل upstream نیز همراه سورس هستند؛ برخی به پنجرهٔ واقعی، دادهٔ fixture یا ابزارهای دیگر نیاز دارند.
+The stdio smoke test checks server startup and the four connectivity tools. Its optional `--live` mode stops and recovers the open Altium bridge; run it only after current operations finish. CI does not validate every tool against a live Altium session.
 
-پروژهٔ سخت‌افزار مرتبط: [RV1106G3 Header Board Robotics](https://github.com/M-R-Abedini/RV1106G3_Header_Board_Robotics).
+For reproducible problems, [open an issue](https://github.com/M-R-Abedini/Altium-MCP-Suite/issues) with your Altium version, the tool name, steps to reproduce and the returned error.
+
+## Credits and licenses
+
+This distribution retains the original authorship and licenses. The coordination code and new connectivity modules use [MIT](LICENSE); that license does not replace the Apache-2.0, MIT or GPL licenses of the included projects. See [source provenance](UPSTREAM.json) before redistributing components.
