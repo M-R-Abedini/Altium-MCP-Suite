@@ -27,7 +27,7 @@ MCP servers that let an AI read and edit your Altium schematics, PCBs, and libra
 ## Current limitations
 
 - Experimental. Some operations can crash Altium's DelphiScript engine and stop the polling loop — back up your design before letting the AI edit it.
-- While the loop runs, some of Altium's own script-backed buttons go unresponsive. Detach to give Altium back its engine.
+- Native save and script-backed UI commands can wait during a handler. The loop releases the engine after about two idle seconds; background pings do not extend that deadline. The next coordinated tool call restarts it automatically.
 - EDA JSON parameters above U+00FF (Ω, Chinese text) are rejected before dispatch to prevent silent `?` substitution. Full Unicode transport is not implemented.
 - Network paths must be mapped drives; UNC paths don't open.
 - `proj_sync_pcb` requires `allow_modal=True`; the schematic→PCB ECO still opens an interactive dialog.

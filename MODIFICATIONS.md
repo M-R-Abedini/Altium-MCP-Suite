@@ -2,6 +2,10 @@
 
 ## Added 2026-10-08
 
+- Native-save follow-up: added `engine_idle_release_ms` (default 2000; 0 disables), independent of the legacy disconnect timer. Background pings do not renew it. Foreground preflight reserves enough time for the actual command. Release occurs between handlers, without saving documents. The coordinated entry point restarts the loop on demand.
+- Startup now publishes `bridge-ready.json` after request purges and form initialization; the coordinator waits for it before publishing a launch probe. This removes the startup-request race exposed by short idle release. Normal shutdown removes the marker, and Python background keepalive treats its absence as idle release rather than a fault.
+- Script version is `2026.10.08.local2`. Tests cover configuration migration, foreground reservation, startup readiness and live release despite repeated pings, followed by automatic recovery. User-confirmed native Ctrl+S worked immediately after releasing the previously held engine.
+
 - Follow-up transport review: legacy commands persist editor-session ownership and require a request-specific final completion acknowledgement before EDA handback. Timeout/cancellation withdraw unconsumed requests and retain unresolved ownership; a confirmed editor restart or explicit manual-stop reset can retire it. Generic bridge errors no longer open blocking error dialogs.
 - The schematic builder validates all pipe-delimited fields and uses strict cp1252 encoding before writing. Each build uses unique specification/pin-map paths in the configured per-user exchange; Pascal receives those paths explicitly. Public shared paths and stale pin-map reuse are removed from this workflow.
 - EDA response envelopes now require a matching request ID, boolean success, valid protocol version type and structured failure fields. Progress ownership no longer expires after 600 seconds: markers are compared with the editor process start time, and uncertain current-session markers block relaunch.

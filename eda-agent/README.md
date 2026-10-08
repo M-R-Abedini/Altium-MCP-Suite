@@ -323,16 +323,11 @@ The deployed JSON parser substitutes `?` for codepoints above U+00FF. This suite
 
 Use a supported label or edit the text directly in Altium. External batch-file contents are not covered by this JSON parameter guard.
 
-### Altium tool buttons relying on internal scripting pause while the server is running
+### Native UI and saving between MCP commands
 
-Altium itself uses DelphiScript internally for many built-in commands (some ribbon buttons, panel actions, menu items). **While the `eda-agent` polling loop is active, those built-in commands may become temporarily unresponsive** because Altium's scripting engine is single-threaded and currently owned by our polling loop.
+Altium's script engine is single-threaded. Native save and script-backed commands can wait while an MCP handler is executing. This suite releases the polling loop after about two seconds without work (`engine_idle_release_ms=2000`); background keepalive pings do not renew that deadline. Foreground preflight reserves time to submit the next real command. The coordinated entry point restarts the loop automatically when needed.
 
-**The polling loop owns the scripting engine for as long as it's running.** While it runs, Altium's own script-backed buttons sit waiting. The loop exits when either:
-
-- The MCP client calls `app_detach` (or the dashboard **Detach** button is clicked); the loop saves all dirty docs, exits within ~500 ms, and Altium becomes fully responsive, OR
-- **10 minutes of total silence** from the MCP client (no commands AND no keep-alive pings) triggers the built-in auto-shutdown
-
-In practice, while an MCP client is attached and sending keep-alive pings every 30 s, the loop will never time out on its own; you need to either have the AI call `app_detach` or close the MCP client session entirely. After the client disconnects, expect up to ~10 minutes for the loop to auto-exit unless you use **Detach** to release it immediately.
+Idle release runs between handlers and does not interrupt or save a document. Save your work normally in Altium. Set `engine_idle_release_ms=0` only when you explicitly want continuous engine ownership. Startup readiness is acknowledged after request cleanup and status-form initialization, preventing a health request from being purged during startup.
 
 ### ECO (sch → PCB update) opens a modal, and there is no silent API
 
@@ -366,23 +361,17 @@ When the MCP client calls a tool, the Python bridge writes a request file and wa
 
 Each request is published to its own `request_<id>.json` file; Altium replies in `response_<id>.json` with the matching ID. The bridge's keep-alive thread and MCP-client calls each use their own request IDs, so responses never race. The older single-`response.json` channel was retired in IPC v2.
 
-### 2. Server auto-shutdown (Altium side)
+### 2. Engine idle release (Altium side)
 
-The DelphiScript polling loop auto-stops after **10 minutes of inactivity** (`AUTO_SHUTDOWN_MS = 600000`). If the MCP client disconnects and the keep-alive pings stop arriving, the server releases Altium's scripting engine after ten minutes and `StartMCPServer` returns. To resume, re-launch via **File → Run Script... → StartMCPServer → Run**.
+The suite defaults to `engine_idle_release_ms=2000`. After the last work command, the loop exits and returns the scripting engine to Altium. It does not stop an in-flight handler. The older `auto_shutdown_ms=600000` remains as a separate fallback timer when idle release is explicitly disabled.
 
-### 3. Python keep-alive pings
+### 3. Python keepalive pings
 
-While an MCP client is attached, the Python bridge pings Altium every 30 seconds so the 10-minute auto-shutdown never fires mid-session. The sequence:
+Background pings neither restart an idle-released loop nor renew its work deadline. A missing native readiness marker is treated as normal idle release. A foreground tool call checks and, if needed, starts the loop before submitting its command.
 
-- **AI issues command A** → Altium busy, then idle
-- **30 s later, Python pings** → Altium responds "pong", idle timer resets
-- **10 min later, still no AI activity and no ping** → Altium auto-shuts down
+### Altium UI responsiveness
 
-In practice: the server stays alive as long as an MCP client is connected, and exits cleanly ~10 minutes after the client fully disconnects. No manual stop needed in the common case. For a hard exit, the AI (or the **Detach** button on the dashboard window) calls `app_detach`, which persists any unsaved work via `app_save_all` and returns control to Altium within ~500 ms.
-
-### Why this matters for Altium UI responsiveness
-
-The polling loop goes into idle mode after ~1 second of no MCP commands. In idle mode it polls every 100 ms with a `ProcessMessages` yield in between, so Altium's UI stays responsive continuously. In active mode the loop polls every 10 ms (`ProcessMessages` every 5th tick), giving sub-50 ms round-trip latency for back-to-back commands. For a full release, call `app_detach` or click **Detach** on the dashboard.
+`ProcessMessages` keeps some UI responsive but does not surrender ownership of the script engine. Full release occurs when the polling procedure returns. The idle policy provides that release between work bursts; active handlers and modal dialogs can still block native commands until they finish.
 
 ## Tool reference
 

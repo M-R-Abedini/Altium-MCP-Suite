@@ -1,5 +1,9 @@
 # Review and validation — 2026-10-06
 
+## Native save and idle ownership — 2026-10-08
+
+The user's Ctrl+S failure was reproduced as an engine-ownership problem: saving worked after the polling loop was stopped. Idle release now defaults to two seconds and background pings do not prolong it. Live AD26 validation confirmed `reason=engine_idle_release` while repeated health pings were sent, successful on-demand restart with script version `2026.10.08.local2`, and a released engine at test exit. No design files were edited or saved by the test. A startup-request race found during the first timing test was fixed with native readiness acknowledgement. The final suite includes 80 suite tests plus 152 selected EDA tests.
+
 ## Five-finding repair validation — 2026-10-08
 
 All five follow-up findings are addressed. 75 suite tests and 152 selected EDA tests passed, including cancellation, late native completion, editor-session changes, strict response validation and batch-file isolation. A live AD26 stdio smoke test stopped/recovered the EDA loop, executed a read-only legacy command with the new final completion acknowledgement and restored EDA ownership. This exercised compilation of the updated Pascal project without changing the hardware design. Circuit-building geometry was validated with mocked backend/file tests, not by building on the active design. See `docs/review/TRANSPORT_FINDINGS_2026-10-08.md` for evidence and manual recovery.

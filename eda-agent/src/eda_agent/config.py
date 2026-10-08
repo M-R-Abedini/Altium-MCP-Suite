@@ -119,6 +119,9 @@ class MCPRuntimeConfig(BaseModel):
     # so a burst of dashboard calls all get 10 ms pickup.
     idle_threshold: int = 150
     auto_shutdown_ms: int = 600_000  # 10 min
+    # Return the single-threaded script engine to Altium between work bursts.
+    # Health pings do not renew this deadline. Zero explicitly disables it.
+    engine_idle_release_ms: int = Field(default=2_000, ge=0)
     yield_iterations: int = 5
     yield_every_n_active: int = 5
 

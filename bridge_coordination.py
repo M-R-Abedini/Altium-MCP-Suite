@@ -164,14 +164,15 @@ def _handler_busy():
             return True  # Uncertain ownership must not authorize a relaunch.
     return False
 
-def _file_ping(timeout):
+def _file_ping(timeout, *, command_pending=False):
     request_id = uuid.uuid4().hex
     request = WORKSPACE / ('request_' + request_id + '.json')
     response = WORKSPACE / ('response_' + request_id + '.json')
     progress = WORKSPACE / ('progress_' + request_id + '.json')
     temp = request.with_suffix('.json.tmp')
     WORKSPACE.mkdir(parents=True, exist_ok=True)
-    temp.write_text(json.dumps({'protocol_version': 2, 'id': request_id, 'command': 'application.ping', 'params': {}}), encoding='utf-8')
+    params = {'command_pending': True} if command_pending else {}
+    temp.write_text(json.dumps({'protocol_version': 2, 'id': request_id, 'command': 'application.ping', 'params': params}), encoding='utf-8')
     temp.replace(request)
     deadline = time.monotonic() + timeout
     try:
@@ -225,6 +226,8 @@ def _ensure(probe):
     executable = EXE or altium_exe()
     if not script.is_file() or not executable.is_file():
         raise RuntimeError('The Altium executable or bridge script is missing')
+    ready = WORKSPACE / 'bridge-ready.json'
+    ready.unlink(missing_ok=True)
     LAUNCH_STATE.parent.mkdir(parents=True, exist_ok=True)
     LAUNCH_STATE.write_text(json.dumps({'attempted_at': time.time()}), encoding='utf-8')
     command = '"%s" -RScriptingSystem:RunScript(ProjectName="%s"|ProcName="Dispatcher>StartMCPServer")' % (executable, script)
@@ -234,6 +237,10 @@ def _ensure(probe):
     while time.monotonic() < deadline:
         time.sleep(.3)
         _guard_editor()
+        # Startup purges orphan requests. Do not publish a health request
+        # until that purge and the status-form initialization have finished.
+        if not ready.exists():
+            continue
         try:
             probe(2.0)
             LAUNCH_STATE.unlink(missing_ok=True)
@@ -248,7 +255,7 @@ def ensure_eda(bridge, execute):
     from eda_agent.bridge.exceptions import AltiumTimeoutError
     def probe(timeout):
         try:
-            return execute(bridge, 'application.ping', {}, timeout)
+            return execute(bridge, 'application.ping', {'command_pending': True}, timeout)
         except AltiumTimeoutError as error:
             raise TimeoutError(str(error)) from error
     _ensure(probe)
@@ -264,7 +271,7 @@ def stop_eda():
     # Only publish a stop if the polling loop actually answers. An unconsumed
     # sentinel must not kill a later session that happens to start meanwhile.
     try:
-        _file_ping(2.0)
+        _file_ping(2.0, command_pending=True)
     except TimeoutError:
         return
     stop = WORKSPACE / 'stop'

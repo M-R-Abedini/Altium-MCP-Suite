@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import sys
 import tempfile
+import time
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
@@ -83,7 +84,26 @@ async def main(live=False):
                                     if isinstance(value, dict) and 'error' in value:
                                         assert value['error'] == 'No component data found', value
                                     with coordination.engine_lock():
-                                        assert coordination._file_ping(3)['script_version'] == '2026.10.06.local1'
+                                        from eda_agent.tools.application import _bundled_script_version
+                                        assert coordination._file_ping(3)['script_version'] == _bundled_script_version()
+                                        activity = coordination.WORKSPACE / 'activity.log'
+                                        offset = activity.stat().st_size if activity.exists() else 0
+                                        deadline = time.monotonic() + 5
+                                        released = False
+                                        while time.monotonic() < deadline:
+                                            try:
+                                                coordination._file_ping(.4)
+                                            except TimeoutError:
+                                                released = True
+                                                break
+                                            time.sleep(.15)
+                                        assert released, 'Health pings held the script engine beyond its idle deadline'
+                                        assert 'reason=engine_idle_release' in activity.read_bytes()[offset:].decode('utf-8', errors='replace')
+                                        coordination.start_eda()
+                                        assert coordination._file_ping(3)['script_version'] == _bundled_script_version()
+                                        coordination.stop_eda()
+                                    print(json.dumps({'server':name, 'idle_release_despite_pings':True,
+                                                      'recovered_after_idle':True, 'engine_released_at_exit':True}), flush=True)
                                 print(json.dumps({'server':name, 'live_recovery_or_handover':True}), flush=True)
                 except BaseException:
                     log.flush()

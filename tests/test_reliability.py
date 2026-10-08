@@ -15,6 +15,10 @@ class CoordinationTests(unittest.TestCase):
             p=patch.object(coord,key,value);p.start();self.addCleanup(p.stop)
         p=patch.object(coord,'_editor_state',return_value={'pid':77,'blocked':False});self.state=p.start();self.addCleanup(p.stop)
         p=patch.object(coord.subprocess,'Popen');self.launch=p.start();self.launch.return_value.pid=123;self.addCleanup(p.stop)
+        def ready(*args,**kwargs):
+            (work/'bridge-ready.json').write_text('{}')
+            return self.launch.return_value
+        self.launch.side_effect=ready
         p=patch.object(coord.time,'sleep');p.start();self.addCleanup(p.stop)
         p=patch.object(coord,'_session_started_at',return_value=0);p.start();self.addCleanup(p.stop)
     def test_healthy_loop_is_not_relaunched(self):
@@ -74,8 +78,9 @@ class WrapperTests(unittest.TestCase):
     def test_keepalive_never_resurrects_detached_loop(self):
         n=self.namespace();fn=load_function(ROOT/'eda_stdio.py','coordinated',n)
         with patch.object(threading,'current_thread',return_value=types.SimpleNamespace(name='altium-keepalive')):
-            fn(object(),'application.ping',{},5)
-        n['ensure_eda'].assert_not_called();n['original'].assert_called_once()
+            result=fn(types.SimpleNamespace(config=types.SimpleNamespace(workspace_dir=ROOT/'nonexistent-workspace')),'application.ping',{},5)
+        self.assertEqual(result,{'engine_released':True})
+        n['ensure_eda'].assert_not_called();n['original'].assert_not_called()
     def test_stop_does_not_restart_a_stopped_bridge(self):
         n=self.namespace();fn=load_function(ROOT/'eda_stdio.py','coordinated',n)
         fn(object(),'application.stop_server',{},10);n['ensure_eda'].assert_not_called()

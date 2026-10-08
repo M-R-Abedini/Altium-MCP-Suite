@@ -14,7 +14,7 @@ Const
     // returns, mismatch means Altium is running a stale compiled script
     // (DelphiScript caches compiled units until the script project is
     // reopened or Altium is restarted).
-    SCRIPT_VERSION = '2026.10.06.local1';
+    SCRIPT_VERSION = '2026.10.08.local2';
 
     // How far up the mechanical layers a pair tidy looks. Altium allows 1024,
     // and checking every combination of those is a million probes for a stack
@@ -69,6 +69,7 @@ Var
     PollIntervalIdleMs   : Integer;
     IdleThreshold        : Integer;
     AutoShutdownMs       : Cardinal;
+    EngineIdleReleaseMs  : Cardinal;
     YieldIterations      : Integer;
     YieldEveryNActive    : Integer;
 
@@ -137,6 +138,7 @@ Begin
     PollIntervalIdleMs   := 30;
     IdleThreshold        := 150;
     AutoShutdownMs       := 600000;  { 10 min }
+    EngineIdleReleaseMs  := 2000;    { return engine to native UI when idle }
     YieldIterations      := 5;
     YieldEveryNActive    := 5;
 End;
@@ -1700,6 +1702,9 @@ Begin
 
     V := ExtractJsonValue(Content, 'auto_shutdown_ms');
     If V <> '' Then Begin Try N := StrToInt(V); If N >= 0 Then AutoShutdownMs := N; Except End; End;
+
+    V := ExtractJsonValue(Content, 'engine_idle_release_ms');
+    If V <> '' Then Begin Try N := StrToInt(V); If N >= 0 Then EngineIdleReleaseMs := N; Except End; End;
 
     V := ExtractJsonValue(Content, 'yield_iterations');
     If V <> '' Then Begin Try N := StrToInt(V); If N > 0 Then YieldIterations := N; Except End; End;

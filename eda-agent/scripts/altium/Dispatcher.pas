@@ -12,6 +12,7 @@ Var
     StatusRequestCount   : Integer;
     StatusLastCommand    : String;
     StatusTotalAltiumMs  : Cardinal;
+    StatusWorkReserved   : Boolean;
 
 Function ProcessCommand(Command : String; Params : String; RequestId : String) : String;
 Var
@@ -119,6 +120,7 @@ Var
     DashDetail, DashErrPayload, DashCode : String;
 Begin
     Result := False;
+    StatusWorkReserved := False;
     EnsureWorkspaceDir(0);
 
     If Not ScanForRequestFile(RequestPath, RequestId) Then Exit;
@@ -185,6 +187,10 @@ Begin
     End;
 
     StatusLastCommand := Command;
+    { Foreground preflight reserves time to publish its actual command.
+      Background keepalives never send this flag. }
+    StatusWorkReserved := (Command = 'application.ping') And
+        (LowerCase(ExtractJsonValue(Params, 'command_pending')) = 'true');
     Inc(StatusRequestCount);
     StartMs := GetTickCount;
     ResultTag := 'OK';
@@ -311,6 +317,7 @@ Procedure CleanupMCPServer(Dummy : Integer);
 Begin
     CleanupOrphanRequests(0);
     CleanupOrphanProgress(0);
+    DeleteFile(WorkspaceDir + 'bridge-ready.json');
     Application.ProcessMessages;
 End;
 
@@ -333,6 +340,8 @@ Var
     IdleCount      : Integer;
     CurrentSleep   : Integer;
     LastActivityMs : Cardinal;
+    LastWorkMs     : Cardinal;
+    IdleDisplayMs  : Cardinal;
     NowMs          : Cardinal;
     HadRequest     : Boolean;
     I              : Integer;
@@ -357,6 +366,9 @@ Begin
     IdleCount := 0;
     CurrentSleep := PollIntervalActiveMs;
     LastActivityMs := GetTickCount;
+    LastWorkMs := LastActivityMs;
+    IdleDisplayMs := AutoShutdownMs;
+    If EngineIdleReleaseMs > 0 Then IdleDisplayMs := EngineIdleReleaseMs;
     ActiveTickCount := 0;
 
     StatusStartTick := GetTickCount;
@@ -365,9 +377,16 @@ Begin
     StatusTotalAltiumMs := 0;
     ShowStatusForm(0);
     UpdateStatusHeader('MCP: idle');
-    UpdateStatsLine(0, 0, 0, AutoShutdownMs Div 1000);
+    UpdateStatsLine(0, 0, 0, IdleDisplayMs Div 1000);
     AppendLog(FormatLogStamp(0) + ',0,_session_start,version=' + SCRIPT_VERSION
               + ',protocol=' + IntToStr(PROTOCOL_VERSION));
+
+    { Publish readiness only after startup purges and form initialization.
+      Start the idle clock here, not while the form is still being built. }
+    LastActivityMs := GetTickCount;
+    LastWorkMs := LastActivityMs;
+    WriteFileContent(WorkspaceDir + 'bridge-ready.json',
+        '{"script_version":"' + SCRIPT_VERSION + '"}');
 
     Try
         While Running Do
@@ -399,18 +418,33 @@ Begin
             If RenewRequested Then
             Begin
                 LastActivityMs := GetTickCount;
+                LastWorkMs := LastActivityMs;
                 RenewRequested := False;
                 UpdateStatsLine(
                     (GetTickCount - StatusStartTick) Div 1000,
                     StatusRequestCount,
                     StatusTotalAltiumMs,
-                    AutoShutdownMs Div 1000);
+                    IdleDisplayMs Div 1000);
             End;
 
             // Auto-shutdown after prolonged inactivity. Paused sessions
-            // never auto-shutdown so the user can step away indefinitely.
+            // suppress the legacy timer; engine-idle release still frees the UI.
             If PausedFlag Then
                 LastActivityMs := GetTickCount;
+            { Health traffic must not keep the script engine permanently
+              owned: native Ctrl+S and other script-backed UI actions need it.
+              This check runs only BETWEEN handlers; never interrupts a write. }
+            If EngineIdleReleaseMs > 0 Then
+            Begin
+                NowMs := GetTickCount;
+                If NowMs >= LastWorkMs Then
+                    If (NowMs - LastWorkMs) >= EngineIdleReleaseMs Then
+                    Begin
+                        StopReason := 'engine_idle_release';
+                        Running := False;
+                        Break;
+                    End;
+            End;
             If AutoShutdownMs > 0 Then
             Begin
                 NowMs := GetTickCount;
@@ -433,7 +467,7 @@ Begin
                     (GetTickCount - StatusStartTick) Div 1000,
                     StatusRequestCount,
                     StatusTotalAltiumMs,
-                    AutoShutdownMs Div 1000);
+                    IdleDisplayMs Div 1000);
                 Application.ProcessMessages;
                 Sleep(PollIntervalIdleMs);
                 Continue;
@@ -446,12 +480,14 @@ Begin
                 IdleCount := 0;
                 CurrentSleep := PollIntervalActiveMs;
                 LastActivityMs := GetTickCount;
+                If (StatusLastCommand <> 'application.ping') Or StatusWorkReserved Then
+                    LastWorkMs := LastActivityMs;
                 UpdateStatusHeader('MCP: idle');
                 UpdateStatsLine(
                     (GetTickCount - StatusStartTick) Div 1000,
                     StatusRequestCount,
                     StatusTotalAltiumMs,
-                    (AutoShutdownMs - (GetTickCount - LastActivityMs)) Div 1000);
+                    (IdleDisplayMs - (GetTickCount - LastWorkMs)) Div 1000);
                 { Perf row already updated in-place by TrackPerf (called }
                 { from AppendLogLine inside ProcessSingleRequest). Skip  }
                 { the full RefreshPerfPanel rebuild that used to flash  }
@@ -467,7 +503,7 @@ Begin
                         (GetTickCount - StatusStartTick) Div 1000,
                         StatusRequestCount,
                         StatusTotalAltiumMs,
-                        (AutoShutdownMs - (GetTickCount - LastActivityMs)) Div 1000);
+                        (IdleDisplayMs - (GetTickCount - LastWorkMs)) Div 1000);
             End;
 
             If CurrentSleep >= PollIntervalIdleMs Then
