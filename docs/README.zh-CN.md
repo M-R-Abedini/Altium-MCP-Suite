@@ -1,39 +1,40 @@
 # Altium MCP Suite
 
-[English](../README.md) · [فارسی](README.fa.md) · [简体中文](README.zh-CN.md)
+[English](../README.md) · [فارسی](README.fa.md) · [简体中文](README.zh-CN.md) · [العربية](README.ar.md)
 
-用于读取和编辑 Altium 原理图、PCB 和库的 MCP 服务器集合。实时操作通过 Altium 的 DelphiScript 引擎执行；库文件操作由独立的 Rust 服务器处理。
+让 AI 读取和编辑你的 Altium 原理图、PCB 和库的 MCP 服务器。Altium 保持打开，AI 直接在你打开的项目上实时操作。
 
-**Windows · Python 3.12 · 实时集成已在 Altium Designer 26 上测试**
+**Windows · Python 3.12 · 已在 Altium Designer 26 上实测**
 
-## 架构与功能
+## 能做什么
 
-| 后端 | 范围 | 许可证 |
-| --- | --- | --- |
-| [eda-agent](../eda-agent/README.md) | 原理图对象和编译后的网络；PCB 元件、焊盘和铜；符号及封装编辑 | Apache-2.0 |
-| [coffeenmusic/altium-mcp](../coffeenmusic/README.md) | 通过文件请求/响应桥执行其他 Altium 命令 | MIT |
-| [altium-designer-mcp](../altium-designer-mcp/README.md) | 在配置的库目录内读写 `.SchLib` 和 `.PcbLib` | GPL-3.0-or-later |
+- 读写打开的原理图：添加元件、画线、放置网络标签和电源端口、改参数、导出 BOM 和网表。
+- 操作 PCB：移动元件、布线和过孔、检查布局间距、拼板。
+- 设计审查：孤立网络标签、悬空端口、IC 未连接引脚、缺失去耦电容、位号冲突、偏离网格的元件——或一次跑完 31 项 lint 检查。
+- 四个只读工具做连接检查：引脚-网络映射快照（SHA-256 摘要）、逐引脚约定（期望网络，或注明原因的有意悬空）、前后 diff、原理图↔PCB 焊盘双向一致性。
+- 计算线宽、阻抗和长度预算。只是计算器，不是信号完整性证明。
+- 读写 `.SchLib` / `.PcbLib` 库文件。
+- 两个桥，一个脚本引擎：共享锁让两个 Python 桥不会抢 Altium 的脚本引擎；每个请求带 ID，过期的旧响应不会被接受。
 
-布线功能包含离线 Manhattan A* 规划器，输出走线和过孔操作。线宽、阻抗及长度预算计算用于辅助设计判断，不构成信号完整性验证，也不能替代场求解器。封装审查将焊盘几何与调用者提供的制造商规格进行比较。
+## 还在开发中的功能
 
-与单独运行[所收录的上游版本](../UPSTREAM.json)相比，本套件增加了：
+- 辅助布局：批量布局和间距检查可用，更精细的布局工具还在做。
+- 桥的稳定性：已知的 DelphiScript 崩溃都会修掉或加上防护，但新的还是会冒出来——这事没完。
+- 目前只在 Altium Designer 26 上实测过，其他版本还没测。
 
-- **脚本协调：**共享锁串行化两个 Python 桥的执行；旧桥接管脚本引擎时，暂停主桥轮询。
-- **响应校验与恢复：**原子发布请求和请求 ID 防止接受过期响应。恢复前检查编辑器及桥状态；超时的编辑命令不会自动重放。
-- **连接回归检查：**以下四个只读工具比较引脚/焊盘与网络的映射。保留完整层级网络名，例如 `/Camera0/RESET` 与 `/Camera1/RESET` 不会合并。
+## 当前限制
 
-| 工具 | 检查内容 |
-| --- | --- |
-| `design_connectivity_snapshot` | 规范化元件/引脚/网络映射及 SHA-256 摘要 |
-| `design_check_pin_contracts` | 每个引脚的预期网络，或注明原因的有意悬空 |
-| `design_diff_connectivity` | 引脚增删及网络分配变化 |
-| `design_check_schematic_pcb_parity` | 双向检查缺失/多余焊盘及引脚/焊盘网络不一致 |
-
-这些检查由本套件新增，运行时不依赖 KiCad。
+- 实验性质。某些操作可能让 Altium 的 DelphiScript 引擎崩溃、轮询停掉；让 AI 改图之前先备份。
+- 轮询运行时，Altium 自带的一些脚本按钮会暂时没反应。用 Detach 把引擎还给 Altium。
+- EDA JSON 参数中高于 U+00FF 的字符（Ω、中文）在发送前被拒绝，避免静默替换为 `?`；尚未实现完整 Unicode 传输。
+- 网络路径要用映射盘符，UNC 路径打不开。
+- `proj_sync_pcb` 必须显式设置 `allow_modal=True`；原理图到 PCB 的 ECO 仍会打开交互对话框。
+- 连接检查只查引脚分配，不查铜。你没喂给它的数据，它看不见。
+- 模态框阻塞脚本命令，但 Win32 对话框诊断仍可使用。处理器忙碌时拒绝发送新命令。超时后撤回尚未读取的请求；已开始的编辑无法取消，重试前应检查设计。
 
 ## 安装
 
-在 Windows 上安装 Git、Python 3.12 和 Altium。将可执行文件路径替换为实际安装路径：
+在 Windows 上安装 Git、Python 3.12 和 Altium。把可执行文件路径换成你自己的：
 
 ```powershell
 git clone https://github.com/M-R-Abedini/Altium-MCP-Suite.git
@@ -43,11 +44,7 @@ python -m venv .venv
 .\.venv\Scripts\python.exe setup.py --altium-exe "C:\Program Files\Altium\AD26\X2.EXE"
 ```
 
-将生成的 `mcp.local.json` 或 `codex.local.toml` 条目合并到 MCP 客户端配置，然后重启连接。在 Altium 中打开项目，调用 `app_context` 检查活动文档与桥状态。
-
-若要减少启动时的工具描述，向生成的 **eda-agent** 参数列表添加 `"--toolset", "minimal"`。通过 `tool_catalog` 和 `tool_invoke` 仍可访问完整工具集。
-
-可选库文件服务器需要锁定版本的 Rust 工具链和 Visual Studio C++ 构建工具。指定已存在的库目录；多个目录可重复使用 `--library-dir`：
+把生成的 `mcp.local.json`（或 `codex.local.toml`）条目合并到 MCP 客户端配置，重启连接。在 Altium 里打开项目，调用 `app_context` 检查桥的状态。
 
 ```powershell
 Push-Location altium-designer-mcp
@@ -56,21 +53,8 @@ Pop-Location
 .\.venv\Scripts\python.exe setup.py --altium-exe "C:\Program Files\Altium\AD26\X2.EXE" --library-dir "D:\MyProject\Libraries"
 ```
 
-## 验证边界
+库服务器是可选的（需要锁定版本的 Rust 工具链和 Visual Studio C++ 构建工具）。多个目录可重复 `--library-dir`。
 
-重新编译后，采集未过滤的原理图网络及同一项目版本的 PCB 焊盘。`complete=true` 是调用者对覆盖范围的声明；工具无法发现源数据中遗漏的记录。标记为不完整的数据不能通过验证。参见[输入约定与示例](../CONNECTIVITY_VERIFICATION.md)。
+## 许可
 
-引脚/焊盘网络一致性不验证铜连接、间距、差分对长度偏差、封装方向或 ERC/DRC。发布制造文件前，应执行并审查 Altium 原生检查。编辑命令超时后，先检查文档再重试；首次操作可能已生效。模态对话框可能阻塞实时执行。
-
-超时后撤回 Altium 尚未读取的请求；已开始的操作无法取消。处理器忙碌时拒绝发送新命令。JSON 参数中高于 U+00FF 的字符在发送前被拒绝，避免静默替换为 `?`。`proj_sync_pcb` 必须显式设置 `allow_modal=True`，仍会打开 Altium 的交互式 ECO 对话框。
-
-## 测试与维护
-
-```powershell
-.\.venv\Scripts\python.exe -m pytest tests eda-agent/tests/design/test_connectivity_contracts.py -q
-.\.venv\Scripts\python.exe tests/smoke_stdio.py
-```
-
-stdio 冒烟测试使用合成数据检查服务器启动及四个连接工具。CI 不会在实时 Altium 中验证每条命令。参见[验证范围](../REVIEW.md)、[套件变更](../MODIFICATIONS.md)和 [CI 工作流](../.github/workflows/tests.yml)。报告问题时请提供 Altium 版本、工具名、复现步骤及返回错误。
-
-协调代码和新增连接模块采用 [MIT](../LICENSE)。各收录项目保留原许可证和作者信息；参见[来源记录](../UPSTREAM.json)。
+套件新代码 MIT。收录的项目保留各自许可——见 [UPSTREAM.json](../UPSTREAM.json)。

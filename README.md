@@ -1,41 +1,42 @@
 # Altium MCP Suite
 
-[English](README.md) · [فارسی](docs/README.fa.md) · [简体中文](docs/README.zh-CN.md)
+[![Tests](https://github.com/M-R-Abedini/Altium-MCP-Suite/actions/workflows/tests.yml/badge.svg)](.github/workflows/tests.yml)
 
-[![Tests](https://github.com/M-R-Abedini/Altium-MCP-Suite/actions/workflows/tests.yml/badge.svg)](https://github.com/M-R-Abedini/Altium-MCP-Suite/actions/workflows/tests.yml)
+[English](README.md) · [فارسی](docs/README.fa.md) · [简体中文](docs/README.zh-CN.md) · [العربية](docs/README.ar.md)
 
-MCP servers for inspecting and editing Altium schematics, PCBs and libraries. Live operations run through Altium's DelphiScript engine; library-file operations use a separate Rust server.
+MCP servers that let an AI read and edit your Altium schematics, PCBs, and libraries. You keep Altium open; the AI works on the project you have open, live.
 
-**Windows · Python 3.12 · Live integration tested on Altium Designer 26**
+**Windows · Python 3.12 · Tested live on Altium Designer 26**
 
-## Architecture and capabilities
+## What it can do
 
-| Backend | Scope | License |
-| --- | --- | --- |
-| [eda-agent](eda-agent/README.md) | Schematic objects and compiled nets; PCB components, pads and copper; symbol/footprint editing | Apache-2.0 |
-| [coffeenmusic/altium-mcp](coffeenmusic/README.md) | Additional live Altium commands through a file-based request/response bridge | MIT |
-| [altium-designer-mcp](altium-designer-mcp/README.md) | Read/write `.SchLib` and `.PcbLib` files within configured library directories | GPL-3.0-or-later |
+- Read and edit the open schematic: add components, draw wires, place net labels and power ports, edit parameters, pull a BOM or netlist.
+- Work the PCB: move components, lay tracks and vias, check placement clearances, panelize.
+- Audit the design: orphan net labels, floating ports, unconnected IC pins, missing decoupling caps, designator collisions, off-grid parts — or one 31-point lint sweep over schematic and PCB.
+- Check connectivity with four read-only tools: snapshot pin-to-net assignments (SHA-256 digest), per-pin contracts (expected net, or intentional NC with a reason), before/after diffs, and schematic↔PCB pad parity in both directions.
+- Calculate trace width, impedance, and length budgets. These are calculators, not a signal-integrity proof.
+- Read and write `.SchLib` / `.PcbLib` library files.
+- Two bridges, one script engine: a shared lock keeps the two Python bridges from fighting over Altium's script engine, and every request carries an ID so a late answer to an old request is never accepted.
 
-Routing includes an offline Manhattan A* planner that produces track/via operations. Trace-width, impedance and length-budget calculations support design decisions; they do not establish signal integrity or replace a field solver. Footprint auditing compares pad geometry against a manufacturer specification supplied by the caller.
+## What's still in development
 
-Compared with running the bundled servers independently, this suite adds:
+- Placement assistance: batch placement and clearance checks work; finer placement tooling is still being worked on.
+- Bridge reliability: every known DelphiScript crash gets fixed or guarded, but new ones still surface — this is ongoing.
+- Validation so far is on Altium Designer 26; other versions haven't been exercised yet.
 
-- **Script coordination:** a shared lock serializes the two Python bridges; handover pauses EDA polling while the legacy bridge owns the script engine.
-- **Response integrity and recovery:** atomic request publication and request IDs prevent stale-response acceptance. Recovery checks editor/bridge state; timed-out editing commands are not automatically replayed.
-- **Electrical regression checks:** four read-only tools below compare captured pin/pad assignments. Full hierarchical net names remain distinct, e.g. `/Camera0/RESET` and `/Camera1/RESET`.
+## Current limitations
 
-| Tool | Check |
-| --- | --- |
-| `design_connectivity_snapshot` | Canonical component/pin/net assignments and SHA-256 digest |
-| `design_check_pin_contracts` | Expected net or intentional NC with a reason, per pin |
-| `design_diff_connectivity` | Added/removed pins and changed net assignments |
-| `design_check_schematic_pcb_parity` | Missing/extra PCB pads and symbol/pad net mismatches, in both directions |
-
-These are suite additions, not a KiCad runtime dependency. Comparison is against the [recorded upstream snapshots](UPSTREAM.json).
+- Experimental. Some operations can crash Altium's DelphiScript engine and stop the polling loop — back up your design before letting the AI edit it.
+- While the loop runs, some of Altium's own script-backed buttons go unresponsive. Detach to give Altium back its engine.
+- EDA JSON parameters above U+00FF (Ω, Chinese text) are rejected before dispatch to prevent silent `?` substitution. Full Unicode transport is not implemented.
+- Network paths must be mapped drives; UNC paths don't open.
+- `proj_sync_pcb` requires `allow_modal=True`; the schematic→PCB ECO still opens an interactive dialog.
+- The connectivity checkers verify pin assignments, not copper. They can't see data you didn't feed them.
+- An open modal dialog blocks script commands; Win32 dialog diagnostics remain available. Busy handlers reject new dispatch. Timed-out requests are withdrawn if not yet consumed; in-flight edits cannot be cancelled, so inspect the design before retrying.
 
 ## Setup
 
-Install Git, Python 3.12 and Altium on Windows. Substitute your actual Altium executable path:
+Install Git, Python 3.12, and Altium on Windows. Use your own Altium path.
 
 ```powershell
 git clone https://github.com/M-R-Abedini/Altium-MCP-Suite.git
@@ -45,11 +46,7 @@ python -m venv .venv
 .\.venv\Scripts\python.exe setup.py --altium-exe "C:\Program Files\Altium\AD26\X2.EXE"
 ```
 
-Merge the generated `mcp.local.json` or `codex.local.toml` entries into your MCP client's configuration, then restart its connections. Open the project in Altium and call `app_context` to check the active document and bridge state.
-
-For smaller tool discovery, append `"--toolset", "minimal"` to the generated **eda-agent** argument list: `tool_catalog` and `tool_invoke` provide access to the full collection without exposing every schema at startup.
-
-The optional library-file server requires the pinned Rust toolchain and Visual Studio C++ build tools. Supply an existing library directory; repeat `--library-dir` for additional directories:
+Merge the generated `mcp.local.json` (or `codex.local.toml`) into your MCP client config and restart its connections. Open your project in Altium and call `app_context` to check the bridge.
 
 ```powershell
 Push-Location altium-designer-mcp
@@ -58,21 +55,8 @@ Pop-Location
 .\.venv\Scripts\python.exe setup.py --altium-exe "C:\Program Files\Altium\AD26\X2.EXE" --library-dir "D:\MyProject\Libraries"
 ```
 
-## Verification boundaries
+The library server is optional (needs the pinned Rust toolchain + VS C++ build tools). Repeat `--library-dir` for more directories.
 
-Capture freshly compiled, unfiltered schematic nets and PCB pads from the same project revision. `complete=true` is the caller's coverage assertion; the tools cannot discover omitted source records. A capture marked incomplete cannot pass verification. See [input contracts and examples](CONNECTIVITY_VERIFICATION.md).
+## License
 
-Pad/net parity does **not** verify routed copper, clearances, differential-pair skew, footprint orientation or ERC/DRC. Run Altium's native checks and inspect their results before releasing manufacturing outputs. After an editing timeout, inspect the document before retrying; the first command may have taken effect. Modal dialogs can block live execution.
-
-Timed-out requests are withdrawn if Altium has not consumed them; an in-flight operation cannot be cancelled. A busy handler blocks new dispatch. JSON parameters above U+00FF are rejected before transmission to prevent silent `?` substitution. `proj_sync_pcb` requires `allow_modal=True`; it still opens Altium's interactive ECO dialog.
-
-## Tests and maintenance
-
-```powershell
-.\.venv\Scripts\python.exe -m pytest tests eda-agent/tests/design/test_connectivity_contracts.py -q
-.\.venv\Scripts\python.exe tests/smoke_stdio.py
-```
-
-The stdio smoke test exercises server startup and the four connectivity tools with synthetic data. CI does not validate every command in live Altium. See [validation scope](REVIEW.md), [suite changes](MODIFICATIONS.md) and the [CI workflow](.github/workflows/tests.yml). Report issues with the Altium version, tool name, reproducer and returned error.
-
-Coordination code and new connectivity modules use [MIT](LICENSE). Each bundled project retains its own license and authorship; see [UPSTREAM.json](UPSTREAM.json).
+New suite code is MIT. Bundled projects keep their own licenses — see [UPSTREAM.json](UPSTREAM.json).
