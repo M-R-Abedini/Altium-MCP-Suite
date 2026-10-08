@@ -1,50 +1,39 @@
 # Altium MCP Suite
 
-**[English](../README.md) · [فارسی](README.fa.md) · [简体中文](README.zh-CN.md)**
+[English](../README.md) · [فارسی](README.fa.md) · [简体中文](README.zh-CN.md)
 
-[![Suite tests](https://github.com/M-R-Abedini/Altium-MCP-Suite/actions/workflows/tests.yml/badge.svg)](https://github.com/M-R-Abedini/Altium-MCP-Suite/actions/workflows/tests.yml)
+用于读取和编辑 Altium 原理图、PCB 和库的 MCP 服务器集合。实时操作通过 Altium 的 DelphiScript 引擎执行；库文件操作由独立的 Rust 服务器处理。
 
-将兼容 MCP 的 AI 助手连接到 Altium Designer，用于原理图、PCB 和库文件操作。本套件整合三个开源服务器，并提供统一的脚本执行协调、连接恢复和明确的引脚连接检查。
+**Windows · Python 3.12 · 实时集成已在 Altium Designer 26 上测试**
 
-**Windows · 已在 Altium Designer 26 上测试实时集成 · Python 3.12**
+## 架构与功能
 
-## 功能
-
-| 领域 | 功能 |
-| --- | --- |
-| 原理图 | 读取元件和网络，放置与修改对象，从结构化设计计划生成原理图，检查连接与布局 |
-| PCB | 读取几何数据和设计规则，放置元件与铜线，规划布线，计算线宽、阻抗和长度预算 |
-| 元件库 | 创建和编辑符号及封装；将封装几何数据与依据制造商资料建立的焊盘规范进行比较 |
-| 连接验证 | 生成引脚到网络的快照，检查预期网络与明确的 NC，比较版本，核对原理图引脚与 PCB 焊盘 |
-| 检查与输出 | 生成可视化预览、检查报告和 BOM；调用 Altium 输出作业 |
-
-连接验证保留完整的层级网络名称，并拒绝无效输入。即使已提供的连接全部匹配，不完整的数据也不能通过验证。参见[示例与输入要求](../CONNECTIVITY_VERIFICATION.md)。
-
-## 相比单独部署原项目，套件增加了什么
-
-设计工具来自所包含的原项目。本仓库新增统一部署与执行协调层，以及四个连接验证工具。
-
-| 单独使用原项目 | 使用本套件 |
-| --- | --- |
-| 分别配置各服务器入口 | 一个 Windows 安装流程生成 MCP JSON 和 Codex TOML 配置 |
-| 各 Python 桥接器独立管理脚本执行 | 通过共享锁和控制权交接，协调 Altium 脚本引擎的使用 |
-| 各桥接器独立管理连接生命周期 | 健康检查与受保护的恢复流程；编辑命令超时后不会自动重放 |
-| 使用各自的验证工具 | 统一使用快照、引脚契约、连接差异和原理图/PCB 焊盘双向检查 |
-| 分别管理源码和测试说明 | 记录上游提交、保留原许可证，并提供套件级 CI |
-
-此比较仅针对仓库内的源码快照，不代表其他 MCP 的所有最新版本。原项目仍可独立使用：
-
-| 项目 | 用途 | 许可证 |
+| 后端 | 范围 | 许可证 |
 | --- | --- | --- |
-| [eda-agent](../eda-agent/README.md) | 主要的原理图、PCB 和库自动化工具 | Apache-2.0 |
-| [coffeenmusic/altium-mcp](../coffeenmusic/README.md) | 通过旧版桥接器提供补充 Altium 命令 | MIT |
-| [altium-designer-mcp](../altium-designer-mcp/README.md) | 独立的 Rust 服务器，用于 Altium 库文件操作 | GPL-3.0-or-later |
+| [eda-agent](../eda-agent/README.md) | 原理图对象和编译后的网络；PCB 元件、焊盘和铜；符号及封装编辑 | Apache-2.0 |
+| [coffeenmusic/altium-mcp](../coffeenmusic/README.md) | 通过文件请求/响应桥执行其他 Altium 命令 | MIT |
+| [altium-designer-mcp](../altium-designer-mcp/README.md) | 在配置的库目录内读写 `.SchLib` 和 `.PcbLib` | GPL-3.0-or-later |
 
-各原项目的仓库地址与确切提交记录在 [UPSTREAM.json](../UPSTREAM.json) 中。
+布线功能包含离线 Manhattan A* 规划器，输出走线和过孔操作。线宽、阻抗及长度预算计算用于辅助设计判断，不构成信号完整性验证，也不能替代场求解器。封装审查将焊盘几何与调用者提供的制造商规格进行比较。
 
-## 快速开始
+与单独运行[所收录的上游版本](../UPSTREAM.json)相比，本套件增加了：
 
-在 Windows 上安装 Git、Python 3.12 和 Altium Designer。实时设计操作需要可正常运行的 Altium 安装。
+- **脚本协调：**共享锁串行化两个 Python 桥的执行；旧桥接管脚本引擎时，暂停主桥轮询。
+- **响应校验与恢复：**原子发布请求和请求 ID 防止接受过期响应。恢复前检查编辑器及桥状态；超时的编辑命令不会自动重放。
+- **连接回归检查：**以下四个只读工具比较引脚/焊盘与网络的映射。保留完整层级网络名，例如 `/Camera0/RESET` 与 `/Camera1/RESET` 不会合并。
+
+| 工具 | 检查内容 |
+| --- | --- |
+| `design_connectivity_snapshot` | 规范化元件/引脚/网络映射及 SHA-256 摘要 |
+| `design_check_pin_contracts` | 每个引脚的预期网络，或注明原因的有意悬空 |
+| `design_diff_connectivity` | 引脚增删及网络分配变化 |
+| `design_check_schematic_pcb_parity` | 双向检查缺失/多余焊盘及引脚/焊盘网络不一致 |
+
+这些检查由本套件新增，运行时不依赖 KiCad。
+
+## 安装
+
+在 Windows 上安装 Git、Python 3.12 和 Altium。将可执行文件路径替换为实际安装路径：
 
 ```powershell
 git clone https://github.com/M-R-Abedini/Altium-MCP-Suite.git
@@ -54,13 +43,11 @@ python -m venv .venv
 .\.venv\Scripts\python.exe setup.py --altium-exe "C:\Program Files\Altium\AD26\X2.EXE"
 ```
 
-请替换为实际的 Altium 可执行文件路径。安装程序生成 `mcp.local.json` 和 `codex.local.toml`；将所需条目合并到客户端配置后，重新启动 MCP 连接。现有客户端配置不会被覆盖。
+将生成的 `mcp.local.json` 或 `codex.local.toml` 条目合并到 MCP 客户端配置，然后重启连接。在 Altium 中打开项目，调用 `app_context` 检查活动文档与桥状态。
 
-在 Altium 中打开项目，编辑前让助手调用 `app_context`，确认当前文档及桥接器/脚本状态。使用生成的协调入口，不要同时运行另一份旧桥接器。
+若要减少启动时的工具描述，向生成的 **eda-agent** 参数列表添加 `"--toolset", "minimal"`。通过 `tool_catalog` 和 `tool_invoke` 仍可访问完整工具集。
 
-### 可选：库文件服务器
-
-Rust 服务器需要单独构建。项目固定使用 Rust 1.95.0 工具链；在 Windows 上还需要 Visual Studio C++ 构建工具。
+可选库文件服务器需要锁定版本的 Rust 工具链和 Visual Studio C++ 构建工具。指定已存在的库目录；多个目录可重复使用 `--library-dir`：
 
 ```powershell
 Push-Location altium-designer-mcp
@@ -69,37 +56,19 @@ Pop-Location
 .\.venv\Scripts\python.exe setup.py --altium-exe "C:\Program Files\Altium\AD26\X2.EXE" --library-dir "D:\MyProject\Libraries"
 ```
 
-库路径必须指向已存在的目录。可以重复使用 `--library-dir`；安装程序会将库服务器加入生成的配置。构建后的可执行文件位于 `altium-designer-mcp/target/release/altium-designer-mcp.exe`。
+## 验证边界
 
-### 减少工具发现占用的上下文
+重新编译后，采集未过滤的原理图网络及同一项目版本的 PCB 焊盘。`complete=true` 是调用者对覆盖范围的声明；工具无法发现源数据中遗漏的记录。标记为不完整的数据不能通过验证。参见[输入约定与示例](../CONNECTIVITY_VERIFICATION.md)。
 
-如果客户端把全部工具 schema 加载到上下文中，可在生成配置的 **eda-agent** 参数列表中追加 `--toolset`、`minimal`。客户端只看到用于发现和执行工具的 `tool_catalog` 与 `tool_invoke`，仍可访问完整工具集。若不需要本地检查面板，可追加 `--no-dashboard`。
+引脚/焊盘网络一致性不验证铜连接、间距、差分对长度偏差、封装方向或 ERC/DRC。发布制造文件前，应执行并审查 Altium 原生检查。编辑命令超时后，先检查文档再重试；首次操作可能已生效。模态对话框可能阻塞实时执行。
 
-## 使用限制
-
-- Altium 实时控制仅支持 Windows，已在 AD26 上测试；本套件尚未验证其他 Altium 版本。
-- 模态对话框可能阻塞桥接器。完成或关闭对话框后再重试。编辑命令超时后，先检查设计状态：修改可能已经生效。
-- 连接检查通过不等于 ERC/DRC、封装几何、实际铜连接或制造准备全部通过。调用方必须确认输入数据完整且为最新状态。
-- 部分工具只规划或计算修改，另一些工具会实际应用修改。请检查返回结果与作用范围。本套件不保证完全自主生成可制造的设计。
-
-## 文档与验证
-
-- [连接验证](../CONNECTIVITY_VERIFICATION.md)：工具输入、示例与通过条件。
-- [检查报告](../REVIEW.md)：发布验证记录与已知限制。
-- [本地修改](../MODIFICATIONS.md)：对原项目所做的修改。
-- [CI 工作流](../.github/workflows/tests.yml)：Python 回归/发现测试与 Rust 测试。
-
-在仓库根目录运行：
+## 测试与维护
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests eda-agent/tests/design/test_connectivity_contracts.py -q
 .\.venv\Scripts\python.exe tests/smoke_stdio.py
 ```
 
-stdio 冒烟测试检查服务器启动与四个连接工具。可选的 `--live` 模式会停止并恢复已打开的 Altium 桥接器，请在当前操作结束后运行。CI 不会在真实 Altium 会话中验证全部工具。
+stdio 冒烟测试使用合成数据检查服务器启动及四个连接工具。CI 不会在实时 Altium 中验证每条命令。参见[验证范围](../REVIEW.md)、[套件变更](../MODIFICATIONS.md)和 [CI 工作流](../.github/workflows/tests.yml)。报告问题时请提供 Altium 版本、工具名、复现步骤及返回错误。
 
-对于可复现的问题，请[提交 issue](https://github.com/M-R-Abedini/Altium-MCP-Suite/issues)，并提供 Altium 版本、工具名称、复现步骤和返回的错误。
-
-## 致谢与许可证
-
-本发行版保留原作者署名和许可证。协调代码与新增连接验证模块采用 [MIT](../LICENSE)，但该许可证不会取代所包含项目的 Apache-2.0、MIT 或 GPL 许可证。重新分发组件前，请查阅[源码来源](../UPSTREAM.json)。
+协调代码和新增连接模块采用 [MIT](../LICENSE)。各收录项目保留原许可证和作者信息；参见[来源记录](../UPSTREAM.json)。
