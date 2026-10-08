@@ -36,6 +36,8 @@ MCP servers that let an AI read and edit your Altium schematics, PCBs, and libra
 
 ## Setup
 
+See [transport checks and manual recovery](docs/review/TRANSPORT_FINDINGS_2026-10-08.md) for unresolved script ownership after a timeout or engine fault.
+
 Install Git, Python 3.12, and Altium on Windows. Use your own Altium path.
 
 ```powershell

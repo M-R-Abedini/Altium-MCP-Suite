@@ -2,6 +2,11 @@
 
 ## Added 2026-10-08
 
+- Follow-up transport review: legacy commands persist editor-session ownership and require a request-specific final completion acknowledgement before EDA handback. Timeout/cancellation withdraw unconsumed requests and retain unresolved ownership; a confirmed editor restart or explicit manual-stop reset can retire it. Generic bridge errors no longer open blocking error dialogs.
+- The schematic builder validates all pipe-delimited fields and uses strict cp1252 encoding before writing. Each build uses unique specification/pin-map paths in the configured per-user exchange; Pascal receives those paths explicitly. Public shared paths and stale pin-map reuse are removed from this workflow.
+- EDA response envelopes now require a matching request ID, boolean success, valid protocol version type and structured failure fields. Progress ownership no longer expires after 600 seconds: markers are compared with the editor process start time, and uncertain current-session markers block relaunch.
+- Acceptance tests for all five findings are in `tests/test_review_fixes.py`; review evidence and manual recovery instructions are in `docs/review/TRANSPORT_FINDINGS_2026-10-08.md`.
+
 - `bridge_coordination.py`: a busy handler now rejects subsequent dispatch instead of allowing another request to queue. The second health-check race has the same guard.
 - `eda-agent/src/eda_agent/bridge/altium_bridge.py`: remove an unconsumed request when polling exits, including timeout/modal errors. Already-consumed edits cannot be cancelled; their progress markers remain intact. No automatic replay was added.
 - `eda-agent/src/eda_agent/bridge/payload.py`: reject JSON parameter text above U+00FF before publication instead of silently substituting `?`. Nested keys/values and batch strings are covered; external batch files are outside this check. This does not implement Unicode transport.

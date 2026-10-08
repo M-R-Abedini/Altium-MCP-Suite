@@ -25,20 +25,25 @@ def method(name, namespace):
 def test_legacy_reads_partial_response_without_replaying_command(tmp_path):
     request, response = tmp_path / 'request.json', tmp_path / 'response.json'
     count = []
+    published = []
     async def run():
         count.append(1)
+        published.append(json.loads(request.read_text()))
         response.write_text('{', encoding='utf-8')
         return True
     async def finish_write(_):
-        response.write_text(json.dumps({'success': True, 'value': 'دوربین', 'request_id': json.loads(request.read_text())['request_id']}), encoding='utf-8')
+        request_id = json.loads(request.read_text())['request_id']
+        response.write_text(json.dumps({'success': True, 'value': 'دوربین', 'request_id': request_id}), encoding='utf-8')
+        (tmp_path / f'completed_{request_id}.json').write_text(json.dumps({'request_id': request_id}))
     namespace = dict(Dict=dict, Any=object, REQUEST_FILE=request, RESPONSE_FILE=response,
                      json=json, uuid=uuid, time=__import__('time'), logger=MagicMock(),
-                     asyncio=types.SimpleNamespace(sleep=finish_write))
+                     asyncio=types.SimpleNamespace(sleep=finish_write), begin_legacy=MagicMock(), abandon_unlaunched_legacy=MagicMock())
     fn = method('_execute_command_locked', namespace)
     result = asyncio.run(fn(types.SimpleNamespace(run_altium_script=run), 'safe.command', {'command': 'wrong.command'}))
     assert result == {'success': True, 'value': 'دوربین'}
     assert count == [1]
-    assert json.loads(request.read_text())['command'] == 'safe.command'
+    assert published[0]['command'] == 'safe.command'
+    assert not request.exists()
     assert not request.with_suffix('.json.tmp').exists()
 
 
@@ -52,9 +57,10 @@ def test_late_response_from_another_command_is_not_accepted(tmp_path):
     async def reply(_):
         request_id = json.loads(request.read_text())['request_id']
         response.write_text(json.dumps({'request_id':request_id,'success':True,'result':'correct'}))
+        (tmp_path / f'completed_{request_id}.json').write_text(json.dumps({'request_id': request_id}))
     namespace = dict(Dict=dict, Any=object, REQUEST_FILE=request, RESPONSE_FILE=response,
                      json=json, uuid=uuid, time=__import__('time'), logger=MagicMock(),
-                     asyncio=types.SimpleNamespace(sleep=reply))
+                     asyncio=types.SimpleNamespace(sleep=reply), begin_legacy=MagicMock(), abandon_unlaunched_legacy=MagicMock())
     fn = method('_execute_command_locked', namespace)
     result = asyncio.run(fn(types.SimpleNamespace(run_altium_script=run), 'read', {}))
     assert result['result'] == 'correct'

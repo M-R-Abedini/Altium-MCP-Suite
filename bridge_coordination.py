@@ -17,6 +17,58 @@ LAUNCH_STATE = RUNTIME / 'bridge-launch.json'
 SCRIPT = None
 EXE = None
 
+def _session_started_at(pid):
+    import psutil
+    return psutil.Process(pid).create_time()
+
+def _legacy_marker():
+    return RUNTIME / 'legacy-operation.json'
+
+def _guard_legacy(state):
+    marker = _legacy_marker()
+    if not marker.exists():
+        return
+    try:
+        pending = json.loads(marker.read_text(encoding='utf-8'))
+        import psutil
+        try:
+            old_session_alive = pending['session_started_at'] == _session_started_at(pending['pid'])
+        except psutil.NoSuchProcess:
+            old_session_alive = False
+        if not old_session_alive:
+            # Only an observed editor restart proves the old script cannot run.
+            Path(pending['request_path']).unlink(missing_ok=True)
+            marker.unlink(missing_ok=True)
+            return
+        if pending['pid'] != state['pid']:
+            raise RuntimeError('The unresolved legacy operation belongs to another running Altium editor; no script was launched.')
+        completion = Path(pending['completion_path'])
+        if completion.exists():
+            reply = json.loads(completion.read_text(encoding='utf-8-sig'))
+            if isinstance(reply, dict) and reply.get('request_id') == pending['request_id']:
+                marker.unlink(missing_ok=True)
+                completion.unlink(missing_ok=True)
+                return
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        raise RuntimeError('Legacy operation ownership cannot be verified; no new script was launched.') from error
+    raise RuntimeError('A legacy operation has not confirmed completion. No new script was launched. Wait for completion or stop the script manually and reset ownership.')
+
+def begin_legacy(request_id, request_path, completion_path):
+    state = _guard_editor()
+    marker = _legacy_marker()
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    temp = marker.with_suffix('.json.tmp')
+    temp.write_text(json.dumps(dict(request_id=request_id, pid=state['pid'],
+        session_started_at=_session_started_at(state['pid']),
+        request_path=str(request_path), completion_path=str(completion_path))), encoding='utf-8')
+    temp.replace(marker)
+
+def abandon_unlaunched_legacy(request_id):
+    marker = _legacy_marker()
+    pending = json.loads(marker.read_text(encoding='utf-8'))
+    if pending['request_id'] == request_id:
+        marker.unlink(missing_ok=True)
+
 def log_event(event, **details):
     try:
         RUNTIME.mkdir(parents=True, exist_ok=True)
@@ -94,16 +146,22 @@ def _guard_editor():
     if state['blocked']:
         log_event('modal_blocked', pid=state['pid'])
         raise RuntimeError('Altium is blocked by a modal dialog. Close or complete it, then retry; no second script was launched.')
+    _guard_legacy(state)
     return state
 
 def _handler_busy():
-    now = time.time()
-    for p in WORKSPACE.glob('progress_*.json'):
+    markers = list(WORKSPACE.glob('progress_*.json'))
+    if not markers:
+        return False
+    started = _session_started_at(_editor_state()['pid'])
+    for p in markers:
         try:
-            if now - p.stat().st_mtime < 600:
+            if p.stat().st_mtime >= started:
                 return True
+            # An old editor session cannot still own the current engine.
+            p.unlink(missing_ok=True)
         except OSError:
-            pass
+            return True  # Uncertain ownership must not authorize a relaunch.
     return False
 
 def _file_ping(timeout):
@@ -124,13 +182,14 @@ def _file_ping(timeout):
                 except (OSError, ValueError):
                     time.sleep(.02)
                     continue
-                if result.get('id') == request_id and result.get('success'):
+                if isinstance(result, dict) and result.get('id') == request_id and result.get('success') is True:
                     return result.get('data')
                 raise RuntimeError('EDA ping returned a protocol or command error')
             time.sleep(.02)
         raise TimeoutError('EDA ping did not answer')
     finally:
-        for p in (temp, request, response, progress):
+        # Do not erase evidence of a ping already consumed by Altium.
+        for p in (temp, request, response):
             p.unlink(missing_ok=True)
 
 def _ensure(probe):
@@ -198,6 +257,7 @@ def start_eda():
     _ensure(_file_ping)
 
 def stop_eda():
+    _guard_editor()
     WORKSPACE.mkdir(parents=True, exist_ok=True)
     if _handler_busy():
         raise RuntimeError('An EDA handler is still running; refusing to stop it for the other bridge')
@@ -217,3 +277,29 @@ def stop_eda():
         stop.unlink(missing_ok=True)
         raise TimeoutError('EDA did not acknowledge the stop; refusing a second bridge launch')
     time.sleep(.5)
+
+def reset_after_manual_stop():
+    """Explicit operator assertion: the script was stopped in Altium's IDE."""
+    with engine_lock():
+        state = _editor_state()
+        if state['blocked']:
+            raise RuntimeError('Close the Altium dialog and stop its script before resetting ownership.')
+        for pattern in ('request_*.json', 'progress_*.json'):
+            for path in WORKSPACE.glob(pattern):
+                path.unlink(missing_ok=True)
+        marker = _legacy_marker()
+        if marker.exists():
+            pending = json.loads(marker.read_text(encoding='utf-8'))
+            Path(pending['request_path']).unlink(missing_ok=True)
+            marker.unlink(missing_ok=True)
+        log_event('manual_ownership_reset', pid=state['pid'])
+
+if __name__ == '__main__':
+    import argparse
+    parser = argparse.ArgumentParser(description='Reset only after stopping the Altium script manually; never replays edits.')
+    parser.add_argument('--confirm-script-stopped', action='store_true', required=True)
+    parser.add_argument('--workspace', type=Path, default=WORKSPACE,
+                        help='Use the EDA_AGENT_WORKSPACE configured for your MCP server.')
+    args = parser.parse_args()
+    WORKSPACE = args.workspace.resolve()
+    reset_after_manual_stop()

@@ -34,6 +34,8 @@
 
 ## 安装
 
+命令超时或引擎故障后的脚本所有权处理，参见[传输检查与手动恢复](review/TRANSPORT_FINDINGS_2026-10-08.md)。
+
 在 Windows 上安装 Git、Python 3.12 和 Altium。把可执行文件路径换成你自己的：
 
 ```powershell

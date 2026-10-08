@@ -214,7 +214,23 @@ class CommandResponse:
     error: Optional[dict] = None
 
     @classmethod
-    def from_dict(cls, data: dict) -> "CommandResponse":
+    def from_dict(cls, data: dict, expected_id: Optional[str] = None) -> "CommandResponse":
+        valid = isinstance(data, dict)
+        if valid:
+            valid = (isinstance(data.get('id'), str) and bool(data['id']) and
+                     type(data.get('success')) is bool and
+                     (expected_id is None or data['id'] == expected_id) and
+                     type(data.get('protocol_version', 0)) is int and
+                     data.get('protocol_version', 0) >= 0)
+        if valid and not data['success']:
+            error = data.get('error')
+            valid = (isinstance(error, dict) and isinstance(error.get('code'), str)
+                     and bool(error['code']) and isinstance(error.get('message'), str))
+        if valid and data['success']:
+            valid = data.get('error') is None
+        if not valid:
+            raise AltiumProtocolError(message='Invalid Altium response envelope or mismatched request ID; inspect the design before retrying.',
+                                      code='MALFORMED_RESPONSE', details={'expected_id': expected_id})
         return cls(
             id=data.get("id", ""),
             success=data.get("success", False),
@@ -727,7 +743,7 @@ class AltiumBridge:
                         f"polls={poll_count} parse_errs={parse_errors} "
                         f"extensions={extensions}",
                     )
-                    return CommandResponse.from_dict(data)
+                    return CommandResponse.from_dict(data, expected_id=request_id)
 
             if time.monotonic() >= deadline:
                 # Window expired. Heartbeat still ticking? extend.

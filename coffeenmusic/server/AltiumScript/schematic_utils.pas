@@ -1642,7 +1642,7 @@ begin
     end;
 end;
 
-function BuildCircuitFromSpec(SpecPath: String; PlacementPath: String): String;
+function BuildCircuitFromSpec(SpecPath: String; PlacementPath: String; PinMapPath: String): String;
 var
     Spec, Placement, PinMap : TStringList;
     TargetDoc, LibDoc : ISch_Document;
@@ -1957,7 +1957,7 @@ begin
         Prim := Iter.NextSchObject;
     end;
     TargetDoc.SchIterator_Destroy(Iter);
-    PinMap.SaveToFile('C:\Users\Public\altium_mcp\pin_map.txt');
+    PinMap.SaveToFile(PinMapPath);
     PinMap.Free;
 
     Result := '{"success": true, "detached_from": "' + Adopted + '", "sheet": "' + TargetDoc.DocumentName +

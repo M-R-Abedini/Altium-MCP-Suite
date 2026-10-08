@@ -16,6 +16,7 @@ class CoordinationTests(unittest.TestCase):
         p=patch.object(coord,'_editor_state',return_value={'pid':77,'blocked':False});self.state=p.start();self.addCleanup(p.stop)
         p=patch.object(coord.subprocess,'Popen');self.launch=p.start();self.launch.return_value.pid=123;self.addCleanup(p.stop)
         p=patch.object(coord.time,'sleep');p.start();self.addCleanup(p.stop)
+        p=patch.object(coord,'_session_started_at',return_value=0);p.start();self.addCleanup(p.stop)
     def test_healthy_loop_is_not_relaunched(self):
         probe=MagicMock(return_value={'pong':True});coord._ensure(probe)
         probe.assert_called_once_with(2.0);self.launch.assert_not_called()

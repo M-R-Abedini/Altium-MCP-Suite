@@ -21,6 +21,8 @@ import base64
 import glob
 import re
 import uuid
+from bridge_coordination import begin_legacy, abandon_unlaunched_legacy
+from batch_safety import validate_batch_fields
 
 # Configure logging
 logging.basicConfig(
@@ -149,6 +151,11 @@ class AltiumBridge:
             return await self._execute_command_locked(command, params)
 
     async def _execute_command_locked(self, command: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        request_id = uuid.uuid4().hex
+        completion = RESPONSE_FILE.parent / ('completed_' + request_id + '.json')
+        temporary = REQUEST_FILE.with_suffix('.json.tmp')
+        ownership_started = False
+        launch_attempted = False
         try:
             # Clean up any existing response file
             if RESPONSE_FILE.exists():
@@ -156,16 +163,18 @@ class AltiumBridge:
             
             # Publish a complete request atomically. A parameter cannot override
             # the command selected by the tool dispatcher.
-            temporary = REQUEST_FILE.with_suffix('.json.tmp')
-            request_id = uuid.uuid4().hex
             temporary.write_text(json.dumps({**params, "command": command, "request_id": request_id}, indent=2), encoding="utf-8")
+            begin_legacy(request_id, REQUEST_FILE, completion)
+            ownership_started = True
             temporary.replace(REQUEST_FILE)
 
             logger.info(f"Wrote request file for command: {command}")
             
             # Run the Altium script
+            launch_attempted = True
             success = await self.run_altium_script()
             if not success:
+                launch_attempted = False
                 return {"success": False, "error": "Failed to run Altium script"}
             
             # Wait for the response file
@@ -182,6 +191,14 @@ class AltiumBridge:
                         # A late response from a timed-out call is not this reply.
                         await asyncio.sleep(0.1)
                         continue
+                    if type(response.get('success')) is not bool:
+                        return {"success": False, "error": "Altium response success must be boolean; ownership remains unresolved"}
+                    # Response publication precedes native cleanup. Only the
+                    # final completion acknowledgement authorizes handback.
+                    done = json.loads(completion.read_text(encoding='utf-8-sig'))
+                    if not isinstance(done, dict) or done.get('request_id') != request_id:
+                        await asyncio.sleep(0.1)
+                        continue
                     response.pop('request_id')
                     return response
                 except (FileNotFoundError, PermissionError, UnicodeDecodeError, json.JSONDecodeError):
@@ -192,6 +209,16 @@ class AltiumBridge:
         except Exception as e:
             logger.error(f"Error executing command: {e}")
             return {"success": False, "error": str(e)}
+        finally:
+            # Cancellation is a BaseException and still withdraws the request.
+            # This cannot cancel a consumed operation: preserve its ownership.
+            for path in (temporary, REQUEST_FILE):
+                try:
+                    path.unlink(missing_ok=True)
+                except OSError:
+                    logger.error('Could not withdraw legacy IPC file %s; inspect script ownership before retrying', path)
+            if ownership_started and not launch_attempted:
+                abandon_unlaunched_legacy(request_id)
     
     @staticmethod
     def _resolve_msix_path(virtual_path: str) -> str:
@@ -1280,6 +1307,12 @@ async def build_schematic(ctx: Context, parts: list, wires: list = None,
     """
     logger.info(f"Building schematic: {len(parts)} parts")
 
+    try:
+        validate_batch_fields(dict(parts=parts, wires=wires, junctions=junctions,
+                                   net_labels=net_labels, power_ports=power_ports, notes=notes))
+    except ValueError as error:
+        return json.dumps({"success": False, "error": str(error), "command_sent": False})
+
     lines = []
     for p in parts:
         for key in ("designator", "symbol_library", "symbol", "x", "y"):
@@ -1317,13 +1350,19 @@ async def build_schematic(ctx: Context, parts: list, wires: list = None,
     for nt in (notes or []):
         lines.append(f"NOTE|{int(nt['x'])}|{int(nt['y'])}|{nt['text']}")
 
-    spec_path = Path("C:/Users/Public/altium_mcp/circuit_spec.txt")
+    capture_id = uuid.uuid4().hex
+    spec_path = EXCHANGE_DIR / ('circuit_' + capture_id + '.txt')
+    pm = EXCHANGE_DIR / ('pin_map_' + capture_id + '.txt')
     spec_path.parent.mkdir(parents=True, exist_ok=True)
-    # cp1252: the bridge reads these as ANSI, and part descriptions carry
-    # characters that are not plain ASCII
-    spec_path.write_text("\n".join(lines) + "\n", encoding="cp1252", errors="replace")
+    temporary = spec_path.with_suffix('.txt.tmp')
+    temporary.write_text("\n".join(lines) + "\n", encoding="cp1252", errors="strict")
+    temporary.replace(spec_path)
 
-    response = await altium_bridge.execute_command("build_circuit", {})
+    try:
+        response = await altium_bridge.execute_command("build_circuit", {
+            "spec_file": str(spec_path), "pin_map_file": str(pm)})
+    finally:
+        spec_path.unlink(missing_ok=True)
     if not response.get("success", False):
         return json.dumps({"success": False,
                            "error": response.get("error", "unknown error")})
@@ -1337,12 +1376,12 @@ async def build_schematic(ctx: Context, parts: list, wires: list = None,
 
     # Hand back the measured pin map so the caller can route a second pass
     pin_map = {}
-    pm = Path("C:/Users/Public/altium_mcp/pin_map.txt")
     if pm.is_file():
-        for line in pm.read_text(errors="replace").splitlines():
+        for line in pm.read_text(encoding='cp1252', errors='strict').splitlines():
             f = line.strip().split("|")
             if len(f) == 5 and f[0] == "PIN":
                 pin_map.setdefault(f[1], {})[f[2]] = [int(f[3]), int(f[4])]
+        pm.unlink(missing_ok=True)
     result["pin_map"] = pin_map
     result["pin_map_note"] = ("Absolute electrical connection points. Route "
                               "wires from these, not from predicted offsets.")

@@ -40,6 +40,8 @@
 
 ## التثبيت
 
+راجع [فحوص الاتصال والاستعادة اليدوية](review/TRANSPORT_FINDINGS_2026-10-08.md) لمعالجة ملكية السكربت غير المؤكدة بعد انتهاء المهلة أو تعطل المحرك.
+
 ثبّت <span dir="ltr"><code>Git</code></span> و <span dir="ltr"><code>Python 3.12</code></span> و <span dir="ltr"><code>Altium</code></span> على ويندوز. ضع مسار ملف التنفيذ الخاص بك:
 
 </div>

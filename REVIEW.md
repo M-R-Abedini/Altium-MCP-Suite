@@ -1,5 +1,9 @@
 # Review and validation — 2026-10-06
 
+## Five-finding repair validation — 2026-10-08
+
+All five follow-up findings are addressed. 75 suite tests and 152 selected EDA tests passed, including cancellation, late native completion, editor-session changes, strict response validation and batch-file isolation. A live AD26 stdio smoke test stopped/recovered the EDA loop, executed a read-only legacy command with the new final completion acknowledgement and restored EDA ownership. This exercised compilation of the updated Pascal project without changing the hardware design. Circuit-building geometry was validated with mocked backend/file tests, not by building on the active design. See `docs/review/TRANSPORT_FINDINGS_2026-10-08.md` for evidence and manual recovery.
+
 ## Transport safety review — 2026-10-08
 
 The new guards were verified with 44 suite tests and 91 selected EDA tests. Regressions cover withdrawing an unconsumed timed-out edit, retaining in-flight progress evidence, blocking dispatch during a handler, rejecting lossy nested JSON text, and requiring explicit modal ECO opt-in. Fresh stdio sessions initialized 445 EDA, 37 legacy and 34 library tools; default ECO invocation returned without dispatch. These checks used temporary files, mocked engine state and synthetic tool data. No live document edits or native DelphiScript crash reproduction were performed in this review. Unicode transport, native dialogs and copper verification remain outside these fixes.

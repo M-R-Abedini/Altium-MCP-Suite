@@ -1080,8 +1080,9 @@ begin
         'create_symbols_batch':
             Result := ExecuteCreateSymbolsBatch(RequestData);
         'build_circuit':
-            Result := BuildCircuitFromSpec(ROOT_DIR + 'circuit_spec.txt',
-                                          ROOT_DIR + 'param_placement.txt');
+            Result := BuildCircuitFromSpec(Params.Values['spec_file'],
+                                          ROOT_DIR + 'param_placement.txt',
+                                          Params.Values['pin_map_file']);
         'get_footprint_primitives':
             Result := ExecuteGetFootprintPrimitives(RequestData);
         'create_footprints_batch':
@@ -1203,7 +1204,7 @@ begin
     // Check if request file exists
     if not FileExists(REQUEST_FILE) then
     begin
-        ShowMessage('Error: No request file found at ' + REQUEST_FILE);
+        { Withdrawn/timed-out request: do not open a blocking error dialog. }
         Exit;
     end;
 
@@ -1240,6 +1241,8 @@ begin
             end;
 
             BridgeRequestId := Params.Values['request_id'];
+            { The request was consumed. Never read it again after a timeout. }
+            DeleteFile(REQUEST_FILE);
 
             // Execute the command if valid
             if CommandType <> '' then
@@ -1253,13 +1256,11 @@ begin
                 else
                 begin
                     WriteResponse(False, '', 'Command execution failed');
-                    ShowMessage('Error: Command execution failed');
                 end;
             end
             else
             begin
                 WriteResponse(False, '', 'No command specified');
-                ShowMessage('Error: No command specified');
             end;
         finally
             RequestData.Free;
@@ -1268,7 +1269,18 @@ begin
     except
         // Simple exception handling without the specific exception type
         WriteResponse(False, '', 'Exception occurred during script execution');
-        ShowMessage('Error: Exception occurred during script execution');
+    end;
+    { Published only after handler, response and parameter cleanup finish. }
+    { An engine fault before this point leaves ownership unresolved. }
+    if BridgeRequestId <> '' then
+    begin
+        RequestData := TStringList.Create;
+        try
+            RequestData.Text := '{"request_id":"' + BridgeRequestId + '"}';
+            RequestData.SaveToFile(ROOT_DIR + 'completed_' + BridgeRequestId + '.json');
+        finally
+            RequestData.Free;
+        end;
     end;
 end;
 
