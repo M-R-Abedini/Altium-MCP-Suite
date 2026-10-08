@@ -138,7 +138,7 @@ def _ensure(probe):
     if _handler_busy():
         # A live handler is not a dead loop. Do not interrupt or replay it.
         log_event('busy_handler_no_restart')
-        return
+        raise RuntimeError('An EDA handler is still running. No new command was queued; inspect the previous operation before retrying.')
     try:
         probe(2.0)
         LAUNCH_STATE.unlink(missing_ok=True)
@@ -148,7 +148,7 @@ def _ensure(probe):
     # A second health check avoids launching over a temporarily slow editor.
     _guard_editor()
     if _handler_busy():
-        return
+        raise RuntimeError('An EDA handler started during the health check. No new command was queued.')
     try:
         probe(3.0)
         LAUNCH_STATE.unlink(missing_ok=True)

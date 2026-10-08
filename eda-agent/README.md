@@ -317,11 +317,11 @@ This is an ongoing reliability effort. Every identified crash is either fixed or
 
 Use a mapped drive letter (`Z:\team\board.PrjPcb`) rather than a UNC path (`\\server\team\board.PrjPcb`). A path given in UNC form arrives at the bridge with one leading backslash missing, so the file is not found and the error names a path that looks almost right. Every other path form is unaffected, and a mapped drive is the workaround until the fix ships with the next script deploy.
 
-### Text above Latin-1 becomes question marks
+### Text above Latin-1 is rejected before dispatch
 
-Altium's DelphiScript strings are single-byte, so the bridge carries text as one byte per character. Any character above U+00FF is replaced with `?` on the way in, silently. Accented Latin, the micro sign, and the degree sign are all below that boundary and survive; the ohm sign and any CJK text do not, so `10Ω` arrives as `10?`.
+The deployed JSON parser substitutes `?` for codepoints above U+00FF. This suite now rejects those characters in request parameters, including nested values, keys and batch strings, before publishing the request. The error identifies the field and codepoints; it does not silently rename a net or change a component value. This is a loss-prevention guard, not full Unicode support.
 
-This shows up most often on imported parts: LCSC descriptions are frequently Chinese, and `lib_easyeda_import` passes the description straight through. If you need those fields readable, set them to a transliteration before importing, or edit them in Altium afterwards.
+Use a supported label or edit the text directly in Altium. External batch-file contents are not covered by this JSON parameter guard.
 
 ### Altium tool buttons relying on internal scripting pause while the server is running
 

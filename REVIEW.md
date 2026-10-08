@@ -1,5 +1,9 @@
 # Review and validation — 2026-10-06
 
+## Transport safety review — 2026-10-08
+
+The new guards were verified with 44 suite tests and 91 selected EDA tests. Regressions cover withdrawing an unconsumed timed-out edit, retaining in-flight progress evidence, blocking dispatch during a handler, rejecting lossy nested JSON text, and requiring explicit modal ECO opt-in. Fresh stdio sessions initialized 445 EDA, 37 legacy and 34 library tools; default ECO invocation returned without dispatch. These checks used temporary files, mocked engine state and synthetic tool data. No live document edits or native DelphiScript crash reproduction were performed in this review. Unicode transport, native dialogs and copper verification remain outside these fixes.
+
 Reviewed the installed source snapshots and the suite's shared execution path before publication. The review concentrated on process selection, script-engine ownership, recovery, IPC correctness, stdout framing, fresh-install compatibility, configuration portability and license/source completeness. It is not a certification of every EDA operation.
 
 ## Defects corrected

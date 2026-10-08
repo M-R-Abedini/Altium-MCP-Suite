@@ -37,7 +37,7 @@ from __future__ import annotations
 
 import re
 
-__all__ = ["payload_safe", "unsendable_chars"]
+__all__ = ["payload_safe", "unsendable_chars", "validate_wire_text"]
 
 #: Two or more consecutive tildes. A single one is data.
 #:
@@ -87,3 +87,31 @@ def unsendable_chars(value: object) -> str:
             seen.add(ch)
             out.append(ch)
     return "".join(out)
+
+
+def validate_wire_text(value: object, field: str = "params") -> None:
+    """Reject lossy text before publishing a request to the ANSI parser.
+
+    This is a transport guard, not transliteration or Unicode support.
+    Validate nested values and keys, including complete batch strings.
+    """
+    from .exceptions import AltiumCommandError
+
+    if isinstance(value, str):
+        bad = unsendable_chars(value)
+        if bad:
+            points = ", ".join(f"U+{ord(ch):04X}" for ch in bad)
+            raise AltiumCommandError(
+                f"{field} contains characters unsupported by the Altium "
+                f"script transport ({points}). Request was not sent; "
+                "use a supported label or edit this text directly in Altium.",
+                code="INVALID_PARAMETER",
+                details={"field": field, "codepoints": points, "request_sent": False},
+            )
+    elif isinstance(value, dict):
+        for index, (key, item) in enumerate(value.items()):
+            validate_wire_text(key, f"{field}.key[{index}]")
+            validate_wire_text(item, f"{field}.{key}")
+    elif isinstance(value, (list, tuple)):
+        for index, item in enumerate(value):
+            validate_wire_text(item, f"{field}[{index}]")

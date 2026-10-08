@@ -64,6 +64,8 @@ Capture freshly compiled, unfiltered schematic nets and PCB pads from the same p
 
 Pad/net parity does **not** verify routed copper, clearances, differential-pair skew, footprint orientation or ERC/DRC. Run Altium's native checks and inspect their results before releasing manufacturing outputs. After an editing timeout, inspect the document before retrying; the first command may have taken effect. Modal dialogs can block live execution.
 
+Timed-out requests are withdrawn if Altium has not consumed them; an in-flight operation cannot be cancelled. A busy handler blocks new dispatch. JSON parameters above U+00FF are rejected before transmission to prevent silent `?` substitution. `proj_sync_pcb` requires `allow_modal=True`; it still opens Altium's interactive ECO dialog.
+
 ## Tests and maintenance
 
 ```powershell

@@ -32,6 +32,7 @@ from dataclasses import dataclass, field
 
 from ..config import get_config
 from .process_manager import AltiumProcessManager
+from .payload import validate_wire_text
 from .exceptions import (
     AltiumNotRunningError,
     AltiumTimeoutError,
@@ -531,6 +532,13 @@ class AltiumBridge:
         violation when its Reset() collides with Python's still-open
         write handle.
         """
+        validate_wire_text(request.params)
+        if request.command == "project.update_pcb" and request.params.get("allow_modal") is not True:
+            raise AltiumCommandError(
+                "Schematic-to-PCB ECO opens a modal dialog. Explicit allow_modal=True is required; request was not sent.",
+                code="INVALID_PARAMETER",
+                details={"request_sent": False},
+            )
         self._ensure_workspace_fast()
         request_path = self._request_path(request.id)
         tmp_path = request_path.with_suffix(".json.tmp")
@@ -698,7 +706,8 @@ class AltiumBridge:
                             f"Response file for request {request_id[:8]} was "
                             f"present but unparseable after {parse_errors} "
                             f"attempts -- Altium likely crashed mid-write. "
-                            f"The corrupt file was removed; retry the call. "
+                            f"The corrupt file was removed; inspect the document "
+                            f"before retrying because the operation may have changed it. "
                             + recovery_message(CORRUPT_RESPONSE),
                             details={"recovery": recovery_guidance(CORRUPT_RESPONSE)},
                         )
@@ -858,14 +867,14 @@ class AltiumBridge:
         try:
             response = self._poll_response(request.id, timeout)
         finally:
-            # Always sweep our own response file on the way out,_poll_response
-            # already deletes it on success, but a timeout or a late-arriving
-            # response would otherwise be orphaned forever.
-            try:
-                if response_path.exists():
-                    response_path.unlink()
-            except OSError:
-                pass
+            # Withdraw an unconsumed request as well as its response. Otherwise
+            # closing a modal/restarting the loop can execute a timed-out edit.
+            # A consumed request cannot be cancelled: retain progress evidence.
+            for path in (self._request_path(request.id), response_path):
+                try:
+                    path.unlink(missing_ok=True)
+                except OSError:
+                    logger.warning("Could not remove IPC file %s", path)
 
         if response.protocol_version and response.protocol_version != PROTOCOL_VERSION:
             raise AltiumProtocolError(

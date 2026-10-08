@@ -28,7 +28,9 @@ class CoordinationTests(unittest.TestCase):
         probe.assert_not_called();self.launch.assert_not_called()
     def test_live_handler_is_not_interrupted(self):
         (coord.WORKSPACE/'progress_live.json').write_text('{}');probe=MagicMock()
-        coord._ensure(probe);probe.assert_not_called();self.launch.assert_not_called()
+        with self.assertRaisesRegex(RuntimeError,'No new command'):
+            coord._ensure(probe)
+        probe.assert_not_called();self.launch.assert_not_called()
     def test_no_editor_never_launches_an_unrelated_instance(self):
         self.state.side_effect=RuntimeError('Expected one Altium editor');probe=MagicMock()
         with self.assertRaises(RuntimeError):coord._ensure(probe)

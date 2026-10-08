@@ -1,5 +1,13 @@
 # Local changes — 2026-10-06
 
+## Added 2026-10-08
+
+- `bridge_coordination.py`: a busy handler now rejects subsequent dispatch instead of allowing another request to queue. The second health-check race has the same guard.
+- `eda-agent/src/eda_agent/bridge/altium_bridge.py`: remove an unconsumed request when polling exits, including timeout/modal errors. Already-consumed edits cannot be cancelled; their progress markers remain intact. No automatic replay was added.
+- `eda-agent/src/eda_agent/bridge/payload.py`: reject JSON parameter text above U+00FF before publication instead of silently substituting `?`. Nested keys/values and batch strings are covered; external batch files are outside this check. This does not implement Unicode transport.
+- `proj_sync_pcb` requires `allow_modal=True`. The transport also rejects direct `project.update_pcb` calls without an explicit boolean opt-in. The native ECO dialog remains interactive.
+- New regressions in `tests/test_transport_safety.py`; stdio smoke additionally checks that default ECO invocation sends no command. No Altium Pascal code or hardware design was modified.
+
 ## Added 2026-10-07
 
 - Independent MIT-licensed connectivity verification modules and four read-only MCP tools: canonical snapshots, exact pin contracts, connectivity diffs, and bidirectional schematic/PCB pad parity. Full net names are preserved; incomplete inputs cannot pass; NC and extra-pad waivers require explicit intent. Registered with the existing Altium full/minimal toolsets, with no new dependencies or Pascal changes. See `CONNECTIVITY_VERIFICATION.md` and `eda-agent/tests/design/test_connectivity_contracts.py`.

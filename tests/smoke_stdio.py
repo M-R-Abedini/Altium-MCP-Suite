@@ -45,6 +45,8 @@ async def main(live=False):
                                 captured = await verify_call('design_connectivity_snapshot',
                                                              {'data':sample, 'complete':True})
                                 assert captured['count'] == 2
+                                eco = await verify_call('proj_sync_pcb', {})
+                                assert eco['command_sent'] is False and eco['ok'] is False
                                 mismatch = await verify_call('design_check_pin_contracts', {
                                     'actual':captured, 'contracts':[
                                         {'component':'J2', 'pin':'1', 'net':'/Cam0/RESET'}]})

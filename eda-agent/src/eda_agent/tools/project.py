@@ -1886,7 +1886,7 @@ def register_project_tools(mcp):
         return result
 
     @mcp.tool()
-    async def proj_sync_pcb() -> dict[str, Any]:
+    async def proj_sync_pcb(allow_modal: bool = False) -> dict[str, Any]:
         """Push schematic changes to PCB (ECO): Design ▸ Update PCB Document.
 
         IMPORTANT: this is NOT silent. Altium's ECO (change-review) dialog
@@ -1928,14 +1928,24 @@ def register_project_tools(mcp):
         ``pcb_place_components`` instead (places geometry only: see its note
         about leaving the project unsynced).
 
+        Args:
+            allow_modal: Explicitly accept the interactive ECO dialog.
+                Defaults to False, which returns without dispatching a command.
+
         Returns:
             Dictionary with success, pcb_path, before/after mapping counts,
             components_added_to_pcb, components_removed_from_pcb,
             components_in_sync (component presence only, see above), and
             dialog_outcome_verified.
         """
+        if not allow_modal:
+            return {
+                "ok": False,
+                "reason": "ECO requires an interactive Altium dialog. Set allow_modal=True only when someone can review and execute it.",
+                "command_sent": False,
+            }
         bridge = get_bridge()
-        result = await bridge.send_command_async("project.update_pcb", {})
+        result = await bridge.send_command_async("project.update_pcb", {"allow_modal": True})
         return result
 
     @mcp.tool()
