@@ -81,6 +81,10 @@ Pop-Location
 
 سرور کتابخانه اختیاری است (به نسخهٔ پین‌شدهٔ راست و ابزارهای ساخت <span dir="ltr"><code>Visual Studio C++</code></span> نیاز دارد). برای چند پوشه، گزینهٔ <span dir="ltr"><code>--library-dir</code></span> را تکرار کنید.
 
+## پرسش‌ها و مشارکت
+
+پرسش‌های نصب و استفاده را در [بخش پرسش‌وپاسخ](https://github.com/M-R-Abedini/Altium-MCP-Suite/discussions/categories/q-a) مطرح کنید. برای گزارش خطا و پیشنهاد قابلیت، از [فرم‌های Issues](https://github.com/M-R-Abedini/Altium-MCP-Suite/issues/new/choose) استفاده کنید. [راهنمای مشارکت به انگلیسی](../CONTRIBUTING.md) شامل آماده‌سازی محیط توسعه، اجرای آزمون‌ها، ترجمه و ثبت نویسندگان مشترک است.
+
 ## مجوز
 
 کد جدید مجموعه با <span dir="ltr"><code>MIT</code></span> منتشر شده. پروژه‌های همراه مجوز خودشان را دارند — <span dir="ltr"><code>UPSTREAM.json</code></span> را ببینید.

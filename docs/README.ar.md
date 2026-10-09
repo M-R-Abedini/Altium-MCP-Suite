@@ -81,6 +81,10 @@ Pop-Location
 
 خادم المكتبات اختياري (يحتاج نسخة <span dir="ltr"><code>Rust</code></span> المثبتة وأدوات بناء <span dir="ltr"><code>Visual Studio C++</code></span>). للمجلدات المتعددة كرر الخيار <span dir="ltr"><code>--library-dir</code></span>.
 
+## الأسئلة والمساهمة
+
+اطرح أسئلة التثبيت والاستخدام في [قسم الأسئلة والأجوبة](https://github.com/M-R-Abedini/Altium-MCP-Suite/discussions/categories/q-a). استخدم [نماذج Issues](https://github.com/M-R-Abedini/Altium-MCP-Suite/issues/new/choose) للإبلاغ عن الأخطاء واقتراح الميزات. يوضح [دليل المساهمة بالإنجليزية](../CONTRIBUTING.md) إعداد بيئة التطوير والاختبارات والترجمة وتسجيل المؤلفين المشاركين.
+
 ## الترخيص
 
 كود المجموعة الجديد بترخيص <span dir="ltr"><code>MIT</code></span>. المشاريع المضمّنة تحتفظ بتراخيصها — انظر <span dir="ltr"><code>UPSTREAM.json</code></span>.

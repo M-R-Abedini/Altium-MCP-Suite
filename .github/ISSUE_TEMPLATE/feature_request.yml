@@ -1,0 +1,23 @@
+name: Feature request
+description: Propose a tool, workflow, or documentation improvement.
+title: "[Feature]: "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What workflow needs improvement?
+      description: Describe the task, the current limitation, and any workaround.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Include an example input and result if you are proposing a tool change.
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: How could we verify it?
+      description: Suggest a small test case, sample design, or documentation example. Use synthetic data for public examples.
