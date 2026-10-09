@@ -331,29 +331,32 @@ begin
                 FPProps := TStringList.Create;
                 try
                     GrpIter := LibComp.GroupIterator_Create;
-                    Prim := GrpIter.FirstPCBObject;
-                    while (Prim <> nil) do
-                    begin
-                        case Prim.ObjectId of
-                            ePadObject:           TypeName := 'pads';
-                            eTrackObject:         TypeName := 'tracks';
-                            eArcObject:           TypeName := 'arcs';
-                            eFillObject:          TypeName := 'fills';
-                            eTextObject:          TypeName := 'texts';
-                            eRegionObject:        TypeName := 'regions';
-                            eViaObject:           TypeName := 'vias';
-                            eComponentBodyObject: TypeName := 'component_bodies';
-                        else
-                            TypeName := 'other';
+                    try
+                        Prim := GrpIter.FirstPCBObject;
+                        while (Prim <> nil) do
+                        begin
+                            case Prim.ObjectId of
+                                ePadObject:           TypeName := 'pads';
+                                eTrackObject:         TypeName := 'tracks';
+                                eArcObject:           TypeName := 'arcs';
+                                eFillObject:          TypeName := 'fills';
+                                eTextObject:          TypeName := 'texts';
+                                eRegionObject:        TypeName := 'regions';
+                                eViaObject:           TypeName := 'vias';
+                                eComponentBodyObject: TypeName := 'component_bodies';
+                            else
+                                TypeName := 'other';
+                            end;
+                            i := Counts.IndexOfName(TypeName);
+                            if (i < 0) then
+                                Counts.Add(TypeName + '=1')
+                            else
+                                Counts[i] := TypeName + '=' + IntToStr(StrToInt(Counts.ValueFromIndex[i]) + 1);
+                            Prim := GrpIter.NextPCBObject;
                         end;
-                        i := Counts.IndexOfName(TypeName);
-                        if (i < 0) then
-                            Counts.Add(TypeName + '=1')
-                        else
-                            Counts[i] := TypeName + '=' + IntToStr(StrToInt(Counts.ValueFromIndex[i]) + 1);
-                        Prim := GrpIter.NextPCBObject;
+                    finally
+                        LibComp.GroupIterator_Destroy(GrpIter);
                     end;
-                    LibComp.GroupIterator_Destroy(GrpIter);
 
                     AddJSONProperty(FPProps, 'name', LibComp.Name);
                     AddJSONProperty(FPProps, 'description', LibComp.Description);
@@ -376,148 +379,151 @@ begin
                     AddJSONProperty(FPProps, 'description', LibComp.Description);
 
                     GrpIter := LibComp.GroupIterator_Create;
-                    Prim := GrpIter.FirstPCBObject;
-                    while (Prim <> nil) do
-                    begin
-                        PrimProps := TStringList.Create;
-                        try
-                          // Armor: an unreadable primitive degrades to a
-                          // reported entry instead of crashing the script
-                          try
-                            case Prim.ObjectId of
-                                ePadObject:
-                                begin
-                                    AddJSONProperty(PrimProps, 'type', 'pad');
-                                    AddJSONProperty(PrimProps, 'name', Prim.Name);
-                                    AddJSONNumber(PrimProps, 'x', CoordToMils(Prim.x));
-                                    AddJSONNumber(PrimProps, 'y', CoordToMils(Prim.y));
-                                    AddJSONNumber(PrimProps, 'rotation', Prim.Rotation);
-                                    AddJSONProperty(PrimProps, 'layer', Layer2String(Prim.Layer));
-                                    AddJSONBoolean(PrimProps, 'plated', Prim.Plated);
-                                    AddJSONInteger(PrimProps, 'mode', Prim.Mode);
-                                    AddJSONNumber(PrimProps, 'top_x_size', CoordToMils(Prim.TopXSize));
-                                    AddJSONNumber(PrimProps, 'top_y_size', CoordToMils(Prim.TopYSize));
-                                    AddJSONInteger(PrimProps, 'top_shape', Prim.TopShape);
-                                    AddJSONNumber(PrimProps, 'hole_size', CoordToMils(Prim.HoleSize));
-                                    AddJSONInteger(PrimProps, 'hole_type', Prim.HoleType);
-                                    AddJSONNumber(PrimProps, 'hole_width', CoordToMils(Prim.HoleWidth));
-                                    AddJSONNumber(PrimProps, 'hole_rotation', Prim.HoleRotation);
-                                    if (Prim.Mode <> ePadMode_Simple) then
+                    try
+                        Prim := GrpIter.FirstPCBObject;
+                        while (Prim <> nil) do
+                        begin
+                            PrimProps := TStringList.Create;
+                            try
+                              // Armor: an unreadable primitive degrades to a
+                              // reported entry instead of crashing the script
+                              try
+                                case Prim.ObjectId of
+                                    ePadObject:
                                     begin
-                                        AddJSONNumber(PrimProps, 'mid_x_size', CoordToMils(Prim.MidXSize));
-                                        AddJSONNumber(PrimProps, 'mid_y_size', CoordToMils(Prim.MidYSize));
-                                        AddJSONInteger(PrimProps, 'mid_shape', Prim.MidShape);
-                                        AddJSONNumber(PrimProps, 'bot_x_size', CoordToMils(Prim.BotXSize));
-                                        AddJSONNumber(PrimProps, 'bot_y_size', CoordToMils(Prim.BotYSize));
-                                        AddJSONInteger(PrimProps, 'bot_shape', Prim.BotShape);
-                                    end;
-                                    if (Prim.TopShape = eRoundedRectangular) then
-                                        AddJSONInteger(PrimProps, 'corner_pct', Prim.StackCRPctOnLayer[eTopLayer]);
-                                end;
-                                eTrackObject:
-                                begin
-                                    AddJSONProperty(PrimProps, 'type', 'track');
-                                    AddJSONNumber(PrimProps, 'x1', CoordToMils(Prim.x1));
-                                    AddJSONNumber(PrimProps, 'y1', CoordToMils(Prim.y1));
-                                    AddJSONNumber(PrimProps, 'x2', CoordToMils(Prim.x2));
-                                    AddJSONNumber(PrimProps, 'y2', CoordToMils(Prim.y2));
-                                    AddJSONNumber(PrimProps, 'width', CoordToMils(Prim.Width));
-                                    AddJSONProperty(PrimProps, 'layer', Layer2String(Prim.Layer));
-                                end;
-                                eArcObject:
-                                begin
-                                    AddJSONProperty(PrimProps, 'type', 'arc');
-                                    AddJSONNumber(PrimProps, 'cx', CoordToMils(Prim.XCenter));
-                                    AddJSONNumber(PrimProps, 'cy', CoordToMils(Prim.YCenter));
-                                    AddJSONNumber(PrimProps, 'radius', CoordToMils(Prim.Radius));
-                                    AddJSONNumber(PrimProps, 'start_angle', Prim.StartAngle);
-                                    AddJSONNumber(PrimProps, 'end_angle', Prim.EndAngle);
-                                    AddJSONNumber(PrimProps, 'width', CoordToMils(Prim.LineWidth));
-                                    AddJSONProperty(PrimProps, 'layer', Layer2String(Prim.Layer));
-                                end;
-                                eFillObject:
-                                begin
-                                    AddJSONProperty(PrimProps, 'type', 'fill');
-                                    AddJSONNumber(PrimProps, 'x1', CoordToMils(Prim.x1Location));
-                                    AddJSONNumber(PrimProps, 'y1', CoordToMils(Prim.y1Location));
-                                    AddJSONNumber(PrimProps, 'x2', CoordToMils(Prim.x2Location));
-                                    AddJSONNumber(PrimProps, 'y2', CoordToMils(Prim.y2Location));
-                                    AddJSONNumber(PrimProps, 'rotation', Prim.Rotation);
-                                    AddJSONProperty(PrimProps, 'layer', Layer2String(Prim.Layer));
-                                end;
-                                eTextObject:
-                                begin
-                                    AddJSONProperty(PrimProps, 'type', 'text');
-                                    AddJSONProperty(PrimProps, 'text', Prim.Text);
-                                    AddJSONNumber(PrimProps, 'x', CoordToMils(Prim.XLocation));
-                                    AddJSONNumber(PrimProps, 'y', CoordToMils(Prim.YLocation));
-                                    AddJSONNumber(PrimProps, 'size', CoordToMils(Prim.Size));
-                                    AddJSONNumber(PrimProps, 'width', CoordToMils(Prim.Width));
-                                    AddJSONNumber(PrimProps, 'rotation', Prim.Rotation);
-                                    AddJSONProperty(PrimProps, 'layer', Layer2String(Prim.Layer));
-                                    AddJSONBoolean(PrimProps, 'mirror', Prim.MirrorFlag);
-                                    AddJSONBoolean(PrimProps, 'ttf', Prim.UseTTFonts);
-                                end;
-                                eRegionObject:
-                                begin
-                                    AddJSONProperty(PrimProps, 'type', 'region');
-                                    AddJSONProperty(PrimProps, 'layer', Layer2String(Prim.Layer));
-                                    AddJSONInteger(PrimProps, 'kind', Prim.Kind);
-                                    PointsArray := TStringList.Create;
-                                    try
-                                        for V := 1 to Prim.MainContour.Count do
+                                        AddJSONProperty(PrimProps, 'type', 'pad');
+                                        AddJSONProperty(PrimProps, 'name', Prim.Name);
+                                        AddJSONNumber(PrimProps, 'x', CoordToMils(Prim.x));
+                                        AddJSONNumber(PrimProps, 'y', CoordToMils(Prim.y));
+                                        AddJSONNumber(PrimProps, 'rotation', Prim.Rotation);
+                                        AddJSONProperty(PrimProps, 'layer', Layer2String(Prim.Layer));
+                                        AddJSONBoolean(PrimProps, 'plated', Prim.Plated);
+                                        AddJSONInteger(PrimProps, 'mode', Prim.Mode);
+                                        AddJSONNumber(PrimProps, 'top_x_size', CoordToMils(Prim.TopXSize));
+                                        AddJSONNumber(PrimProps, 'top_y_size', CoordToMils(Prim.TopYSize));
+                                        AddJSONInteger(PrimProps, 'top_shape', Prim.TopShape);
+                                        AddJSONNumber(PrimProps, 'hole_size', CoordToMils(Prim.HoleSize));
+                                        AddJSONInteger(PrimProps, 'hole_type', Prim.HoleType);
+                                        AddJSONNumber(PrimProps, 'hole_width', CoordToMils(Prim.HoleWidth));
+                                        AddJSONNumber(PrimProps, 'hole_rotation', Prim.HoleRotation);
+                                        if (Prim.Mode <> ePadMode_Simple) then
                                         begin
-                                            PProps := TStringList.Create;
-                                            try
-                                                AddJSONNumber(PProps, 'x', CoordToMils(Prim.MainContour.x[V]));
-                                                AddJSONNumber(PProps, 'y', CoordToMils(Prim.MainContour.y[V]));
-                                                PointsArray.Add(BuildJSONObject(PProps, 3));
-                                            finally
-                                                PProps.Free;
-                                            end;
+                                            AddJSONNumber(PrimProps, 'mid_x_size', CoordToMils(Prim.MidXSize));
+                                            AddJSONNumber(PrimProps, 'mid_y_size', CoordToMils(Prim.MidYSize));
+                                            AddJSONInteger(PrimProps, 'mid_shape', Prim.MidShape);
+                                            AddJSONNumber(PrimProps, 'bot_x_size', CoordToMils(Prim.BotXSize));
+                                            AddJSONNumber(PrimProps, 'bot_y_size', CoordToMils(Prim.BotYSize));
+                                            AddJSONInteger(PrimProps, 'bot_shape', Prim.BotShape);
                                         end;
-                                        PrimProps.Add(BuildJSONArray(PointsArray, 'vertices', 2));
-                                    finally
-                                        PointsArray.Free;
+                                        if (Prim.TopShape = eRoundedRectangular) then
+                                            AddJSONInteger(PrimProps, 'corner_pct', Prim.StackCRPctOnLayer[eTopLayer]);
                                     end;
-                                    AddJSONInteger(PrimProps, 'hole_count', Prim.HoleCount);
-                                end;
-                                eViaObject:
+                                    eTrackObject:
+                                    begin
+                                        AddJSONProperty(PrimProps, 'type', 'track');
+                                        AddJSONNumber(PrimProps, 'x1', CoordToMils(Prim.x1));
+                                        AddJSONNumber(PrimProps, 'y1', CoordToMils(Prim.y1));
+                                        AddJSONNumber(PrimProps, 'x2', CoordToMils(Prim.x2));
+                                        AddJSONNumber(PrimProps, 'y2', CoordToMils(Prim.y2));
+                                        AddJSONNumber(PrimProps, 'width', CoordToMils(Prim.Width));
+                                        AddJSONProperty(PrimProps, 'layer', Layer2String(Prim.Layer));
+                                    end;
+                                    eArcObject:
+                                    begin
+                                        AddJSONProperty(PrimProps, 'type', 'arc');
+                                        AddJSONNumber(PrimProps, 'cx', CoordToMils(Prim.XCenter));
+                                        AddJSONNumber(PrimProps, 'cy', CoordToMils(Prim.YCenter));
+                                        AddJSONNumber(PrimProps, 'radius', CoordToMils(Prim.Radius));
+                                        AddJSONNumber(PrimProps, 'start_angle', Prim.StartAngle);
+                                        AddJSONNumber(PrimProps, 'end_angle', Prim.EndAngle);
+                                        AddJSONNumber(PrimProps, 'width', CoordToMils(Prim.LineWidth));
+                                        AddJSONProperty(PrimProps, 'layer', Layer2String(Prim.Layer));
+                                    end;
+                                    eFillObject:
+                                    begin
+                                        AddJSONProperty(PrimProps, 'type', 'fill');
+                                        AddJSONNumber(PrimProps, 'x1', CoordToMils(Prim.x1Location));
+                                        AddJSONNumber(PrimProps, 'y1', CoordToMils(Prim.y1Location));
+                                        AddJSONNumber(PrimProps, 'x2', CoordToMils(Prim.x2Location));
+                                        AddJSONNumber(PrimProps, 'y2', CoordToMils(Prim.y2Location));
+                                        AddJSONNumber(PrimProps, 'rotation', Prim.Rotation);
+                                        AddJSONProperty(PrimProps, 'layer', Layer2String(Prim.Layer));
+                                    end;
+                                    eTextObject:
+                                    begin
+                                        AddJSONProperty(PrimProps, 'type', 'text');
+                                        AddJSONProperty(PrimProps, 'text', Prim.Text);
+                                        AddJSONNumber(PrimProps, 'x', CoordToMils(Prim.XLocation));
+                                        AddJSONNumber(PrimProps, 'y', CoordToMils(Prim.YLocation));
+                                        AddJSONNumber(PrimProps, 'size', CoordToMils(Prim.Size));
+                                        AddJSONNumber(PrimProps, 'width', CoordToMils(Prim.Width));
+                                        AddJSONNumber(PrimProps, 'rotation', Prim.Rotation);
+                                        AddJSONProperty(PrimProps, 'layer', Layer2String(Prim.Layer));
+                                        AddJSONBoolean(PrimProps, 'mirror', Prim.MirrorFlag);
+                                        AddJSONBoolean(PrimProps, 'ttf', Prim.UseTTFonts);
+                                    end;
+                                    eRegionObject:
+                                    begin
+                                        AddJSONProperty(PrimProps, 'type', 'region');
+                                        AddJSONProperty(PrimProps, 'layer', Layer2String(Prim.Layer));
+                                        AddJSONInteger(PrimProps, 'kind', Prim.Kind);
+                                        PointsArray := TStringList.Create;
+                                        try
+                                            for V := 1 to Prim.MainContour.Count do
+                                            begin
+                                                PProps := TStringList.Create;
+                                                try
+                                                    AddJSONNumber(PProps, 'x', CoordToMils(Prim.MainContour.x[V]));
+                                                    AddJSONNumber(PProps, 'y', CoordToMils(Prim.MainContour.y[V]));
+                                                    PointsArray.Add(BuildJSONObject(PProps, 3));
+                                                finally
+                                                    PProps.Free;
+                                                end;
+                                            end;
+                                            PrimProps.Add(BuildJSONArray(PointsArray, 'vertices', 2));
+                                        finally
+                                            PointsArray.Free;
+                                        end;
+                                        AddJSONInteger(PrimProps, 'hole_count', Prim.HoleCount);
+                                    end;
+                                    eViaObject:
+                                    begin
+                                        AddJSONProperty(PrimProps, 'type', 'via');
+                                        AddJSONNumber(PrimProps, 'x', CoordToMils(Prim.x));
+                                        AddJSONNumber(PrimProps, 'y', CoordToMils(Prim.y));
+                                        AddJSONNumber(PrimProps, 'size', CoordToMils(Prim.Size));
+                                        AddJSONNumber(PrimProps, 'hole_size', CoordToMils(Prim.HoleSize));
+                                        AddJSONProperty(PrimProps, 'low_layer', Layer2String(Prim.LowLayer));
+                                        AddJSONProperty(PrimProps, 'high_layer', Layer2String(Prim.HighLayer));
+                                    end;
+                                    eComponentBodyObject:
+                                        // 3D bodies are models, not 2D primitives -
+                                        // excluded from the graphics round-trip
+                                        AddJSONProperty(PrimProps, 'type', '');
+                                else
                                 begin
-                                    AddJSONProperty(PrimProps, 'type', 'via');
-                                    AddJSONNumber(PrimProps, 'x', CoordToMils(Prim.x));
-                                    AddJSONNumber(PrimProps, 'y', CoordToMils(Prim.y));
-                                    AddJSONNumber(PrimProps, 'size', CoordToMils(Prim.Size));
-                                    AddJSONNumber(PrimProps, 'hole_size', CoordToMils(Prim.HoleSize));
-                                    AddJSONProperty(PrimProps, 'low_layer', Layer2String(Prim.LowLayer));
-                                    AddJSONProperty(PrimProps, 'high_layer', Layer2String(Prim.HighLayer));
+                                    AddJSONProperty(PrimProps, 'type', 'unknown');
+                                    AddJSONInteger(PrimProps, 'object_id', Prim.ObjectId);
                                 end;
-                                eComponentBodyObject:
-                                    // 3D bodies are models, not 2D primitives -
-                                    // excluded from the graphics round-trip
-                                    AddJSONProperty(PrimProps, 'type', '');
-                            else
-                            begin
-                                AddJSONProperty(PrimProps, 'type', 'unknown');
-                                AddJSONInteger(PrimProps, 'object_id', Prim.ObjectId);
-                            end;
+                                end;
+
+                                if (PrimProps.Count > 0) then
+                                    if (Pos('"type": ""', PrimProps[0]) = 0) then
+                                        PrimsArray.Add(BuildJSONObject(PrimProps, 1));
+                              except
+                                PrimProps.Clear;
+                                AddJSONProperty(PrimProps, 'type', 'unreadable');
+                                PrimsArray.Add(BuildJSONObject(PrimProps, 1));
+                              end;
+                            finally
+                                PrimProps.Free;
                             end;
 
-                            if (PrimProps.Count > 0) then
-                                if (Pos('"type": ""', PrimProps[0]) = 0) then
-                                    PrimsArray.Add(BuildJSONObject(PrimProps, 1));
-                          except
-                            PrimProps.Clear;
-                            AddJSONProperty(PrimProps, 'type', 'unreadable');
-                            PrimsArray.Add(BuildJSONObject(PrimProps, 1));
-                          end;
-                        finally
-                            PrimProps.Free;
+                            Prim := GrpIter.NextPCBObject;
                         end;
-
-                        Prim := GrpIter.NextPCBObject;
+                    finally
+                        LibComp.GroupIterator_Destroy(GrpIter);
                     end;
-                    LibComp.GroupIterator_Destroy(GrpIter);
 
                     FPProps.Add(BuildJSONArray(PrimsArray, 'primitives', 1));
 
@@ -583,6 +589,7 @@ begin
     try
         // Create the iterator that will look for Net objects only
         Iterator := Board.BoardIterator_Create;
+        try
         Iterator.AddFilter_ObjectSet(MkSet(eNetObject));
         Iterator.AddFilter_LayerSet(AllLayers);
         Iterator.AddFilter_Method(eProcessAll);
@@ -595,7 +602,9 @@ begin
             NetsArray.Add('"' + JSONEscapeString(Net.Name) + '"');
             Net := Iterator.NextPCBObject;
         end;
-        Board.BoardIterator_Destroy(Iterator);
+        finally
+            Board.BoardIterator_Destroy(Iterator);
+        end;
         
         // Build the final JSON array
         OutputLines := TStringList.Create;
@@ -647,43 +656,52 @@ begin
         
         // Search for existing class with the same name
         ClassIterator := Board.BoardIterator_Create;
-        ClassIterator.SetState_FilterAll;
-        ClassIterator.AddFilter_ObjectSet(MkSet(eClassObject));
+        try
+            ClassIterator.SetState_FilterAll;
+            ClassIterator.AddFilter_ObjectSet(MkSet(eClassObject));
         
-        NetClass := ClassIterator.FirstPCBObject;
-        while (NetClass <> nil) do
-        begin
-            if (NetClass.MemberKind = eClassMemberKind_Net) and (NetClass.Name = ClassName) then
+            NetClass := ClassIterator.FirstPCBObject;
+            while (NetClass <> nil) do
             begin
-                ClassExists := True;
-                Break;
+                if (NetClass.MemberKind = eClassMemberKind_Net) and (NetClass.Name = ClassName) then
+                begin
+                    ClassExists := True;
+                    Break;
+                end;
+                NetClass := ClassIterator.NextPCBObject;
             end;
-            NetClass := ClassIterator.NextPCBObject;
-        end;
         
-        // If class doesn't exist, create it
-        if not ClassExists then
-        begin
+            // If class doesn't exist, create it
+            if not ClassExists then
+            begin
+                PCBServer.PreProcess;
+                try
+                    NetClass := PCBServer.PCBClassFactoryByClassMember(eClassMemberKind_Net);
+                    NetClass.SuperClass := False;
+                    NetClass.Name := ClassName;
+                    Board.AddPCBObject(NetClass);
+                finally
+                    PCBServer.PostProcess;
+                end;
+            end;
+
+            // Add nets to the class
             PCBServer.PreProcess;
-            NetClass := PCBServer.PCBClassFactoryByClassMember(eClassMemberKind_Net);
-            NetClass.SuperClass := False;
-            NetClass.Name := ClassName;
-            Board.AddPCBObject(NetClass);
-            PCBServer.PostProcess;
-        end;
+            try
+                for i := 0 to NetNames.Count - 1 do
+                begin
+                    // Add each net to the class
+                    if NetClass.AddMemberByName(NetNames[i]) then
+                        AddedCount := AddedCount + 1;
+                end;
+            finally
+                PCBServer.PostProcess;
+            end;
         
-        // Add nets to the class
-        PCBServer.PreProcess;
-        for i := 0 to NetNames.Count - 1 do
-        begin
-            // Add each net to the class
-            if NetClass.AddMemberByName(NetNames[i]) then
-                AddedCount := AddedCount + 1;
+            // Clean up iterator
+        finally
+            Board.BoardIterator_Destroy(ClassIterator);
         end;
-        PCBServer.PostProcess;
-        
-        // Clean up iterator
-        Board.BoardIterator_Destroy(ClassIterator);
         
         // Build result JSON
         AddJSONBoolean(ResultProps, 'success', True);
@@ -1375,35 +1393,38 @@ begin
     try
         // Retrieve the iterator
         BoardIterator := Board.BoardIterator_Create;
-        BoardIterator.AddFilter_ObjectSet(MkSet(eRuleObject));
-        BoardIterator.AddFilter_LayerSet(AllLayers);
-        BoardIterator.AddFilter_Method(eProcessAll);
+        try
+            BoardIterator.AddFilter_ObjectSet(MkSet(eRuleObject));
+            BoardIterator.AddFilter_LayerSet(AllLayers);
+            BoardIterator.AddFilter_Method(eProcessAll);
 
-        // Process each rule
-        Rule := BoardIterator.FirstPCBObject;
-        while (Rule <> Nil) do
-        begin
-            // Create rule properties
-            RuleProps := TStringList.Create;
-            try
-                // Add rule descriptor
-                AddJSONProperty(RuleProps, 'descriptor', Rule.Descriptor);
-                AddJSONProperty(RuleProps, 'rule_kind', Rule.GetState_ShortDescriptorString);
-                AddJSONProperty(RuleProps, 'filter1', Rule.Scope1Expression);
-                AddJSONProperty(RuleProps, 'filter2', Rule.Scope2Expression);
+            // Process each rule
+            Rule := BoardIterator.FirstPCBObject;
+            while (Rule <> Nil) do
+            begin
+                // Create rule properties
+                RuleProps := TStringList.Create;
+                try
+                    // Add rule descriptor
+                    AddJSONProperty(RuleProps, 'descriptor', Rule.Descriptor);
+                    AddJSONProperty(RuleProps, 'rule_kind', Rule.GetState_ShortDescriptorString);
+                    AddJSONProperty(RuleProps, 'filter1', Rule.Scope1Expression);
+                    AddJSONProperty(RuleProps, 'filter2', Rule.Scope2Expression);
 
-                // Add to rules array
-                RulesArray.Add(BuildJSONObject(RuleProps, 1));
-            finally
-                RuleProps.Free;
-            end;
+                    // Add to rules array
+                    RulesArray.Add(BuildJSONObject(RuleProps, 1));
+                finally
+                    RuleProps.Free;
+                end;
             
-            // Move to next rule
-            Rule := BoardIterator.NextPCBObject;
-        end;
+                // Move to next rule
+                Rule := BoardIterator.NextPCBObject;
+            end;
 
-        // Clean up the iterator
-        Board.BoardIterator_Destroy(BoardIterator);
+            // Clean up the iterator
+        finally
+            Board.BoardIterator_Destroy(BoardIterator);
+        end;
         
         // Build the final JSON array
         OutputLines := TStringList.Create;
@@ -1450,48 +1471,51 @@ begin
     try
         // Create an iterator to find all components
         Iterator := Board.BoardIterator_Create;
-        Iterator.AddFilter_ObjectSet(MkSet(eComponentObject));
-        Iterator.AddFilter_IPCB_LayerSet(LayerSet.AllLayers);
-        Iterator.AddFilter_Method(eProcessAll);
+        try
+            Iterator.AddFilter_ObjectSet(MkSet(eComponentObject));
+            Iterator.AddFilter_IPCB_LayerSet(LayerSet.AllLayers);
+            Iterator.AddFilter_Method(eProcessAll);
 
-        // Process each component
-        Component := Iterator.FirstPCBObject;
-        while (Component <> Nil) do
-        begin
-            // Process either all components or only selected ones
-            if ((not SelectedOnly) or (SelectedOnly and Component.Selected)) then
+            // Process each component
+            Component := Iterator.FirstPCBObject;
+            while (Component <> Nil) do
             begin
-                // Create component properties
-                ComponentProps := TStringList.Create;
-                try
-                    // Get bounds
-                    Rect := Component.BoundingRectangleNoNameComment;
+                // Process either all components or only selected ones
+                if ((not SelectedOnly) or (SelectedOnly and Component.Selected)) then
+                begin
+                    // Create component properties
+                    ComponentProps := TStringList.Create;
+                    try
+                        // Get bounds
+                        Rect := Component.BoundingRectangleNoNameComment;
                     
-                    // Add properties
-                    AddJSONProperty(ComponentProps, 'designator', Component.Name.Text);
-                    AddJSONProperty(ComponentProps, 'name', Component.Identifier);
-                    AddJSONProperty(ComponentProps, 'description', Component.SourceDescription);
-                    AddJSONProperty(ComponentProps, 'footprint', Component.Pattern);
-                    AddJSONProperty(ComponentProps, 'layer', Layer2String(Component.Layer));
-                    AddJSONNumber(ComponentProps, 'x', CoordToMils(Component.x - xorigin));
-                    AddJSONNumber(ComponentProps, 'y', CoordToMils(Component.y - yorigin));
-                    AddJSONNumber(ComponentProps, 'width', CoordToMils(Rect.Right - Rect.Left));
-                    AddJSONNumber(ComponentProps, 'height', CoordToMils(Rect.Top - Rect.Bottom));
-                    AddJSONNumber(ComponentProps, 'rotation', Component.Rotation);
+                        // Add properties
+                        AddJSONProperty(ComponentProps, 'designator', Component.Name.Text);
+                        AddJSONProperty(ComponentProps, 'name', Component.Identifier);
+                        AddJSONProperty(ComponentProps, 'description', Component.SourceDescription);
+                        AddJSONProperty(ComponentProps, 'footprint', Component.Pattern);
+                        AddJSONProperty(ComponentProps, 'layer', Layer2String(Component.Layer));
+                        AddJSONNumber(ComponentProps, 'x', CoordToMils(Component.x - xorigin));
+                        AddJSONNumber(ComponentProps, 'y', CoordToMils(Component.y - yorigin));
+                        AddJSONNumber(ComponentProps, 'width', CoordToMils(Rect.Right - Rect.Left));
+                        AddJSONNumber(ComponentProps, 'height', CoordToMils(Rect.Top - Rect.Bottom));
+                        AddJSONNumber(ComponentProps, 'rotation', Component.Rotation);
 
-                    // Add to components array
-                    ComponentsArray.Add(BuildJSONObject(ComponentProps, 1));
-                finally
-                    ComponentProps.Free;
+                        // Add to components array
+                        ComponentsArray.Add(BuildJSONObject(ComponentProps, 1));
+                    finally
+                        ComponentProps.Free;
+                    end;
                 end;
-            end;
             
-            // Move to next component
-            Component := Iterator.NextPCBObject;
-        end;
+                // Move to next component
+                Component := Iterator.NextPCBObject;
+            end;
 
-        // Clean up the iterator
-        Board.BoardIterator_Destroy(Iterator);
+            // Clean up the iterator
+        finally
+            Board.BoardIterator_Destroy(Iterator);
+        end;
         
         // Build the final JSON array
         OutputLines := TStringList.Create;
@@ -1648,88 +1672,94 @@ begin
 
                     // Create pad iterator
                     GrpIter := Component.GroupIterator_Create;
-                    GrpIter.SetState_FilterAll;
-                    GrpIter.AddFilter_ObjectSet(MkSet(ePadObject));
+                    try
+                        GrpIter.SetState_FilterAll;
+                        GrpIter.AddFilter_ObjectSet(MkSet(ePadObject));
                     
-                    // Count pins
-                    PinCount := 0;
-                    Pad := GrpIter.FirstPCBObject;
-                    while (Pad <> Nil) do
-                    begin
-                        if Pad.InComponent then
-                            PinCount := PinCount + 1;
-                        Pad := GrpIter.NextPCBObject;
-                    end;
-                    
-                    // Reset iterator
-                    Component.GroupIterator_Destroy(GrpIter);
-                    GrpIter := Component.GroupIterator_Create;
-                    GrpIter.SetState_FilterAll;
-                    GrpIter.AddFilter_ObjectSet(MkSet(ePadObject));
-                    
-                    // Process each pad
-                    PinsProcessed := 0;
-                    Pad := GrpIter.FirstPCBObject;
-                    while (Pad <> Nil) do
-                    begin
-                        if Pad.InComponent then
+                        // Count pins
+                        PinCount := 0;
+                        Pad := GrpIter.FirstPCBObject;
+                        while (Pad <> Nil) do
                         begin
-                            // Get net name if connected
-                            if (Pad.Net <> Nil) then
-                                NetName := Pad.Net.Name
-                            else
-                                NetName := '';
-                                
-                            // Create pin properties
-                            PinProps := TStringList.Create;
-                            try
-                                AddJSONProperty(PinProps, 'name', Pad.Name);
-                                AddJSONProperty(PinProps, 'net', NetName);
-                                AddJSONNumber(PinProps, 'x', CoordToMils(Pad.x - xorigin));
-                                AddJSONNumber(PinProps, 'y', CoordToMils(Pad.y - yorigin));
-
-                                // Pad offset from the component origin in the
-                                // footprint's rotation-0 frame: un-rotate the
-                                // current offset, and un-mirror X for parts on
-                                // the bottom side. Predicted pad position after
-                                // placement = origin + (mirror-x if bottom,
-                                // then rotate CCW by rotation) applied to dx/dy.
-                                AbsDX := CoordToMils(Pad.x - xorigin) - CompX;
-                                AbsDY := CoordToMils(Pad.y - yorigin) - CompY;
-                                RelDX := AbsDX * Cos(CompRad) + AbsDY * Sin(CompRad);
-                                RelDY := -AbsDX * Sin(CompRad) + AbsDY * Cos(CompRad);
-                                if (Component.Layer = eBottomLayer) then
-                                begin
-                                    RelDX := -(AbsDX * Cos(CompRad) - AbsDY * Sin(CompRad));
-                                    RelDY := AbsDX * Sin(CompRad) + AbsDY * Cos(CompRad);
-                                end;
-                                // Round away trig noise (0.0001 mil resolution)
-                                RelDX := Round(RelDX * 10000) / 10000;
-                                RelDY := Round(RelDY * 10000) / 10000;
-                                AddJSONNumber(PinProps, 'dx', RelDX);
-                                AddJSONNumber(PinProps, 'dy', RelDY);
-
-                                AddJSONNumber(PinProps, 'rotation', Pad.Rotation);
-                                AddJSONProperty(PinProps, 'layer', Layer2String(Pad.Layer));
-                                AddJSONNumber(PinProps, 'width', CoordToMils(Pad.XSizeOnLayer[Pad.Layer]));
-                                AddJSONNumber(PinProps, 'height', CoordToMils(Pad.YSizeOnLayer[Pad.Layer]));
-                                AddJSONProperty(PinProps, 'shape', ShapeToString(Pad.ShapeOnLayer[Pad.Layer]));
-                                
-                                // Add to pins array
-                                PinsArray.Add(BuildJSONObject(PinProps, 3));
-                                
-                                // Increment counter
-                                PinsProcessed := PinsProcessed + 1;
-                            finally
-                                PinProps.Free;
-                            end;
+                            if Pad.InComponent then
+                                PinCount := PinCount + 1;
+                            Pad := GrpIter.NextPCBObject;
                         end;
-                        
-                        Pad := GrpIter.NextPCBObject;
-                    end;
                     
-                    // Clean up iterator
-                    Component.GroupIterator_Destroy(GrpIter);
+                        // Reset iterator
+                    finally
+                        Component.GroupIterator_Destroy(GrpIter);
+                    end;
+                    GrpIter := Component.GroupIterator_Create;
+                    try
+                        GrpIter.SetState_FilterAll;
+                        GrpIter.AddFilter_ObjectSet(MkSet(ePadObject));
+                    
+                        // Process each pad
+                        PinsProcessed := 0;
+                        Pad := GrpIter.FirstPCBObject;
+                        while (Pad <> Nil) do
+                        begin
+                            if Pad.InComponent then
+                            begin
+                                // Get net name if connected
+                                if (Pad.Net <> Nil) then
+                                    NetName := Pad.Net.Name
+                                else
+                                    NetName := '';
+                                
+                                // Create pin properties
+                                PinProps := TStringList.Create;
+                                try
+                                    AddJSONProperty(PinProps, 'name', Pad.Name);
+                                    AddJSONProperty(PinProps, 'net', NetName);
+                                    AddJSONNumber(PinProps, 'x', CoordToMils(Pad.x - xorigin));
+                                    AddJSONNumber(PinProps, 'y', CoordToMils(Pad.y - yorigin));
+
+                                    // Pad offset from the component origin in the
+                                    // footprint's rotation-0 frame: un-rotate the
+                                    // current offset, and un-mirror X for parts on
+                                    // the bottom side. Predicted pad position after
+                                    // placement = origin + (mirror-x if bottom,
+                                    // then rotate CCW by rotation) applied to dx/dy.
+                                    AbsDX := CoordToMils(Pad.x - xorigin) - CompX;
+                                    AbsDY := CoordToMils(Pad.y - yorigin) - CompY;
+                                    RelDX := AbsDX * Cos(CompRad) + AbsDY * Sin(CompRad);
+                                    RelDY := -AbsDX * Sin(CompRad) + AbsDY * Cos(CompRad);
+                                    if (Component.Layer = eBottomLayer) then
+                                    begin
+                                        RelDX := -(AbsDX * Cos(CompRad) - AbsDY * Sin(CompRad));
+                                        RelDY := AbsDX * Sin(CompRad) + AbsDY * Cos(CompRad);
+                                    end;
+                                    // Round away trig noise (0.0001 mil resolution)
+                                    RelDX := Round(RelDX * 10000) / 10000;
+                                    RelDY := Round(RelDY * 10000) / 10000;
+                                    AddJSONNumber(PinProps, 'dx', RelDX);
+                                    AddJSONNumber(PinProps, 'dy', RelDY);
+
+                                    AddJSONNumber(PinProps, 'rotation', Pad.Rotation);
+                                    AddJSONProperty(PinProps, 'layer', Layer2String(Pad.Layer));
+                                    AddJSONNumber(PinProps, 'width', CoordToMils(Pad.XSizeOnLayer[Pad.Layer]));
+                                    AddJSONNumber(PinProps, 'height', CoordToMils(Pad.YSizeOnLayer[Pad.Layer]));
+                                    AddJSONProperty(PinProps, 'shape', ShapeToString(Pad.ShapeOnLayer[Pad.Layer]));
+                                
+                                    // Add to pins array
+                                    PinsArray.Add(BuildJSONObject(PinProps, 3));
+                                
+                                    // Increment counter
+                                    PinsProcessed := PinsProcessed + 1;
+                                finally
+                                    PinProps.Free;
+                                end;
+                            end;
+                        
+                            Pad := GrpIter.NextPCBObject;
+                        end;
+                    
+                        // Clean up iterator
+                    finally
+                        Component.GroupIterator_Destroy(GrpIter);
+                    end;
                     
                     // Add pins array to component
                     CompProps.Add(BuildJSONArray(PinsArray, 'pins', 1));
@@ -1799,18 +1829,23 @@ begin
     ResultProps := TStringList.Create;
     try
         PCBServer.PreProcess;
-        PCBServer.SendMessageToRobots(Component.I_ObjectAddress, c_Broadcast, PCBM_BeginModify, c_NoEventData);
-        
-        // Set absolute position using MoveToXY
-        // Add origin back since input coordinates are relative to origin
-        Component.MoveToXY(MilsToCoord(NewX) + xorigin, MilsToCoord(NewY) + yorigin);
-        
-        // Set rotation if specified (use -1 to keep current)
-        if (Rotation >= 0) then
-            Component.Rotation := Rotation;
-        
-        PCBServer.SendMessageToRobots(Component.I_ObjectAddress, c_Broadcast, PCBM_EndModify, c_NoEventData);
-        PCBServer.PostProcess;
+        try
+            PCBServer.SendMessageToRobots(Component.I_ObjectAddress, c_Broadcast, PCBM_BeginModify, c_NoEventData);
+            try
+
+                // Set absolute position using MoveToXY
+                // Add origin back since input coordinates are relative to origin
+                Component.MoveToXY(MilsToCoord(NewX) + xorigin, MilsToCoord(NewY) + yorigin);
+
+                // Set rotation if specified (use -1 to keep current)
+                if (Rotation >= 0) then
+                    Component.Rotation := Rotation;
+            finally
+                PCBServer.SendMessageToRobots(Component.I_ObjectAddress, c_Broadcast, PCBM_EndModify, c_NoEventData);
+            end;
+        finally
+            PCBServer.PostProcess;
+        end;
         
         Client.SendMessage('PCB:Zoom', 'Action=Redraw', 255, Client.CurrentView);
         
@@ -2063,41 +2098,47 @@ begin
     try
         // Start transaction
         PCBServer.PreProcess;
-        
-        // Process each designator
-        for i := 0 to DesignatorsList.Count - 1 do
-        begin
-            Designator := Trim(DesignatorsList[i]);
-            
-            // Use direct function to get component by designator
-            Component := Board.GetPcbComponentByRefDes(Designator);
-            
-            if (Component <> Nil) then
+        try
+
+            // Process each designator
+            for i := 0 to DesignatorsList.Count - 1 do
             begin
-                // Begin modify
-                PCBServer.SendMessageToRobots(Component.I_ObjectAddress, c_Broadcast, PCBM_BeginModify, c_NoEventData);
-                
-                // Move the component by the specified offsets
-                Component.MoveByXY(XOffset, YOffset);
-                
-                // Set rotation if specified (non-zero)
-                if (Rotation <> 0) then
-                    Component.Rotation := Rotation;
-                
-                // End modify
-                PCBServer.SendMessageToRobots(Component.I_ObjectAddress, c_Broadcast, PCBM_EndModify, c_NoEventData);
-                
-                MovedCount := MovedCount + 1;
-            end
-            else
-            begin
-                // Add to missing designators list
-                MissingArray.Add('"' + JSONEscapeString(Designator) + '"');
+                Designator := Trim(DesignatorsList[i]);
+
+                // Use direct function to get component by designator
+                Component := Board.GetPcbComponentByRefDes(Designator);
+
+                if (Component <> Nil) then
+                begin
+                    // Begin modify
+                    PCBServer.SendMessageToRobots(Component.I_ObjectAddress, c_Broadcast, PCBM_BeginModify, c_NoEventData);
+                    try
+
+                        // Move the component by the specified offsets
+                        Component.MoveByXY(XOffset, YOffset);
+
+                        // Set rotation if specified (non-zero)
+                        if (Rotation <> 0) then
+                            Component.Rotation := Rotation;
+
+                        // End modify
+                    finally
+                        PCBServer.SendMessageToRobots(Component.I_ObjectAddress, c_Broadcast, PCBM_EndModify, c_NoEventData);
+                    end;
+
+                    MovedCount := MovedCount + 1;
+                end
+                else
+                begin
+                    // Add to missing designators list
+                    MissingArray.Add('"' + JSONEscapeString(Designator) + '"');
+                end;
             end;
+
+            // End transaction
+        finally
+            PCBServer.PostProcess;
         end;
-        
-        // End transaction
-        PCBServer.PostProcess;
         
         // Update PCB document
         Client.SendMessage('PCB:Zoom', 'Action=Redraw', 255, Client.CurrentView);
@@ -2137,38 +2178,41 @@ begin
     MinD := 2147483647;
 
     ItA := CompA.GroupIterator_Create;
-    ItA.SetState_FilterAll;
-    PA := ItA.FirstPCBObject;
-    while (PA <> nil) do
-    begin
-        if (PA.ObjectId <> eTextObject) then
+    try
+        ItA.SetState_FilterAll;
+        PA := ItA.FirstPCBObject;
+        while (PA <> nil) do
         begin
-            ItB := CompB.GroupIterator_Create;
-            ItB.SetState_FilterAll;
-            PB := ItB.FirstPCBObject;
-            while (PB <> nil) do
+            if (PA.ObjectId <> eTextObject) then
             begin
-                if (PB.ObjectId <> eTextObject) then
+                ItB := CompB.GroupIterator_Create;
+                ItB.SetState_FilterAll;
+                PB := ItB.FirstPCBObject;
+                while (PB <> nil) do
                 begin
-                    D := Board.PrimPrimDistance(PA, PB);
-                    if (D < MinD) then MinD := D;
+                    if (PB.ObjectId <> eTextObject) then
+                    begin
+                        D := Board.PrimPrimDistance(PA, PB);
+                        if (D < MinD) then MinD := D;
+                    end;
+
+                    // Early exit once touching - it cannot get closer
+                    if (MinD = 0) then
+                        PB := nil
+                    else
+                        PB := ItB.NextPCBObject;
                 end;
-
-                // Early exit once touching - it cannot get closer
-                if (MinD = 0) then
-                    PB := nil
-                else
-                    PB := ItB.NextPCBObject;
+                CompB.GroupIterator_Destroy(ItB);
             end;
-            CompB.GroupIterator_Destroy(ItB);
-        end;
 
-        if (MinD = 0) then
-            PA := nil
-        else
-            PA := ItA.NextPCBObject;
+            if (MinD = 0) then
+                PA := nil
+            else
+                PA := ItA.NextPCBObject;
+        end;
+    finally
+        CompA.GroupIterator_Destroy(ItA);
     end;
-    CompA.GroupIterator_Destroy(ItA);
 
     Result := CoordToMils(MinD);
 end;
@@ -2249,66 +2293,68 @@ begin
             RectA := Target.BoundingRectangleNoNameComment;
 
             Iterator := Board.BoardIterator_Create;
-            Iterator.AddFilter_ObjectSet(MkSet(eComponentObject));
-            Iterator.AddFilter_IPCB_LayerSet(LayerSet.AllLayers);
-            Iterator.AddFilter_Method(eProcessAll);
+            try
+                Iterator.AddFilter_ObjectSet(MkSet(eComponentObject));
+                Iterator.AddFilter_IPCB_LayerSet(LayerSet.AllLayers);
+                Iterator.AddFilter_Method(eProcessAll);
 
-            Other := Iterator.FirstPCBObject;
-            while (Other <> nil) do
-            begin
-                if (Other.Name.Text <> Target.Name.Text) and
-                   (Other.Layer = Target.Layer) and
-                   (Processed.IndexOf(Other.Name.Text) < 0) then
+                Other := Iterator.FirstPCBObject;
+                while (Other <> nil) do
                 begin
-                    RectB := Other.BoundingRectangleNoNameComment;
-
-                    // Bounding-box overlap/separation in mils (negative = gap)
-                    OverlapX := CoordToMils(Min(RectA.Right, RectB.Right) - Max(RectA.Left, RectB.Left));
-                    OverlapY := CoordToMils(Min(RectA.Top, RectB.Top) - Max(RectA.Bottom, RectB.Bottom));
-
-                    if (OverlapX > 0) and (OverlapY > 0) then
-                        Separation := 0
-                    else
-                        Separation := Max(-OverlapX, -OverlapY);
-
-                    // Only measure precisely when the prefilter says "close"
-                    if (Separation < ClearanceMils + 25) then
+                    if (Other.Name.Text <> Target.Name.Text) and
+                       (Other.Layer = Target.Layer) and
+                       (Processed.IndexOf(Other.Name.Text) < 0) then
                     begin
-                        PairsChecked := PairsChecked + 1;
-                        DistMils := ComponentMinDistance(Board, Target, Other);
-                        IsOverlap := (OverlapX > 0) and (OverlapY > 0);
+                        RectB := Other.BoundingRectangleNoNameComment;
 
-                        if (IsOverlap) or (DistMils < ClearanceMils) then
+                        // Bounding-box overlap/separation in mils (negative = gap)
+                        OverlapX := CoordToMils(Min(RectA.Right, RectB.Right) - Max(RectA.Left, RectB.Left));
+                        OverlapY := CoordToMils(Min(RectA.Top, RectB.Top) - Max(RectA.Bottom, RectB.Bottom));
+
+                        if (OverlapX > 0) and (OverlapY > 0) then
+                            Separation := 0
+                        else
+                            Separation := Max(-OverlapX, -OverlapY);
+
+                        // Only measure precisely when the prefilter says "close"
+                        if (Separation < ClearanceMils + 25) then
                         begin
-                            VProps := TStringList.Create;
-                            try
-                                AddJSONProperty(VProps, 'a', Target.Name.Text);
-                                AddJSONProperty(VProps, 'b', Other.Name.Text);
-                                AddJSONProperty(VProps, 'layer', Layer2String(Target.Layer));
-                                if IsOverlap then
-                                    AddJSONProperty(VProps, 'type', 'bounding_box_overlap')
-                                else
-                                    AddJSONProperty(VProps, 'type', 'clearance');
-                                AddJSONNumber(VProps, 'distance_mils', Round(DistMils * 100) / 100);
-                                if IsOverlap then
-                                begin
-                                    AddJSONNumber(VProps, 'overlap_x_mils', Round(OverlapX * 100) / 100);
-                                    AddJSONNumber(VProps, 'overlap_y_mils', Round(OverlapY * 100) / 100);
+                            PairsChecked := PairsChecked + 1;
+                            DistMils := ComponentMinDistance(Board, Target, Other);
+                            IsOverlap := (OverlapX > 0) and (OverlapY > 0);
+
+                            if (IsOverlap) or (DistMils < ClearanceMils) then
+                            begin
+                                VProps := TStringList.Create;
+                                try
+                                    AddJSONProperty(VProps, 'a', Target.Name.Text);
+                                    AddJSONProperty(VProps, 'b', Other.Name.Text);
+                                    AddJSONProperty(VProps, 'layer', Layer2String(Target.Layer));
+                                    if IsOverlap then
+                                        AddJSONProperty(VProps, 'type', 'bounding_box_overlap')
+                                    else
+                                        AddJSONProperty(VProps, 'type', 'clearance');
+                                    AddJSONNumber(VProps, 'distance_mils', Round(DistMils * 100) / 100);
+                                    if IsOverlap then
+                                    begin
+                                        AddJSONNumber(VProps, 'overlap_x_mils', Round(OverlapX * 100) / 100);
+                                        AddJSONNumber(VProps, 'overlap_y_mils', Round(OverlapY * 100) / 100);
+                                    end;
+                                    AddJSONNumber(VProps, 'b_x', CoordToMils(Other.x - Board.XOrigin));
+                                    AddJSONNumber(VProps, 'b_y', CoordToMils(Other.y - Board.YOrigin));
+                                    ViolationsArray.Add(BuildJSONObject(VProps, 2));
+                                finally
+                                    VProps.Free;
                                 end;
-                                AddJSONNumber(VProps, 'b_x', CoordToMils(Other.x - Board.XOrigin));
-                                AddJSONNumber(VProps, 'b_y', CoordToMils(Other.y - Board.YOrigin));
-                                ViolationsArray.Add(BuildJSONObject(VProps, 2));
-                            finally
-                                VProps.Free;
                             end;
                         end;
                     end;
+
+                    Other := Iterator.NextPCBObject;
                 end;
-
-                Other := Iterator.NextPCBObject;
+            finally
+                Board.BoardIterator_Destroy(Iterator);
             end;
-
-            Board.BoardIterator_Destroy(Iterator);
             Processed.Add(Target.Name.Text);
         end;
 
@@ -2405,54 +2451,58 @@ begin
         begin
             Component := Board.GetPcbComponentByRefDes(TargetNames[i]);
             GrpIter := Component.GroupIterator_Create;
-            GrpIter.SetState_FilterAll;
-            GrpIter.AddFilter_ObjectSet(MkSet(ePadObject));
+            try
+                GrpIter.SetState_FilterAll;
+                GrpIter.AddFilter_ObjectSet(MkSet(ePadObject));
 
-            Pad := GrpIter.FirstPCBObject;
-            while (Pad <> nil) do
-            begin
-                if (Pad.Net <> nil) then
-                    if (NetNames.IndexOf(Pad.Net.Name) < 0) then
-                        NetNames.Add(Pad.Net.Name);
-                Pad := GrpIter.NextPCBObject;
+                Pad := GrpIter.FirstPCBObject;
+                while (Pad <> nil) do
+                begin
+                    if (Pad.Net <> nil) then
+                        if (NetNames.IndexOf(Pad.Net.Name) < 0) then
+                            NetNames.Add(Pad.Net.Name);
+                    Pad := GrpIter.NextPCBObject;
+                end;
+            finally
+                Component.GroupIterator_Destroy(GrpIter);
             end;
-
-            Component.GroupIterator_Destroy(GrpIter);
         end;
 
         // One board-wide pass: emit every pad on any of those nets
         Iterator := Board.BoardIterator_Create;
-        Iterator.AddFilter_ObjectSet(MkSet(ePadObject));
-        Iterator.AddFilter_IPCB_LayerSet(LayerSet.AllLayers);
-        Iterator.AddFilter_Method(eProcessAll);
+        try
+            Iterator.AddFilter_ObjectSet(MkSet(ePadObject));
+            Iterator.AddFilter_IPCB_LayerSet(LayerSet.AllLayers);
+            Iterator.AddFilter_Method(eProcessAll);
 
-        Pad := Iterator.FirstPCBObject;
-        while (Pad <> nil) do
-        begin
-            if (Pad.Net <> nil) then
+            Pad := Iterator.FirstPCBObject;
+            while (Pad <> nil) do
             begin
-                if (NetNames.IndexOf(Pad.Net.Name) >= 0) then
+                if (Pad.Net <> nil) then
                 begin
-                    PadProps := TStringList.Create;
-                    try
-                        AddJSONProperty(PadProps, 'net', Pad.Net.Name);
-                        if (Pad.Component <> nil) then
-                            AddJSONProperty(PadProps, 'designator', Pad.Component.Name.Text)
-                        else
-                            AddJSONProperty(PadProps, 'designator', '');
-                        AddJSONProperty(PadProps, 'pin', Pad.Name);
-                        AddJSONNumber(PadProps, 'x', CoordToMils(Pad.x - xorigin));
-                        AddJSONNumber(PadProps, 'y', CoordToMils(Pad.y - yorigin));
-                        PadsArray.Add(BuildJSONObject(PadProps, 2));
-                    finally
-                        PadProps.Free;
+                    if (NetNames.IndexOf(Pad.Net.Name) >= 0) then
+                    begin
+                        PadProps := TStringList.Create;
+                        try
+                            AddJSONProperty(PadProps, 'net', Pad.Net.Name);
+                            if (Pad.Component <> nil) then
+                                AddJSONProperty(PadProps, 'designator', Pad.Component.Name.Text)
+                            else
+                                AddJSONProperty(PadProps, 'designator', '');
+                            AddJSONProperty(PadProps, 'pin', Pad.Name);
+                            AddJSONNumber(PadProps, 'x', CoordToMils(Pad.x - xorigin));
+                            AddJSONNumber(PadProps, 'y', CoordToMils(Pad.y - yorigin));
+                            PadsArray.Add(BuildJSONObject(PadProps, 2));
+                        finally
+                            PadProps.Free;
+                        end;
                     end;
                 end;
+                Pad := Iterator.NextPCBObject;
             end;
-            Pad := Iterator.NextPCBObject;
+        finally
+            Board.BoardIterator_Destroy(Iterator);
         end;
-
-        Board.BoardIterator_Destroy(Iterator);
 
         // Build the result - include the resolved targets so the caller
         // knows which components were analyzed when using the selection
@@ -2531,69 +2581,73 @@ begin
     try
         // Single transaction for the whole batch (one undo step)
         PCBServer.PreProcess;
+        try
 
-        for i := 0 to PlacementsList.Count - 1 do
-        begin
-            Entry := Trim(PlacementsList[i]);
-            if (Entry <> '') then
+            for i := 0 to PlacementsList.Count - 1 do
             begin
-                Designator := Trim(GetFieldFromPipeString(Entry, 0));
-                NewX := SafeStrToFloat(GetFieldFromPipeString(Entry, 1));
-                NewY := SafeStrToFloat(GetFieldFromPipeString(Entry, 2));
-
-                // Rotation is optional: missing/empty field means keep current
-                FieldValue := Trim(GetFieldFromPipeString(Entry, 3));
-                if (FieldValue <> '') then
-                    Rotation := SafeStrToFloat(FieldValue)
-                else
-                    Rotation := -1;
-
-                LayerStr := LowerCase(Trim(GetFieldFromPipeString(Entry, 4)));
-
-                Component := Board.GetPcbComponentByRefDes(Designator);
-
-                if (Component <> nil) then
+                Entry := Trim(PlacementsList[i]);
+                if (Entry <> '') then
                 begin
-                    PCBServer.SendMessageToRobots(Component.I_ObjectAddress, c_Broadcast, PCBM_BeginModify, c_NoEventData);
+                    Designator := Trim(GetFieldFromPipeString(Entry, 0));
+                    NewX := SafeStrToFloat(GetFieldFromPipeString(Entry, 1));
+                    NewY := SafeStrToFloat(GetFieldFromPipeString(Entry, 2));
 
-                    // Change layer first: flipping mirrors the footprint, so
-                    // position and rotation are applied afterwards to keep the
-                    // requested values authoritative
-                    if (LayerStr = 'top') and (Component.Layer = eBottomLayer) then
-                        Component.Layer := eTopLayer
-                    else if (LayerStr = 'bottom') and (Component.Layer = eTopLayer) then
-                        Component.Layer := eBottomLayer;
+                    // Rotation is optional: missing/empty field means keep current
+                    FieldValue := Trim(GetFieldFromPipeString(Entry, 3));
+                    if (FieldValue <> '') then
+                        Rotation := SafeStrToFloat(FieldValue)
+                    else
+                        Rotation := -1;
 
-                    Component.MoveToXY(MilsToCoord(NewX) + xorigin, MilsToCoord(NewY) + yorigin);
+                    LayerStr := LowerCase(Trim(GetFieldFromPipeString(Entry, 4)));
 
-                    if (Rotation >= 0) then
-                        Component.Rotation := Rotation;
+                    Component := Board.GetPcbComponentByRefDes(Designator);
 
-                    PCBServer.SendMessageToRobots(Component.I_ObjectAddress, c_Broadcast, PCBM_EndModify, c_NoEventData);
+                    if (Component <> nil) then
+                    begin
+                        PCBServer.SendMessageToRobots(Component.I_ObjectAddress, c_Broadcast, PCBM_BeginModify, c_NoEventData);
+                        try
 
-                    // Report the final state as Altium sees it
-                    CompProps := TStringList.Create;
-                    try
-                        AddJSONProperty(CompProps, 'designator', Component.Name.Text);
-                        AddJSONNumber(CompProps, 'x', CoordToMils(Component.x - xorigin));
-                        AddJSONNumber(CompProps, 'y', CoordToMils(Component.y - yorigin));
-                        AddJSONNumber(CompProps, 'rotation', Component.Rotation);
-                        AddJSONProperty(CompProps, 'layer', Layer2String(Component.Layer));
-                        PlacedArray.Add(BuildJSONObject(CompProps, 2));
-                    finally
-                        CompProps.Free;
+                            // Change layer first: flipping mirrors the footprint, so
+                            // position and rotation are applied afterwards to keep the
+                            // requested values authoritative
+                            if (LayerStr = 'top') and (Component.Layer = eBottomLayer) then
+                                Component.Layer := eTopLayer
+                            else if (LayerStr = 'bottom') and (Component.Layer = eTopLayer) then
+                                Component.Layer := eBottomLayer;
+
+                            Component.MoveToXY(MilsToCoord(NewX) + xorigin, MilsToCoord(NewY) + yorigin);
+
+                            if (Rotation >= 0) then
+                                Component.Rotation := Rotation;
+                        finally
+                            PCBServer.SendMessageToRobots(Component.I_ObjectAddress, c_Broadcast, PCBM_EndModify, c_NoEventData);
+                        end;
+
+                        // Report the final state as Altium sees it
+                        CompProps := TStringList.Create;
+                        try
+                            AddJSONProperty(CompProps, 'designator', Component.Name.Text);
+                            AddJSONNumber(CompProps, 'x', CoordToMils(Component.x - xorigin));
+                            AddJSONNumber(CompProps, 'y', CoordToMils(Component.y - yorigin));
+                            AddJSONNumber(CompProps, 'rotation', Component.Rotation);
+                            AddJSONProperty(CompProps, 'layer', Layer2String(Component.Layer));
+                            PlacedArray.Add(BuildJSONObject(CompProps, 2));
+                        finally
+                            CompProps.Free;
+                        end;
+
+                        PlacedCount := PlacedCount + 1;
+                    end
+                    else
+                    begin
+                        MissingArray.Add('"' + JSONEscapeString(Designator) + '"');
                     end;
-
-                    PlacedCount := PlacedCount + 1;
-                end
-                else
-                begin
-                    MissingArray.Add('"' + JSONEscapeString(Designator) + '"');
                 end;
             end;
+        finally
+            PCBServer.PostProcess;
         end;
-
-        PCBServer.PostProcess;
 
         // Update PCB document
         Client.SendMessage('PCB:Zoom', 'Action=Redraw', 255, Client.CurrentView);

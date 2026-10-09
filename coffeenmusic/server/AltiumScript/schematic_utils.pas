@@ -87,67 +87,69 @@ begin
         try
             // Create pin iterator
             PinIterator := SchComponent.SchIterator_Create;
-            PinIterator.AddFilter_ObjectSet(MkSet(ePin));
+            try
+                PinIterator.AddFilter_ObjectSet(MkSet(ePin));
             
-            Pin := PinIterator.FirstSchObject;
+                Pin := PinIterator.FirstSchObject;
             
-            // Process all pins
-            while (Pin <> nil) do
-            begin
-                // Create pin properties
-                PinProps := TStringList.Create;
+                // Process all pins
+                while (Pin <> nil) do
+                begin
+                    // Create pin properties
+                    PinProps := TStringList.Create;
                 
-                try
-                    // Get pin properties
-                    PinNum := Pin.Designator;
-                    PinName := Pin.Name;
+                    try
+                        // Get pin properties
+                        PinNum := Pin.Designator;
+                        PinName := Pin.Name;
                     
-                    // Convert electrical type to string
-                    case Pin.Electrical of
-                        eElectricHiZ: PinType := 'eElectricHiZ';
-                        eElectricInput: PinType := 'eElectricInput';
-                        eElectricIO: PinType := 'eElectricIO';
-                        eElectricOpenCollector: PinType := 'eElectricOpenCollector';
-                        eElectricOpenEmitter: PinType := 'eElectricOpenEmitter';
-                        eElectricOutput: PinType := 'eElectricOutput';
-                        eElectricPassive: PinType := 'eElectricPassive';
-                        eElectricPower: PinType := 'eElectricPower';
-                        else PinType := 'eElectricPassive';
-                    end;
+                        // Convert electrical type to string
+                        case Pin.Electrical of
+                            eElectricHiZ: PinType := 'eElectricHiZ';
+                            eElectricInput: PinType := 'eElectricInput';
+                            eElectricIO: PinType := 'eElectricIO';
+                            eElectricOpenCollector: PinType := 'eElectricOpenCollector';
+                            eElectricOpenEmitter: PinType := 'eElectricOpenEmitter';
+                            eElectricOutput: PinType := 'eElectricOutput';
+                            eElectricPassive: PinType := 'eElectricPassive';
+                            eElectricPower: PinType := 'eElectricPower';
+                            else PinType := 'eElectricPassive';
+                        end;
                     
-                    // Convert orientation to string
-                    case Pin.Orientation of
-                        eRotate0: PinOrient := 'eRotate0';
-                        eRotate90: PinOrient := 'eRotate90';
-                        eRotate180: PinOrient := 'eRotate180';
-                        eRotate270: PinOrient := 'eRotate270';
-                        else PinOrient := 'eRotate0';
-                    end;
+                        // Convert orientation to string
+                        case Pin.Orientation of
+                            eRotate0: PinOrient := 'eRotate0';
+                            eRotate90: PinOrient := 'eRotate90';
+                            eRotate180: PinOrient := 'eRotate180';
+                            eRotate270: PinOrient := 'eRotate270';
+                            else PinOrient := 'eRotate0';
+                        end;
                     
-                    // Get coordinates
-                    PinX := CoordToMils(Pin.Location.X);
-                    PinY := CoordToMils(Pin.Location.Y);
+                        // Get coordinates
+                        PinX := CoordToMils(Pin.Location.X);
+                        PinY := CoordToMils(Pin.Location.Y);
                     
-                    // Add pin properties
-                    AddJSONProperty(PinProps, 'pin_number', PinNum);
-                    AddJSONProperty(PinProps, 'pin_name', PinName);
-                    AddJSONProperty(PinProps, 'pin_type', PinType);
-                    AddJSONProperty(PinProps, 'pin_orientation', PinOrient);
-                    AddJSONNumber(PinProps, 'x', PinX);
-                    AddJSONNumber(PinProps, 'y', PinY);
-                    AddJSONInteger(PinProps, 'owner_part_id', Pin.OwnerPartId);
+                        // Add pin properties
+                        AddJSONProperty(PinProps, 'pin_number', PinNum);
+                        AddJSONProperty(PinProps, 'pin_name', PinName);
+                        AddJSONProperty(PinProps, 'pin_type', PinType);
+                        AddJSONProperty(PinProps, 'pin_orientation', PinOrient);
+                        AddJSONNumber(PinProps, 'x', PinX);
+                        AddJSONNumber(PinProps, 'y', PinY);
+                        AddJSONInteger(PinProps, 'owner_part_id', Pin.OwnerPartId);
 
-                    // Add this pin to the pins array
-                    PinsArray.Add(BuildJSONObject(PinProps, 1));
+                        // Add this pin to the pins array
+                        PinsArray.Add(BuildJSONObject(PinProps, 1));
                     
-                    // Move to next pin
-                    Pin := PinIterator.NextSchObject;
-                finally
-                    PinProps.Free;
+                        // Move to next pin
+                        Pin := PinIterator.NextSchObject;
+                    finally
+                        PinProps.Free;
+                    end;
                 end;
+            finally
+                SchComponent.SchIterator_Destroy(PinIterator);
             end;
-            
-            SchComponent.SchIterator_Destroy(PinIterator);
             
             // Add pins array to component - pass empty string as the array name
             // because we're adding it directly to the ComponentProps
@@ -710,49 +712,51 @@ begin
         // Create library iterator to enumerate all symbols
         // NOTE: Must use SchLibIterator_Create (not SchIterator_Create) for SchLib documents
         LibIterator := CurrentLib.SchLibIterator_Create;
-        LibIterator.AddFilter_ObjectSet(MkSet(eSchComponent));
+        try
+            LibIterator.AddFilter_ObjectSet(MkSet(eSchComponent));
 
-        LibComp := LibIterator.FirstSchObject;
-        while (LibComp <> Nil) do
-        begin
-            LibRefUpper := UpperCase(LibComp.LibReference);
-
-            // Add to all symbols list
-            AllSymbolsArray.Add('"' + LibComp.LibReference + '"');
-
-            // Check for partial match
-            if (Pos(SearchUpper, LibRefUpper) > 0) then
+            LibComp := LibIterator.FirstSchObject;
+            while (LibComp <> Nil) do
             begin
-                MatchCount := MatchCount + 1;
+                LibRefUpper := UpperCase(LibComp.LibReference);
 
-                // Record this match
-                MatchProps := TStringList.Create;
-                try
-                    AddJSONProperty(MatchProps, 'name', LibComp.LibReference);
-                    AddJSONProperty(MatchProps, 'description', LibComp.ComponentDescription);
+                // Add to all symbols list
+                AllSymbolsArray.Add('"' + LibComp.LibReference + '"');
 
-                    // Check for exact match
+                // Check for partial match
+                if (Pos(SearchUpper, LibRefUpper) > 0) then
+                begin
+                    MatchCount := MatchCount + 1;
+
+                    // Record this match
+                    MatchProps := TStringList.Create;
+                    try
+                        AddJSONProperty(MatchProps, 'name', LibComp.LibReference);
+                        AddJSONProperty(MatchProps, 'description', LibComp.ComponentDescription);
+
+                        // Check for exact match
+                        if (LibRefUpper = SearchUpper) then
+                            AddJSONBoolean(MatchProps, 'exact_match', True)
+                        else
+                            AddJSONBoolean(MatchProps, 'exact_match', False);
+
+                        MatchesArray.Add(BuildJSONObject(MatchProps, 1));
+                    finally
+                        MatchProps.Free;
+                    end;
+
+                    // Prefer exact match, otherwise use first partial match
                     if (LibRefUpper = SearchUpper) then
-                        AddJSONBoolean(MatchProps, 'exact_match', True)
-                    else
-                        AddJSONBoolean(MatchProps, 'exact_match', False);
-
-                    MatchesArray.Add(BuildJSONObject(MatchProps, 1));
-                finally
-                    MatchProps.Free;
+                        MatchedComp := LibComp
+                    else if (MatchedComp = Nil) then
+                        MatchedComp := LibComp;
                 end;
 
-                // Prefer exact match, otherwise use first partial match
-                if (LibRefUpper = SearchUpper) then
-                    MatchedComp := LibComp
-                else if (MatchedComp = Nil) then
-                    MatchedComp := LibComp;
+                LibComp := LibIterator.NextSchObject;
             end;
-
-            LibComp := LibIterator.NextSchObject;
+        finally
+            CurrentLib.SchIterator_Destroy(LibIterator);
         end;
-
-        CurrentLib.SchIterator_Destroy(LibIterator);
 
         // Navigate to the matched component if found
         if (MatchedComp <> Nil) then
@@ -1016,264 +1020,266 @@ begin
         AddJSONProperty(ResultProps, 'library_name', ExtractFileName(CurrentLib.DocumentName));
 
         LibIterator := CurrentLib.SchLibIterator_Create;
-        LibIterator.AddFilter_ObjectSet(MkSet(eSchComponent));
+        try
+            LibIterator.AddFilter_ObjectSet(MkSet(eSchComponent));
 
-        LibComp := LibIterator.FirstSchObject;
-        while (LibComp <> Nil) do
-        begin
-            if (SymbolName = '') then
+            LibComp := LibIterator.FirstSchObject;
+            while (LibComp <> Nil) do
             begin
-                // Inventory mode: count primitives by type
-                Counts := TStringList.Create;
-                SymProps := TStringList.Create;
-                try
-                    PrimIterator := LibComp.SchIterator_Create;
-                    Prim := PrimIterator.FirstSchObject;
-                    while (Prim <> Nil) do
-                    begin
-                        case Prim.ObjectId of
-                            ePin:            TypeName := 'pins';
-                            eRectangle:      TypeName := 'rectangles';
-                            eLine:           TypeName := 'lines';
-                            ePolyline:       TypeName := 'polylines';
-                            ePolygon:        TypeName := 'polygons';
-                            eArc:            TypeName := 'arcs';
-                            eEllipticalArc:  TypeName := 'elliptical_arcs';
-                            eEllipse:        TypeName := 'ellipses';
-                            eBezier:         TypeName := 'beziers';
-                            ePie:            TypeName := 'pies';
-                            eRoundRectangle: TypeName := 'round_rectangles';
-                            eLabel:          TypeName := 'labels';
-                            eParameter:      TypeName := '';
-                            eDesignator:     TypeName := '';
-                        else
-                            TypeName := 'other';
-                        end;
-
-                        if (TypeName <> '') then
+                if (SymbolName = '') then
+                begin
+                    // Inventory mode: count primitives by type
+                    Counts := TStringList.Create;
+                    SymProps := TStringList.Create;
+                    try
+                        PrimIterator := LibComp.SchIterator_Create;
+                        Prim := PrimIterator.FirstSchObject;
+                        while (Prim <> Nil) do
                         begin
-                            i := Counts.IndexOfName(TypeName);
-                            if (i < 0) then
-                                Counts.Add(TypeName + '=1')
-                            else
-                                Counts[i] := TypeName + '=' + IntToStr(StrToInt(Counts.ValueFromIndex[i]) + 1);
-                        end;
-
-                        Prim := PrimIterator.NextSchObject;
-                    end;
-                    LibComp.SchIterator_Destroy(PrimIterator);
-
-                    AddJSONProperty(SymProps, 'name', LibComp.LibReference);
-                    AddJSONProperty(SymProps, 'description', LibComp.ComponentDescription);
-                    AddJSONInteger(SymProps, 'part_count', LibComp.PartCount);
-                    for i := 0 to Counts.Count - 1 do
-                        AddJSONInteger(SymProps, Counts.Names[i], StrToInt(Counts.ValueFromIndex[i]));
-
-                    SymbolsArray.Add(BuildJSONObject(SymProps, 1));
-                finally
-                    Counts.Free;
-                    SymProps.Free;
-                end;
-            end
-            else if (SymbolName = '*') or (UpperCase(LibComp.LibReference) = UpperCase(SymbolName)) then
-            begin
-                // Dump mode: full geometry of every primitive.
-                // SymbolName '*' dumps every symbol into the symbols array.
-                Found := True;
-                SymProps := TStringList.Create;
-                PrimsArray := TStringList.Create;
-                try
-                    AddJSONProperty(SymProps, 'symbol_name', LibComp.LibReference);
-                    AddJSONProperty(SymProps, 'description', LibComp.ComponentDescription);
-                    AddJSONInteger(SymProps, 'part_count', LibComp.PartCount);
-
-                    PrimIterator := LibComp.SchIterator_Create;
-                    Prim := PrimIterator.FirstSchObject;
-                    while (Prim <> Nil) do
-                    begin
-                        PrimProps := TStringList.Create;
-                        try
-                          // One unreadable primitive must not crash the dump:
-                          // a property access that throws would otherwise leave
-                          // the script paused in the debugger, wedging all
-                          // later script runs
-                          try
                             case Prim.ObjectId of
-                                ePin:
-                                begin
-                                    PinObj := Prim;
-                                    AddJSONProperty(PrimProps, 'type', 'pin');
-                                    AddJSONProperty(PrimProps, 'pin_number', PinObj.Designator);
-                                    AddJSONProperty(PrimProps, 'pin_name', PinObj.Name);
-                                    AddJSONInteger(PrimProps, 'electrical', PinObj.Electrical);
-                                    AddJSONInteger(PrimProps, 'orientation', PinObj.Orientation);
-                                    AddJSONNumber(PrimProps, 'x', CoordToMils(PinObj.Location.X));
-                                    AddJSONNumber(PrimProps, 'y', CoordToMils(PinObj.Location.Y));
-                                    AddJSONNumber(PrimProps, 'length', CoordToMils(PinObj.PinLength));
-                                    AddJSONBoolean(PrimProps, 'show_name', PinObj.ShowName);
-                                    AddJSONBoolean(PrimProps, 'show_designator', PinObj.ShowDesignator);
-                                end;
-                                eRectangle:
-                                begin
-                                    AddJSONProperty(PrimProps, 'type', 'rectangle');
-                                    AddJSONNumber(PrimProps, 'x1', CoordToMils(Prim.Location.X));
-                                    AddJSONNumber(PrimProps, 'y1', CoordToMils(Prim.Location.Y));
-                                    AddJSONNumber(PrimProps, 'x2', CoordToMils(Prim.Corner.X));
-                                    AddJSONNumber(PrimProps, 'y2', CoordToMils(Prim.Corner.Y));
-                                    AddJSONInteger(PrimProps, 'line_width', Prim.LineWidth);
-                                    AddJSONBoolean(PrimProps, 'is_solid', Prim.IsSolid);
-                                end;
-                                eLine:
-                                begin
-                                    AddJSONProperty(PrimProps, 'type', 'line');
-                                    AddJSONNumber(PrimProps, 'x1', CoordToMils(Prim.Location.X));
-                                    AddJSONNumber(PrimProps, 'y1', CoordToMils(Prim.Location.Y));
-                                    AddJSONNumber(PrimProps, 'x2', CoordToMils(Prim.Corner.X));
-                                    AddJSONNumber(PrimProps, 'y2', CoordToMils(Prim.Corner.Y));
-                                    AddJSONInteger(PrimProps, 'line_width', Prim.LineWidth);
-                                end;
-                                ePolyline:
-                                begin
-                                    AddJSONProperty(PrimProps, 'type', 'polyline');
-                                    AddJSONInteger(PrimProps, 'line_width', Prim.LineWidth);
-                                    AddVerticesProperty(PrimProps, Prim);
-                                end;
-                                ePolygon:
-                                begin
-                                    AddJSONProperty(PrimProps, 'type', 'polygon');
-                                    AddJSONInteger(PrimProps, 'line_width', Prim.LineWidth);
-                                    AddJSONBoolean(PrimProps, 'is_solid', Prim.IsSolid);
-                                    AddVerticesProperty(PrimProps, Prim);
-                                end;
-                                eArc:
-                                begin
-                                    AddJSONProperty(PrimProps, 'type', 'arc');
-                                    AddJSONNumber(PrimProps, 'cx', CoordToMils(Prim.Location.X));
-                                    AddJSONNumber(PrimProps, 'cy', CoordToMils(Prim.Location.Y));
-                                    AddJSONNumber(PrimProps, 'radius', CoordToMils(Prim.Radius));
-                                    AddJSONNumber(PrimProps, 'start_angle', Prim.StartAngle);
-                                    AddJSONNumber(PrimProps, 'end_angle', Prim.EndAngle);
-                                    AddJSONInteger(PrimProps, 'line_width', Prim.LineWidth);
-                                end;
-                                eEllipticalArc:
-                                begin
-                                    AddJSONProperty(PrimProps, 'type', 'elliptical_arc');
-                                    AddJSONNumber(PrimProps, 'cx', CoordToMils(Prim.Location.X));
-                                    AddJSONNumber(PrimProps, 'cy', CoordToMils(Prim.Location.Y));
-                                    AddJSONNumber(PrimProps, 'radius', CoordToMils(Prim.Radius));
-                                    AddJSONNumber(PrimProps, 'secondary_radius', CoordToMils(Prim.SecondaryRadius));
-                                    AddJSONNumber(PrimProps, 'start_angle', Prim.StartAngle);
-                                    AddJSONNumber(PrimProps, 'end_angle', Prim.EndAngle);
-                                    AddJSONInteger(PrimProps, 'line_width', Prim.LineWidth);
-                                end;
-                                eEllipse:
-                                begin
-                                    AddJSONProperty(PrimProps, 'type', 'ellipse');
-                                    AddJSONNumber(PrimProps, 'cx', CoordToMils(Prim.Location.X));
-                                    AddJSONNumber(PrimProps, 'cy', CoordToMils(Prim.Location.Y));
-                                    AddJSONNumber(PrimProps, 'radius', CoordToMils(Prim.Radius));
-                                    AddJSONNumber(PrimProps, 'secondary_radius', CoordToMils(Prim.SecondaryRadius));
-                                    AddJSONBoolean(PrimProps, 'is_solid', Prim.IsSolid);
-                                    AddJSONInteger(PrimProps, 'line_width', Prim.LineWidth);
-                                end;
-                                eBezier:
-                                begin
-                                    AddJSONProperty(PrimProps, 'type', 'bezier');
-                                    AddJSONInteger(PrimProps, 'line_width', Prim.LineWidth);
-                                    AddVerticesProperty(PrimProps, Prim);
-                                end;
-                                ePie:
-                                begin
-                                    AddJSONProperty(PrimProps, 'type', 'pie');
-                                    AddJSONNumber(PrimProps, 'cx', CoordToMils(Prim.Location.X));
-                                    AddJSONNumber(PrimProps, 'cy', CoordToMils(Prim.Location.Y));
-                                    AddJSONNumber(PrimProps, 'radius', CoordToMils(Prim.Radius));
-                                    AddJSONNumber(PrimProps, 'start_angle', Prim.StartAngle);
-                                    AddJSONNumber(PrimProps, 'end_angle', Prim.EndAngle);
-                                    AddJSONBoolean(PrimProps, 'is_solid', Prim.IsSolid);
-                                    AddJSONInteger(PrimProps, 'line_width', Prim.LineWidth);
-                                end;
-                                eRoundRectangle:
-                                begin
-                                    AddJSONProperty(PrimProps, 'type', 'round_rectangle');
-                                    AddJSONNumber(PrimProps, 'x1', CoordToMils(Prim.Location.X));
-                                    AddJSONNumber(PrimProps, 'y1', CoordToMils(Prim.Location.Y));
-                                    AddJSONNumber(PrimProps, 'x2', CoordToMils(Prim.Corner.X));
-                                    AddJSONNumber(PrimProps, 'y2', CoordToMils(Prim.Corner.Y));
-                                    AddJSONNumber(PrimProps, 'corner_x_radius', CoordToMils(Prim.CornerXRadius));
-                                    AddJSONNumber(PrimProps, 'corner_y_radius', CoordToMils(Prim.CornerYRadius));
-                                    AddJSONInteger(PrimProps, 'line_width', Prim.LineWidth);
-                                    AddJSONBoolean(PrimProps, 'is_solid', Prim.IsSolid);
-                                end;
-                                eLabel:
-                                begin
-                                    AddJSONProperty(PrimProps, 'type', 'label');
-                                    AddJSONProperty(PrimProps, 'text', Prim.Text);
-                                    AddJSONNumber(PrimProps, 'x', CoordToMils(Prim.Location.X));
-                                    AddJSONNumber(PrimProps, 'y', CoordToMils(Prim.Location.Y));
-                                end;
-                            eParameter:
-                                AddJSONProperty(PrimProps, 'type', '');
-                            eDesignator:
-                                AddJSONProperty(PrimProps, 'type', '');
-                            // Footprint/model links are metadata, not drawn
-                            // graphics - excluded like parameters
-                            eImplementation:
-                                AddJSONProperty(PrimProps, 'type', '');
-                            eImplementationMap:
-                                AddJSONProperty(PrimProps, 'type', '');
+                                ePin:            TypeName := 'pins';
+                                eRectangle:      TypeName := 'rectangles';
+                                eLine:           TypeName := 'lines';
+                                ePolyline:       TypeName := 'polylines';
+                                ePolygon:        TypeName := 'polygons';
+                                eArc:            TypeName := 'arcs';
+                                eEllipticalArc:  TypeName := 'elliptical_arcs';
+                                eEllipse:        TypeName := 'ellipses';
+                                eBezier:         TypeName := 'beziers';
+                                ePie:            TypeName := 'pies';
+                                eRoundRectangle: TypeName := 'round_rectangles';
+                                eLabel:          TypeName := 'labels';
+                                eParameter:      TypeName := '';
+                                eDesignator:     TypeName := '';
                             else
-                            begin
-                                // Surface unknown graphic types instead of
-                                // hiding them - the object_id identifies them
-                                AddJSONProperty(PrimProps, 'type', 'unknown');
-                                AddJSONInteger(PrimProps, 'object_id', Prim.ObjectId);
-                            end;
+                                TypeName := 'other';
                             end;
 
-                            if (PrimProps.Count > 0) then
+                            if (TypeName <> '') then
                             begin
-                                // Skip parameters/designator
-                                if (Pos('"type": ""', PrimProps[0]) = 0) then
-                                begin
-                                    // Unknown object kinds may not expose
-                                    // OwnerPartId (they are not standard
-                                    // graphical objects) - do not touch it
-                                    if (Pos('"type": "unknown"', PrimProps[0]) = 0) then
-                                        AddJSONInteger(PrimProps, 'owner_part_id', Prim.OwnerPartId);
-                                    PrimsArray.Add(BuildJSONObject(PrimProps, 1));
-                                end;
+                                i := Counts.IndexOfName(TypeName);
+                                if (i < 0) then
+                                    Counts.Add(TypeName + '=1')
+                                else
+                                    Counts[i] := TypeName + '=' + IntToStr(StrToInt(Counts.ValueFromIndex[i]) + 1);
                             end;
-                          except
-                            PrimProps.Clear;
-                            AddJSONProperty(PrimProps, 'type', 'unreadable');
-                            PrimsArray.Add(BuildJSONObject(PrimProps, 1));
-                          end;
-                        finally
-                            PrimProps.Free;
+
+                            Prim := PrimIterator.NextSchObject;
                         end;
+                        LibComp.SchIterator_Destroy(PrimIterator);
 
-                        Prim := PrimIterator.NextSchObject;
+                        AddJSONProperty(SymProps, 'name', LibComp.LibReference);
+                        AddJSONProperty(SymProps, 'description', LibComp.ComponentDescription);
+                        AddJSONInteger(SymProps, 'part_count', LibComp.PartCount);
+                        for i := 0 to Counts.Count - 1 do
+                            AddJSONInteger(SymProps, Counts.Names[i], StrToInt(Counts.ValueFromIndex[i]));
+
+                        SymbolsArray.Add(BuildJSONObject(SymProps, 1));
+                    finally
+                        Counts.Free;
+                        SymProps.Free;
                     end;
-                    LibComp.SchIterator_Destroy(PrimIterator);
+                end
+                else if (SymbolName = '*') or (UpperCase(LibComp.LibReference) = UpperCase(SymbolName)) then
+                begin
+                    // Dump mode: full geometry of every primitive.
+                    // SymbolName '*' dumps every symbol into the symbols array.
+                    Found := True;
+                    SymProps := TStringList.Create;
+                    PrimsArray := TStringList.Create;
+                    try
+                        AddJSONProperty(SymProps, 'symbol_name', LibComp.LibReference);
+                        AddJSONProperty(SymProps, 'description', LibComp.ComponentDescription);
+                        AddJSONInteger(SymProps, 'part_count', LibComp.PartCount);
 
-                    SymProps.Add(BuildJSONArray(PrimsArray, 'primitives', 1));
+                        PrimIterator := LibComp.SchIterator_Create;
+                        Prim := PrimIterator.FirstSchObject;
+                        while (Prim <> Nil) do
+                        begin
+                            PrimProps := TStringList.Create;
+                            try
+                              // One unreadable primitive must not crash the dump:
+                              // a property access that throws would otherwise leave
+                              // the script paused in the debugger, wedging all
+                              // later script runs
+                              try
+                                case Prim.ObjectId of
+                                    ePin:
+                                    begin
+                                        PinObj := Prim;
+                                        AddJSONProperty(PrimProps, 'type', 'pin');
+                                        AddJSONProperty(PrimProps, 'pin_number', PinObj.Designator);
+                                        AddJSONProperty(PrimProps, 'pin_name', PinObj.Name);
+                                        AddJSONInteger(PrimProps, 'electrical', PinObj.Electrical);
+                                        AddJSONInteger(PrimProps, 'orientation', PinObj.Orientation);
+                                        AddJSONNumber(PrimProps, 'x', CoordToMils(PinObj.Location.X));
+                                        AddJSONNumber(PrimProps, 'y', CoordToMils(PinObj.Location.Y));
+                                        AddJSONNumber(PrimProps, 'length', CoordToMils(PinObj.PinLength));
+                                        AddJSONBoolean(PrimProps, 'show_name', PinObj.ShowName);
+                                        AddJSONBoolean(PrimProps, 'show_designator', PinObj.ShowDesignator);
+                                    end;
+                                    eRectangle:
+                                    begin
+                                        AddJSONProperty(PrimProps, 'type', 'rectangle');
+                                        AddJSONNumber(PrimProps, 'x1', CoordToMils(Prim.Location.X));
+                                        AddJSONNumber(PrimProps, 'y1', CoordToMils(Prim.Location.Y));
+                                        AddJSONNumber(PrimProps, 'x2', CoordToMils(Prim.Corner.X));
+                                        AddJSONNumber(PrimProps, 'y2', CoordToMils(Prim.Corner.Y));
+                                        AddJSONInteger(PrimProps, 'line_width', Prim.LineWidth);
+                                        AddJSONBoolean(PrimProps, 'is_solid', Prim.IsSolid);
+                                    end;
+                                    eLine:
+                                    begin
+                                        AddJSONProperty(PrimProps, 'type', 'line');
+                                        AddJSONNumber(PrimProps, 'x1', CoordToMils(Prim.Location.X));
+                                        AddJSONNumber(PrimProps, 'y1', CoordToMils(Prim.Location.Y));
+                                        AddJSONNumber(PrimProps, 'x2', CoordToMils(Prim.Corner.X));
+                                        AddJSONNumber(PrimProps, 'y2', CoordToMils(Prim.Corner.Y));
+                                        AddJSONInteger(PrimProps, 'line_width', Prim.LineWidth);
+                                    end;
+                                    ePolyline:
+                                    begin
+                                        AddJSONProperty(PrimProps, 'type', 'polyline');
+                                        AddJSONInteger(PrimProps, 'line_width', Prim.LineWidth);
+                                        AddVerticesProperty(PrimProps, Prim);
+                                    end;
+                                    ePolygon:
+                                    begin
+                                        AddJSONProperty(PrimProps, 'type', 'polygon');
+                                        AddJSONInteger(PrimProps, 'line_width', Prim.LineWidth);
+                                        AddJSONBoolean(PrimProps, 'is_solid', Prim.IsSolid);
+                                        AddVerticesProperty(PrimProps, Prim);
+                                    end;
+                                    eArc:
+                                    begin
+                                        AddJSONProperty(PrimProps, 'type', 'arc');
+                                        AddJSONNumber(PrimProps, 'cx', CoordToMils(Prim.Location.X));
+                                        AddJSONNumber(PrimProps, 'cy', CoordToMils(Prim.Location.Y));
+                                        AddJSONNumber(PrimProps, 'radius', CoordToMils(Prim.Radius));
+                                        AddJSONNumber(PrimProps, 'start_angle', Prim.StartAngle);
+                                        AddJSONNumber(PrimProps, 'end_angle', Prim.EndAngle);
+                                        AddJSONInteger(PrimProps, 'line_width', Prim.LineWidth);
+                                    end;
+                                    eEllipticalArc:
+                                    begin
+                                        AddJSONProperty(PrimProps, 'type', 'elliptical_arc');
+                                        AddJSONNumber(PrimProps, 'cx', CoordToMils(Prim.Location.X));
+                                        AddJSONNumber(PrimProps, 'cy', CoordToMils(Prim.Location.Y));
+                                        AddJSONNumber(PrimProps, 'radius', CoordToMils(Prim.Radius));
+                                        AddJSONNumber(PrimProps, 'secondary_radius', CoordToMils(Prim.SecondaryRadius));
+                                        AddJSONNumber(PrimProps, 'start_angle', Prim.StartAngle);
+                                        AddJSONNumber(PrimProps, 'end_angle', Prim.EndAngle);
+                                        AddJSONInteger(PrimProps, 'line_width', Prim.LineWidth);
+                                    end;
+                                    eEllipse:
+                                    begin
+                                        AddJSONProperty(PrimProps, 'type', 'ellipse');
+                                        AddJSONNumber(PrimProps, 'cx', CoordToMils(Prim.Location.X));
+                                        AddJSONNumber(PrimProps, 'cy', CoordToMils(Prim.Location.Y));
+                                        AddJSONNumber(PrimProps, 'radius', CoordToMils(Prim.Radius));
+                                        AddJSONNumber(PrimProps, 'secondary_radius', CoordToMils(Prim.SecondaryRadius));
+                                        AddJSONBoolean(PrimProps, 'is_solid', Prim.IsSolid);
+                                        AddJSONInteger(PrimProps, 'line_width', Prim.LineWidth);
+                                    end;
+                                    eBezier:
+                                    begin
+                                        AddJSONProperty(PrimProps, 'type', 'bezier');
+                                        AddJSONInteger(PrimProps, 'line_width', Prim.LineWidth);
+                                        AddVerticesProperty(PrimProps, Prim);
+                                    end;
+                                    ePie:
+                                    begin
+                                        AddJSONProperty(PrimProps, 'type', 'pie');
+                                        AddJSONNumber(PrimProps, 'cx', CoordToMils(Prim.Location.X));
+                                        AddJSONNumber(PrimProps, 'cy', CoordToMils(Prim.Location.Y));
+                                        AddJSONNumber(PrimProps, 'radius', CoordToMils(Prim.Radius));
+                                        AddJSONNumber(PrimProps, 'start_angle', Prim.StartAngle);
+                                        AddJSONNumber(PrimProps, 'end_angle', Prim.EndAngle);
+                                        AddJSONBoolean(PrimProps, 'is_solid', Prim.IsSolid);
+                                        AddJSONInteger(PrimProps, 'line_width', Prim.LineWidth);
+                                    end;
+                                    eRoundRectangle:
+                                    begin
+                                        AddJSONProperty(PrimProps, 'type', 'round_rectangle');
+                                        AddJSONNumber(PrimProps, 'x1', CoordToMils(Prim.Location.X));
+                                        AddJSONNumber(PrimProps, 'y1', CoordToMils(Prim.Location.Y));
+                                        AddJSONNumber(PrimProps, 'x2', CoordToMils(Prim.Corner.X));
+                                        AddJSONNumber(PrimProps, 'y2', CoordToMils(Prim.Corner.Y));
+                                        AddJSONNumber(PrimProps, 'corner_x_radius', CoordToMils(Prim.CornerXRadius));
+                                        AddJSONNumber(PrimProps, 'corner_y_radius', CoordToMils(Prim.CornerYRadius));
+                                        AddJSONInteger(PrimProps, 'line_width', Prim.LineWidth);
+                                        AddJSONBoolean(PrimProps, 'is_solid', Prim.IsSolid);
+                                    end;
+                                    eLabel:
+                                    begin
+                                        AddJSONProperty(PrimProps, 'type', 'label');
+                                        AddJSONProperty(PrimProps, 'text', Prim.Text);
+                                        AddJSONNumber(PrimProps, 'x', CoordToMils(Prim.Location.X));
+                                        AddJSONNumber(PrimProps, 'y', CoordToMils(Prim.Location.Y));
+                                    end;
+                                eParameter:
+                                    AddJSONProperty(PrimProps, 'type', '');
+                                eDesignator:
+                                    AddJSONProperty(PrimProps, 'type', '');
+                                // Footprint/model links are metadata, not drawn
+                                // graphics - excluded like parameters
+                                eImplementation:
+                                    AddJSONProperty(PrimProps, 'type', '');
+                                eImplementationMap:
+                                    AddJSONProperty(PrimProps, 'type', '');
+                                else
+                                begin
+                                    // Surface unknown graphic types instead of
+                                    // hiding them - the object_id identifies them
+                                    AddJSONProperty(PrimProps, 'type', 'unknown');
+                                    AddJSONInteger(PrimProps, 'object_id', Prim.ObjectId);
+                                end;
+                                end;
 
-                    if (SymbolName = '*') then
-                        SymbolsArray.Add(BuildJSONObject(SymProps, 1))
-                    else
-                        for i := 0 to SymProps.Count - 1 do
-                            ResultProps.Add(SymProps[i]);
-                finally
-                    SymProps.Free;
-                    PrimsArray.Free;
+                                if (PrimProps.Count > 0) then
+                                begin
+                                    // Skip parameters/designator
+                                    if (Pos('"type": ""', PrimProps[0]) = 0) then
+                                    begin
+                                        // Unknown object kinds may not expose
+                                        // OwnerPartId (they are not standard
+                                        // graphical objects) - do not touch it
+                                        if (Pos('"type": "unknown"', PrimProps[0]) = 0) then
+                                            AddJSONInteger(PrimProps, 'owner_part_id', Prim.OwnerPartId);
+                                        PrimsArray.Add(BuildJSONObject(PrimProps, 1));
+                                    end;
+                                end;
+                              except
+                                PrimProps.Clear;
+                                AddJSONProperty(PrimProps, 'type', 'unreadable');
+                                PrimsArray.Add(BuildJSONObject(PrimProps, 1));
+                              end;
+                            finally
+                                PrimProps.Free;
+                            end;
+
+                            Prim := PrimIterator.NextSchObject;
+                        end;
+                        LibComp.SchIterator_Destroy(PrimIterator);
+
+                        SymProps.Add(BuildJSONArray(PrimsArray, 'primitives', 1));
+
+                        if (SymbolName = '*') then
+                            SymbolsArray.Add(BuildJSONObject(SymProps, 1))
+                        else
+                            for i := 0 to SymProps.Count - 1 do
+                                ResultProps.Add(SymProps[i]);
+                    finally
+                        SymProps.Free;
+                        PrimsArray.Free;
+                    end;
                 end;
+
+                LibComp := LibIterator.NextSchObject;
             end;
-
-            LibComp := LibIterator.NextSchObject;
+        finally
+            CurrentLib.SchIterator_Destroy(LibIterator);
         end;
-
-        CurrentLib.SchIterator_Destroy(LibIterator);
 
         if (SymbolName = '') or (SymbolName = '*') then
         begin
@@ -1358,95 +1364,97 @@ begin
                 Begin
                     // Get schematic components
                     Iterator := CurrentSch.SchIterator_Create;
-                    Iterator.AddFilter_ObjectSet(MkSet(eSchComponent));
+                    try
+                        Iterator.AddFilter_ObjectSet(MkSet(eSchComponent));
 
-                    Component := Iterator.FirstSchObject;
-                    While (Component <> Nil) Do
-                    Begin
-                        // Create component properties
-                        CompProps := TStringList.Create;
+                        Component := Iterator.FirstSchObject;
+                        While (Component <> Nil) Do
+                        Begin
+                            // Create component properties
+                            CompProps := TStringList.Create;
                         
-                        try
-                            // Get basic component properties
-                            Designator := Component.Designator.Text;
-                            Sheet := Doc.DM_FullPath;
-
-                            // Get position, dimensions and rotation
-                            x := FloatToStr(CoordToMils(Component.Location.X));
-                            y := FloatToStr(CoordToMils(Component.Location.Y));
-
-                            Rect := Component.BoundingRectangle;
-                            left := FloatToStr(CoordToMils(Rect.Left));
-                            right := FloatToStr(CoordToMils(Rect.Right));
-                            top := FloatToStr(CoordToMils(Rect.Top));
-                            bottom := FloatToStr(CoordToMils(Rect.Bottom));
-
-                            width := FloatToStr(CoordToMils(Rect.Right - Rect.Left));
-                            height := FloatToStr(CoordToMils(Rect.Bottom - Rect.Top));
-
-                            If Component.Orientation = eRotate0 Then
-                                rotation := '0'
-                            Else If Component.Orientation = eRotate90 Then
-                                rotation := '90'
-                            Else If Component.Orientation = eRotate180 Then
-                                rotation := '180'
-                            Else If Component.Orientation = eRotate270 Then
-                                rotation := '270'
-                            Else
-                                rotation := '0';
-
-                            // Add component properties
-                            AddJSONProperty(CompProps, 'designator', Designator);
-                            AddJSONProperty(CompProps, 'sheet', Sheet);
-                            AddJSONNumber(CompProps, 'schematic_x', StrToFloat(x));
-                            AddJSONNumber(CompProps, 'schematic_y', StrToFloat(y));
-                            AddJSONNumber(CompProps, 'schematic_width', StrToFloat(width));
-                            AddJSONNumber(CompProps, 'schematic_height', StrToFloat(height));
-                            AddJSONNumber(CompProps, 'schematic_rotation', StrToFloat(rotation));
-                            
-                            // Get parameters
-                            ParamsProps := TStringList.Create;
                             try
-                                // Create parameter iterator
-                                PIterator := Component.SchIterator_Create;
-                                PIterator.AddFilter_ObjectSet(MkSet(eParameter));
+                                // Get basic component properties
+                                Designator := Component.Designator.Text;
+                                Sheet := Doc.DM_FullPath;
 
-                                Parameter := PIterator.FirstSchObject;
+                                // Get position, dimensions and rotation
+                                x := FloatToStr(CoordToMils(Component.Location.X));
+                                y := FloatToStr(CoordToMils(Component.Location.Y));
+
+                                Rect := Component.BoundingRectangle;
+                                left := FloatToStr(CoordToMils(Rect.Left));
+                                right := FloatToStr(CoordToMils(Rect.Right));
+                                top := FloatToStr(CoordToMils(Rect.Top));
+                                bottom := FloatToStr(CoordToMils(Rect.Bottom));
+
+                                width := FloatToStr(CoordToMils(Rect.Right - Rect.Left));
+                                height := FloatToStr(CoordToMils(Rect.Bottom - Rect.Top));
+
+                                If Component.Orientation = eRotate0 Then
+                                    rotation := '0'
+                                Else If Component.Orientation = eRotate90 Then
+                                    rotation := '90'
+                                Else If Component.Orientation = eRotate180 Then
+                                    rotation := '180'
+                                Else If Component.Orientation = eRotate270 Then
+                                    rotation := '270'
+                                Else
+                                    rotation := '0';
+
+                                // Add component properties
+                                AddJSONProperty(CompProps, 'designator', Designator);
+                                AddJSONProperty(CompProps, 'sheet', Sheet);
+                                AddJSONNumber(CompProps, 'schematic_x', StrToFloat(x));
+                                AddJSONNumber(CompProps, 'schematic_y', StrToFloat(y));
+                                AddJSONNumber(CompProps, 'schematic_width', StrToFloat(width));
+                                AddJSONNumber(CompProps, 'schematic_height', StrToFloat(height));
+                                AddJSONNumber(CompProps, 'schematic_rotation', StrToFloat(rotation));
+
+                                // Get parameters
+                                ParamsProps := TStringList.Create;
+                                try
+                                    // Create parameter iterator
+                                    PIterator := Component.SchIterator_Create;
+                                    PIterator.AddFilter_ObjectSet(MkSet(eParameter));
+
+                                    Parameter := PIterator.FirstSchObject;
                                 
-                                // Process all parameters
-                                while (Parameter <> nil) do
-                                begin
-                                    // Get this parameter's info
-                                    ParameterName := Parameter.Name;
-                                    ParameterValue := Parameter.Text;
+                                    // Process all parameters
+                                    while (Parameter <> nil) do
+                                    begin
+                                        // Get this parameter's info
+                                        ParameterName := Parameter.Name;
+                                        ParameterValue := Parameter.Text;
 
-                                    // Add parameter to the list
-                                    AddJSONProperty(ParamsProps, ParameterName, ParameterValue);
+                                        // Add parameter to the list
+                                        AddJSONProperty(ParamsProps, ParameterName, ParameterValue);
                                     
-                                    // Move to next parameter
-                                    Parameter := PIterator.NextSchObject;
+                                        // Move to next parameter
+                                        Parameter := PIterator.NextSchObject;
+                                    end;
+
+                                    Component.SchIterator_Destroy(PIterator);
+                                
+                                    // Add parameters to component
+                                    CompProps.Add('"parameters": ' + BuildJSONObject(ParamsProps, 2));
+                                
+                                    // Add to components array
+                                    ComponentsArray.Add(BuildJSONObject(CompProps, 1));
+                                    ComponentCount := ComponentCount + 1;
+                                finally
+                                    ParamsProps.Free;
                                 end;
-
-                                Component.SchIterator_Destroy(PIterator);
-                                
-                                // Add parameters to component
-                                CompProps.Add('"parameters": ' + BuildJSONObject(ParamsProps, 2));
-                                
-                                // Add to components array
-                                ComponentsArray.Add(BuildJSONObject(CompProps, 1));
-                                ComponentCount := ComponentCount + 1;
                             finally
-                                ParamsProps.Free;
+                                CompProps.Free;
                             end;
-                        finally
-                            CompProps.Free;
-                        end;
 
-                        // Move to next component
-                        Component := Iterator.NextSchObject;
-                    End;
-
-                    CurrentSch.SchIterator_Destroy(Iterator);
+                            // Move to next component
+                            Component := Iterator.NextSchObject;
+                        End;
+                    finally
+                        CurrentSch.SchIterator_Destroy(Iterator);
+                    end;
                 End;
             End;
         End;
@@ -1514,17 +1522,20 @@ begin
     BodyR := -999999;
     BodyT := -999999;
     Iter := Comp.SchIterator_Create;
-    Iter.AddFilter_ObjectSet(MkSet(ePin, eLine, eRectangle, eArc, ePolyline, eEllipse));
-    Prim := Iter.FirstSchObject;
-    while (Prim <> nil) do
-    begin
-        Rect := Prim.BoundingRectangle;
-        if (CoordToMils(Rect.Left)  < BodyL) then BodyL := CoordToMils(Rect.Left);
-        if (CoordToMils(Rect.Right) > BodyR) then BodyR := CoordToMils(Rect.Right);
-        if (CoordToMils(Rect.Top)   > BodyT) then BodyT := CoordToMils(Rect.Top);
-        Prim := Iter.NextSchObject;
+    try
+        Iter.AddFilter_ObjectSet(MkSet(ePin, eLine, eRectangle, eArc, ePolyline, eEllipse));
+        Prim := Iter.FirstSchObject;
+        while (Prim <> nil) do
+        begin
+            Rect := Prim.BoundingRectangle;
+            if (CoordToMils(Rect.Left)  < BodyL) then BodyL := CoordToMils(Rect.Left);
+            if (CoordToMils(Rect.Right) > BodyR) then BodyR := CoordToMils(Rect.Right);
+            if (CoordToMils(Rect.Top)   > BodyT) then BodyT := CoordToMils(Rect.Top);
+            Prim := Iter.NextSchObject;
+        end;
+    finally
+        Comp.SchIterator_Destroy(Iter);
     end;
-    Comp.SchIterator_Destroy(Iter);
 end;
 
 // Apply harvested parameter placement to one component. Harvested offsets are
@@ -1563,14 +1574,17 @@ begin
     BlockTop := BodyT - 100;
 
     Iter := Comp.SchIterator_Create;
-    Iter.AddFilter_ObjectSet(MkSet(eParameter));
-    Param := Iter.FirstSchObject;
-    while (Param <> nil) do
-    begin
-        Param.IsHidden := True;
-        Param := Iter.NextSchObject;
+    try
+        Iter.AddFilter_ObjectSet(MkSet(eParameter));
+        Param := Iter.FirstSchObject;
+        while (Param <> nil) do
+        begin
+            Param.IsHidden := True;
+            Param := Iter.NextSchObject;
+        end;
+    finally
+        Comp.SchIterator_Destroy(Iter);
     end;
-    Comp.SchIterator_Destroy(Iter);
 
     for i := 0 to Placement.Count - 1 do
     begin
@@ -1622,21 +1636,24 @@ begin
             else
             begin
                 Iter := Comp.SchIterator_Create;
-                Iter.AddFilter_ObjectSet(MkSet(eParameter));
-                Param := Iter.FirstSchObject;
-                while (Param <> nil) do
-                begin
-                    if (UpperCase(Param.Name) = UpperCase(PName)) then
+                try
+                    Iter.AddFilter_ObjectSet(MkSet(eParameter));
+                    Param := Iter.FirstSchObject;
+                    while (Param <> nil) do
                     begin
-                        Param.IsHidden := False;
-                        Param.Autoposition := False;
-                        Param.Orientation := StrToInt(GetFieldFromPipeString(Rec, 7));
-                        Param.Justification := Just;
-                        Param.MoveToXY(MilsToCoord(AnchorX), MilsToCoord(TextY));
+                        if (UpperCase(Param.Name) = UpperCase(PName)) then
+                        begin
+                            Param.IsHidden := False;
+                            Param.Autoposition := False;
+                            Param.Orientation := StrToInt(GetFieldFromPipeString(Rec, 7));
+                            Param.Justification := Just;
+                            Param.MoveToXY(MilsToCoord(AnchorX), MilsToCoord(TextY));
+                        end;
+                        Param := Iter.NextSchObject;
                     end;
-                    Param := Iter.NextSchObject;
+                finally
+                    Comp.SchIterator_Destroy(Iter);
                 end;
-                Comp.SchIterator_Destroy(Iter);
             end;
         end;
     end;
@@ -1705,232 +1722,243 @@ begin
         end;
 
     SchServer.ProcessControl.PreProcess(TargetDoc, '');
-    Comp := nil;
-    CurLib := '';
-    PartCount := 0;
-    GfxCount := 0;
+    try
+        Comp := nil;
+        CurLib := '';
+        PartCount := 0;
+        GfxCount := 0;
 
-    for i := 0 to Spec.Count - 1 do
-    begin
-        Rec := Spec[i];
-        Kind := GetFieldFromPipeString(Rec, 0);
-
-        if (Kind = 'PART') then
+        for i := 0 to Spec.Count - 1 do
         begin
-            if (GetFieldFromPipeString(Rec, 2) <> CurLib) then
+            Rec := Spec[i];
+            Kind := GetFieldFromPipeString(Rec, 0);
+
+            if (Kind = 'PART') then
             begin
-                CurLib := GetFieldFromPipeString(Rec, 2);
-                Client.ShowDocument(Client.OpenDocument('SchLib', CurLib));
-                Sleep(1200);
-            end;
-            LibDoc := SchServer.GetCurrentSchDocument;
-
-            Found := nil;
-            Iter := LibDoc.SchLibIterator_Create;
-            Iter.AddFilter_ObjectSet(MkSet(eSchComponent));
-            Prim := Iter.FirstSchObject;
-            while (Prim <> nil) do
-            begin
-                if (Prim.LibReference = GetFieldFromPipeString(Rec, 3)) then Found := Prim;
-                Prim := Iter.NextSchObject;
-            end;
-            LibDoc.SchIterator_Destroy(Iter);
-
-            if (Found = nil) then
-                Comp := nil
-            else
-            begin
-                Replica := Found.Replicate;
-                Replica.Designator.Text := GetFieldFromPipeString(Rec, 1);
-                Replica.DesignItemID    := GetFieldFromPipeString(Rec, 4);
-                Replica.Orientation     := StrToInt(GetFieldFromPipeString(Rec, 7));
-
-                TargetDoc.RegisterSchObjectInContainer(Replica);
-                SchServer.RobotManager.SendMessage(TargetDoc.I_ObjectAddress, c_BroadCast,
-                    SCHM_PrimitiveRegistration, Replica.I_ObjectAddress);
-
-                // Mirror is the editor's X key. IsMirrored is a display flag
-                // only - it sets True and leaves the pin coordinates alone.
-                if (GetFieldFromPipeString(Rec, 8) = '1') then
-                    Replica.Mirror(Replica.Location);
-
-                // MoveByXY, not Location, so child text travels with the part
-                Replica.MoveByXY(
-                    MilsToCoord(StrToInt(GetFieldFromPipeString(Rec, 5)) - CoordToMils(Replica.Location.X)),
-                    MilsToCoord(StrToInt(GetFieldFromPipeString(Rec, 6)) - CoordToMils(Replica.Location.Y)));
-
-                Comp := Replica;
-                PartCount := PartCount + 1;
-            end;
-        end
-
-        else if (Kind = 'COMMENT') then
-        begin
-            if (Comp <> nil) then Comp.Comment.Text := GetFieldFromPipeString(Rec, 1);
-        end
-
-        else if (Kind = 'DESCRIPTION') then
-        begin
-            if (Comp <> nil) then Comp.ComponentDescription := GetFieldFromPipeString(Rec, 1);
-        end
-
-        else if (Kind = 'FOOTPRINT') then
-        begin
-            if (Comp <> nil) then
-            begin
-                Impl := Comp.AddSchImplementation;
-                Impl.ModelName := GetFieldFromPipeString(Rec, 1);
-                Impl.ModelType := 'PCBLIB';
-                Impl.IsCurrent := True;
-                Impl.UseComponentLibrary := True;
-            end;
-        end
-
-        else if (Kind = 'PARAM') then
-        begin
-            if (Comp <> nil) then
-            begin
-                PName := GetFieldFromPipeString(Rec, 1);
-                PVal  := GetFieldFromPipeString(Rec, 2);
-                Exists := False;
-                ChildIter := Comp.SchIterator_Create;
-                ChildIter.AddFilter_ObjectSet(MkSet(eParameter));
-                Param := ChildIter.FirstSchObject;
-                while (Param <> nil) do
+                if (GetFieldFromPipeString(Rec, 2) <> CurLib) then
                 begin
-                    if (UpperCase(Param.Name) = UpperCase(PName)) then
+                    CurLib := GetFieldFromPipeString(Rec, 2);
+                    Client.ShowDocument(Client.OpenDocument('SchLib', CurLib));
+                    Sleep(1200);
+                end;
+                LibDoc := SchServer.GetCurrentSchDocument;
+
+                Found := nil;
+                Iter := LibDoc.SchLibIterator_Create;
+                try
+                    Iter.AddFilter_ObjectSet(MkSet(eSchComponent));
+                    Prim := Iter.FirstSchObject;
+                    while (Prim <> nil) do
                     begin
-                        Param.Text := PVal;
-                        Exists := True;
+                        if (Prim.LibReference = GetFieldFromPipeString(Rec, 3)) then Found := Prim;
+                        Prim := Iter.NextSchObject;
                     end;
-                    Param := ChildIter.NextSchObject;
+                finally
+                    LibDoc.SchIterator_Destroy(Iter);
                 end;
-                Comp.SchIterator_Destroy(ChildIter);
 
-                if not Exists then
+                if (Found = nil) then
+                    Comp := nil
+                else
                 begin
-                    Param := SchServer.SchObjectFactory(eParameter, eCreate_Default);
-                    Param.Name := PName;
-                    Param.Text := PVal;
-                    Param.ParamType := eParameterType_String;
-                    Param.ReadOnlyState := eReadOnly_None;
-                    Param.IsHidden := True;
-                    Comp.AddSchObject(Param);
-                    SchServer.RobotManager.SendMessage(Comp.I_ObjectAddress, c_BroadCast,
-                        SCHM_PrimitiveRegistration, Param.I_ObjectAddress);
+                    Replica := Found.Replicate;
+                    Replica.Designator.Text := GetFieldFromPipeString(Rec, 1);
+                    Replica.DesignItemID    := GetFieldFromPipeString(Rec, 4);
+                    Replica.Orientation     := StrToInt(GetFieldFromPipeString(Rec, 7));
+
+                    TargetDoc.RegisterSchObjectInContainer(Replica);
+                    SchServer.RobotManager.SendMessage(TargetDoc.I_ObjectAddress, c_BroadCast,
+                        SCHM_PrimitiveRegistration, Replica.I_ObjectAddress);
+
+                    // Mirror is the editor's X key. IsMirrored is a display flag
+                    // only - it sets True and leaves the pin coordinates alone.
+                    if (GetFieldFromPipeString(Rec, 8) = '1') then
+                        Replica.Mirror(Replica.Location);
+
+                    // MoveByXY, not Location, so child text travels with the part
+                    Replica.MoveByXY(
+                        MilsToCoord(StrToInt(GetFieldFromPipeString(Rec, 5)) - CoordToMils(Replica.Location.X)),
+                        MilsToCoord(StrToInt(GetFieldFromPipeString(Rec, 6)) - CoordToMils(Replica.Location.Y)));
+
+                    Comp := Replica;
+                    PartCount := PartCount + 1;
                 end;
-            end;
-        end
+            end
 
-        else if (Kind = 'WIRE') then
-        begin
-            Obj := SchServer.SchObjectFactory(eWire, eCreate_GlobalCopy);
-            Obj.Location := Point(MilsToCoord(StrToInt(GetFieldFromPipeString(Rec, 1))),
-                                  MilsToCoord(StrToInt(GetFieldFromPipeString(Rec, 2))));
-            fld := 1;
-            vtx := 0;
-            while (GetFieldFromPipeString(Rec, fld) <> '') do
+            else if (Kind = 'COMMENT') then
             begin
-                vtx := vtx + 1;
-                Obj.InsertVertex := vtx;
-                Obj.SetState_Vertex(vtx,
-                    Point(MilsToCoord(StrToInt(GetFieldFromPipeString(Rec, fld))),
-                          MilsToCoord(StrToInt(GetFieldFromPipeString(Rec, fld + 1)))));
-                fld := fld + 2;
+                if (Comp <> nil) then Comp.Comment.Text := GetFieldFromPipeString(Rec, 1);
+            end
+
+            else if (Kind = 'DESCRIPTION') then
+            begin
+                if (Comp <> nil) then Comp.ComponentDescription := GetFieldFromPipeString(Rec, 1);
+            end
+
+            else if (Kind = 'FOOTPRINT') then
+            begin
+                if (Comp <> nil) then
+                begin
+                    Impl := Comp.AddSchImplementation;
+                    Impl.ModelName := GetFieldFromPipeString(Rec, 1);
+                    Impl.ModelType := 'PCBLIB';
+                    Impl.IsCurrent := True;
+                    Impl.UseComponentLibrary := True;
+                end;
+            end
+
+            else if (Kind = 'PARAM') then
+            begin
+                if (Comp <> nil) then
+                begin
+                    PName := GetFieldFromPipeString(Rec, 1);
+                    PVal  := GetFieldFromPipeString(Rec, 2);
+                    Exists := False;
+                    ChildIter := Comp.SchIterator_Create;
+                    try
+                        ChildIter.AddFilter_ObjectSet(MkSet(eParameter));
+                        Param := ChildIter.FirstSchObject;
+                        while (Param <> nil) do
+                        begin
+                            if (UpperCase(Param.Name) = UpperCase(PName)) then
+                            begin
+                                Param.Text := PVal;
+                                Exists := True;
+                            end;
+                            Param := ChildIter.NextSchObject;
+                        end;
+                    finally
+                        Comp.SchIterator_Destroy(ChildIter);
+                    end;
+
+                    if not Exists then
+                    begin
+                        Param := SchServer.SchObjectFactory(eParameter, eCreate_Default);
+                        Param.Name := PName;
+                        Param.Text := PVal;
+                        Param.ParamType := eParameterType_String;
+                        Param.ReadOnlyState := eReadOnly_None;
+                        Param.IsHidden := True;
+                        Comp.AddSchObject(Param);
+                        SchServer.RobotManager.SendMessage(Comp.I_ObjectAddress, c_BroadCast,
+                            SCHM_PrimitiveRegistration, Param.I_ObjectAddress);
+                    end;
+                end;
+            end
+
+            else if (Kind = 'WIRE') then
+            begin
+                Obj := SchServer.SchObjectFactory(eWire, eCreate_GlobalCopy);
+                Obj.Location := Point(MilsToCoord(StrToInt(GetFieldFromPipeString(Rec, 1))),
+                                      MilsToCoord(StrToInt(GetFieldFromPipeString(Rec, 2))));
+                fld := 1;
+                vtx := 0;
+                while (GetFieldFromPipeString(Rec, fld) <> '') do
+                begin
+                    vtx := vtx + 1;
+                    Obj.InsertVertex := vtx;
+                    Obj.SetState_Vertex(vtx,
+                        Point(MilsToCoord(StrToInt(GetFieldFromPipeString(Rec, fld))),
+                              MilsToCoord(StrToInt(GetFieldFromPipeString(Rec, fld + 1)))));
+                    fld := fld + 2;
+                end;
+                TargetDoc.RegisterSchObjectInContainer(Obj);
+                SchServer.RobotManager.SendMessage(TargetDoc.I_ObjectAddress, c_BroadCast,
+                    SCHM_PrimitiveRegistration, Obj.I_ObjectAddress);
+                GfxCount := GfxCount + 1;
+            end
+
+            else if (Kind = 'JUNCTION') then
+            begin
+                Obj := SchServer.SchObjectFactory(eJunction, eCreate_GlobalCopy);
+                Obj.Location := Point(MilsToCoord(StrToInt(GetFieldFromPipeString(Rec, 1))),
+                                      MilsToCoord(StrToInt(GetFieldFromPipeString(Rec, 2))));
+                TargetDoc.RegisterSchObjectInContainer(Obj);
+                SchServer.RobotManager.SendMessage(TargetDoc.I_ObjectAddress, c_BroadCast,
+                    SCHM_PrimitiveRegistration, Obj.I_ObjectAddress);
+                GfxCount := GfxCount + 1;
+            end
+
+            else if (Kind = 'NETLABEL') then
+            begin
+                Obj := SchServer.SchObjectFactory(eNetLabel, eCreate_GlobalCopy);
+                Obj.Location := Point(MilsToCoord(StrToInt(GetFieldFromPipeString(Rec, 1))),
+                                      MilsToCoord(StrToInt(GetFieldFromPipeString(Rec, 2))));
+                Obj.Orientation := StrToInt(GetFieldFromPipeString(Rec, 3));
+                Obj.Text := GetFieldFromPipeString(Rec, 4);
+                TargetDoc.RegisterSchObjectInContainer(Obj);
+                SchServer.RobotManager.SendMessage(TargetDoc.I_ObjectAddress, c_BroadCast,
+                    SCHM_PrimitiveRegistration, Obj.I_ObjectAddress);
+                GfxCount := GfxCount + 1;
+            end
+
+            else if (Kind = 'POWER') then
+            begin
+                Obj := SchServer.SchObjectFactory(ePowerObject, eCreate_GlobalCopy);
+                Obj.Location := Point(MilsToCoord(StrToInt(GetFieldFromPipeString(Rec, 1))),
+                                      MilsToCoord(StrToInt(GetFieldFromPipeString(Rec, 2))));
+                Obj.Orientation := StrToInt(GetFieldFromPipeString(Rec, 3));
+                Obj.Style := StrToInt(GetFieldFromPipeString(Rec, 4));
+                // NOTE: ShowNetName := False does NOT hide the label - Altium draws
+                // it regardless. Keep wires out of the ~300 mil band below a port.
+                Obj.ShowNetName := (GetFieldFromPipeString(Rec, 6) = '1');
+                Obj.Text := GetFieldFromPipeString(Rec, 5);
+                TargetDoc.RegisterSchObjectInContainer(Obj);
+                SchServer.RobotManager.SendMessage(TargetDoc.I_ObjectAddress, c_BroadCast,
+                    SCHM_PrimitiveRegistration, Obj.I_ObjectAddress);
+                GfxCount := GfxCount + 1;
+            end
+
+            else if (Kind = 'SPORT') then
+            begin
+                // Sheet port: SPORT|x|y|name|iotype|style|width
+                // IOType: 0=unspecified 1=output 2=input 3=bidirectional.
+                // Location is the port's connection-side end; wire to it.
+                Obj := SchServer.SchObjectFactory(ePort, eCreate_GlobalCopy);
+                Obj.Location := Point(MilsToCoord(StrToInt(GetFieldFromPipeString(Rec, 1))),
+                                      MilsToCoord(StrToInt(GetFieldFromPipeString(Rec, 2))));
+                Obj.Name := GetFieldFromPipeString(Rec, 3);
+                Obj.IOType := StrToInt(GetFieldFromPipeString(Rec, 4));
+                Obj.Style := StrToInt(GetFieldFromPipeString(Rec, 5));
+                Obj.Width := MilsToCoord(StrToInt(GetFieldFromPipeString(Rec, 6)));
+                TargetDoc.RegisterSchObjectInContainer(Obj);
+                SchServer.RobotManager.SendMessage(TargetDoc.I_ObjectAddress, c_BroadCast,
+                    SCHM_PrimitiveRegistration, Obj.I_ObjectAddress);
+                GfxCount := GfxCount + 1;
+            end
+
+            else if (Kind = 'NOTE') then
+            begin
+                Obj := SchServer.SchObjectFactory(eLabel, eCreate_GlobalCopy);
+                Obj.Location := Point(MilsToCoord(StrToInt(GetFieldFromPipeString(Rec, 1))),
+                                      MilsToCoord(StrToInt(GetFieldFromPipeString(Rec, 2))));
+                Obj.Text := GetFieldFromPipeString(Rec, 3);
+                TargetDoc.RegisterSchObjectInContainer(Obj);
+                SchServer.RobotManager.SendMessage(TargetDoc.I_ObjectAddress, c_BroadCast,
+                    SCHM_PrimitiveRegistration, Obj.I_ObjectAddress);
+                GfxCount := GfxCount + 1;
             end;
-            TargetDoc.RegisterSchObjectInContainer(Obj);
-            SchServer.RobotManager.SendMessage(TargetDoc.I_ObjectAddress, c_BroadCast,
-                SCHM_PrimitiveRegistration, Obj.I_ObjectAddress);
-            GfxCount := GfxCount + 1;
-        end
-
-        else if (Kind = 'JUNCTION') then
-        begin
-            Obj := SchServer.SchObjectFactory(eJunction, eCreate_GlobalCopy);
-            Obj.Location := Point(MilsToCoord(StrToInt(GetFieldFromPipeString(Rec, 1))),
-                                  MilsToCoord(StrToInt(GetFieldFromPipeString(Rec, 2))));
-            TargetDoc.RegisterSchObjectInContainer(Obj);
-            SchServer.RobotManager.SendMessage(TargetDoc.I_ObjectAddress, c_BroadCast,
-                SCHM_PrimitiveRegistration, Obj.I_ObjectAddress);
-            GfxCount := GfxCount + 1;
-        end
-
-        else if (Kind = 'NETLABEL') then
-        begin
-            Obj := SchServer.SchObjectFactory(eNetLabel, eCreate_GlobalCopy);
-            Obj.Location := Point(MilsToCoord(StrToInt(GetFieldFromPipeString(Rec, 1))),
-                                  MilsToCoord(StrToInt(GetFieldFromPipeString(Rec, 2))));
-            Obj.Orientation := StrToInt(GetFieldFromPipeString(Rec, 3));
-            Obj.Text := GetFieldFromPipeString(Rec, 4);
-            TargetDoc.RegisterSchObjectInContainer(Obj);
-            SchServer.RobotManager.SendMessage(TargetDoc.I_ObjectAddress, c_BroadCast,
-                SCHM_PrimitiveRegistration, Obj.I_ObjectAddress);
-            GfxCount := GfxCount + 1;
-        end
-
-        else if (Kind = 'POWER') then
-        begin
-            Obj := SchServer.SchObjectFactory(ePowerObject, eCreate_GlobalCopy);
-            Obj.Location := Point(MilsToCoord(StrToInt(GetFieldFromPipeString(Rec, 1))),
-                                  MilsToCoord(StrToInt(GetFieldFromPipeString(Rec, 2))));
-            Obj.Orientation := StrToInt(GetFieldFromPipeString(Rec, 3));
-            Obj.Style := StrToInt(GetFieldFromPipeString(Rec, 4));
-            // NOTE: ShowNetName := False does NOT hide the label - Altium draws
-            // it regardless. Keep wires out of the ~300 mil band below a port.
-            Obj.ShowNetName := (GetFieldFromPipeString(Rec, 6) = '1');
-            Obj.Text := GetFieldFromPipeString(Rec, 5);
-            TargetDoc.RegisterSchObjectInContainer(Obj);
-            SchServer.RobotManager.SendMessage(TargetDoc.I_ObjectAddress, c_BroadCast,
-                SCHM_PrimitiveRegistration, Obj.I_ObjectAddress);
-            GfxCount := GfxCount + 1;
-        end
-
-        else if (Kind = 'SPORT') then
-        begin
-            // Sheet port: SPORT|x|y|name|iotype|style|width
-            // IOType: 0=unspecified 1=output 2=input 3=bidirectional.
-            // Location is the port's connection-side end; wire to it.
-            Obj := SchServer.SchObjectFactory(ePort, eCreate_GlobalCopy);
-            Obj.Location := Point(MilsToCoord(StrToInt(GetFieldFromPipeString(Rec, 1))),
-                                  MilsToCoord(StrToInt(GetFieldFromPipeString(Rec, 2))));
-            Obj.Name := GetFieldFromPipeString(Rec, 3);
-            Obj.IOType := StrToInt(GetFieldFromPipeString(Rec, 4));
-            Obj.Style := StrToInt(GetFieldFromPipeString(Rec, 5));
-            Obj.Width := MilsToCoord(StrToInt(GetFieldFromPipeString(Rec, 6)));
-            TargetDoc.RegisterSchObjectInContainer(Obj);
-            SchServer.RobotManager.SendMessage(TargetDoc.I_ObjectAddress, c_BroadCast,
-                SCHM_PrimitiveRegistration, Obj.I_ObjectAddress);
-            GfxCount := GfxCount + 1;
-        end
-
-        else if (Kind = 'NOTE') then
-        begin
-            Obj := SchServer.SchObjectFactory(eLabel, eCreate_GlobalCopy);
-            Obj.Location := Point(MilsToCoord(StrToInt(GetFieldFromPipeString(Rec, 1))),
-                                  MilsToCoord(StrToInt(GetFieldFromPipeString(Rec, 2))));
-            Obj.Text := GetFieldFromPipeString(Rec, 3);
-            TargetDoc.RegisterSchObjectInContainer(Obj);
-            SchServer.RobotManager.SendMessage(TargetDoc.I_ObjectAddress, c_BroadCast,
-                SCHM_PrimitiveRegistration, Obj.I_ObjectAddress);
-            GfxCount := GfxCount + 1;
         end;
-    end;
 
-    // Parameter text last, once every part is placed.
-    if (Placement.Count > 0) then
-    begin
-        Iter := TargetDoc.SchIterator_Create;
-        Iter.AddFilter_ObjectSet(MkSet(eSchComponent));
-        Prim := Iter.FirstSchObject;
-        while (Prim <> nil) do
+        // Parameter text last, once every part is placed.
+        if (Placement.Count > 0) then
         begin
-            StyleComponentText(Prim, Placement);
-            Prim := Iter.NextSchObject;
+            Iter := TargetDoc.SchIterator_Create;
+            try
+                Iter.AddFilter_ObjectSet(MkSet(eSchComponent));
+                Prim := Iter.FirstSchObject;
+                while (Prim <> nil) do
+                begin
+                    StyleComponentText(Prim, Placement);
+                    Prim := Iter.NextSchObject;
+                end;
+            finally
+                TargetDoc.SchIterator_Destroy(Iter);
+            end;
         end;
-        TargetDoc.SchIterator_Destroy(Iter);
+    finally
+        SchServer.ProcessControl.PostProcess(TargetDoc, '');
     end;
-
-    SchServer.ProcessControl.PostProcess(TargetDoc, '');
     TargetDoc.GraphicallyInvalidate;
 
     // Pin map: absolute connection point of every placed pin, so a caller can
@@ -1938,25 +1966,28 @@ begin
     PinMap := TStringList.Create;
     PinCount := 0;
     Iter := TargetDoc.SchIterator_Create;
-    Iter.AddFilter_ObjectSet(MkSet(eSchComponent));
-    Prim := Iter.FirstSchObject;
-    while (Prim <> nil) do
-    begin
-        ChildIter := Prim.SchIterator_Create;
-        ChildIter.AddFilter_ObjectSet(MkSet(ePin));
-        Param := ChildIter.FirstSchObject;
-        while (Param <> nil) do
+    try
+        Iter.AddFilter_ObjectSet(MkSet(eSchComponent));
+        Prim := Iter.FirstSchObject;
+        while (Prim <> nil) do
         begin
-            GetPinHotEnd(Param, HotX, HotY);
-            PinMap.Add('PIN|' + Prim.Designator.Text + '|' + Param.Name + '|' +
-                       IntToStr(HotX) + '|' + IntToStr(HotY));
-            PinCount := PinCount + 1;
-            Param := ChildIter.NextSchObject;
+            ChildIter := Prim.SchIterator_Create;
+            ChildIter.AddFilter_ObjectSet(MkSet(ePin));
+            Param := ChildIter.FirstSchObject;
+            while (Param <> nil) do
+            begin
+                GetPinHotEnd(Param, HotX, HotY);
+                PinMap.Add('PIN|' + Prim.Designator.Text + '|' + Param.Name + '|' +
+                           IntToStr(HotX) + '|' + IntToStr(HotY));
+                PinCount := PinCount + 1;
+                Param := ChildIter.NextSchObject;
+            end;
+            Prim.SchIterator_Destroy(ChildIter);
+            Prim := Iter.NextSchObject;
         end;
-        Prim.SchIterator_Destroy(ChildIter);
-        Prim := Iter.NextSchObject;
+    finally
+        TargetDoc.SchIterator_Destroy(Iter);
     end;
-    TargetDoc.SchIterator_Destroy(Iter);
     PinMap.SaveToFile(PinMapPath);
     PinMap.Free;
 

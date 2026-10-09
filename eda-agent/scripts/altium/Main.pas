@@ -14,7 +14,7 @@ Const
     // returns, mismatch means Altium is running a stale compiled script
     // (DelphiScript caches compiled units until the script project is
     // reopened or Altium is restarted).
-    SCRIPT_VERSION = '2026.10.08.perf1';
+    SCRIPT_VERSION = '2026.10.09.review1';
 
     // How far up the mechanical layers a pair tidy looks. Altium allows 1024,
     // and checking every combination of those is a million probes for a stack
@@ -1259,25 +1259,77 @@ Begin
     End;
 End;
 
+Function FindJsonMemberValue(Json : String; Key : String) : Integer;
+Var
+    I, J, K, L, Depth : Integer;
+    Ch, Member : String;
+    ExpectKey : Boolean;
+Begin
+    Result := 0;
+    I := 1;
+    L := Length(Json);
+    Depth := 0;
+    ExpectKey := False;
+    While I <= L Do
+    Begin
+        Ch := Copy(Json, I, 1);
+        If Ch = '"' Then
+        Begin
+            J := I + 1;
+            While J <= L Do
+            Begin
+                If Copy(Json, J, 1) = '\' Then Inc(J, 2)
+                Else If Copy(Json, J, 1) = '"' Then Break
+                Else Inc(J);
+            End;
+            If J > L Then Exit;
+            If (Depth = 1) And ExpectKey Then
+            Begin
+                Member := UnescapeJsonString(Copy(Json, I + 1, J - I - 1));
+                K := J + 1;
+                While (K <= L) And (Copy(Json, K, 1) <= ' ') Do Inc(K);
+                If Copy(Json, K, 1) <> ':' Then Exit;
+                Inc(K);
+                While (K <= L) And (Copy(Json, K, 1) <= ' ') Do Inc(K);
+                If Member = Key Then Begin Result := K; Exit; End;
+                ExpectKey := False;
+            End;
+            I := J + 1;
+        End
+        Else
+        Begin
+            If (Ch = '{') Or (Ch = '[') Then
+            Begin
+                Inc(Depth);
+                If Depth = 1 Then
+                Begin
+                    If Ch <> '{' Then Exit;
+                    ExpectKey := True;
+                End;
+            End
+            Else If (Ch = '}') Or (Ch = ']') Then
+            Begin
+                Dec(Depth);
+                If Depth = 0 Then Exit;
+            End
+            Else If (Ch = ',') And (Depth = 1) Then ExpectKey := True;
+            Inc(I);
+        End;
+    End;
+End;
+
 Function ExtractJsonValue(Json : String; Key : String) : String;
 Var
     StartPos, EndPos : Integer;
-    SearchKey : String;
     BraceCount : Integer;
     BackslashCount, TempPos : Integer;
     InStr : Boolean;
     Ch : String;
 Begin
     Result := '';
-    SearchKey := '"' + Key + '"';
-    StartPos := Pos(SearchKey, Json);
+    StartPos := FindJsonMemberValue(Json, Key);
     If StartPos > 0 Then
     Begin
-        StartPos := StartPos + Length(SearchKey);
-        // Skip whitespace and colon
-        While (StartPos <= Length(Json)) And IsWhitespaceOrColon(Json, StartPos) Do
-            Inc(StartPos);
-
         If StartPos <= Length(Json) Then
         Begin
             If Copy(Json, StartPos, 1) = '"' Then

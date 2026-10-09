@@ -13,6 +13,7 @@ var
     RESPONSE_FILE : String;
     ROOT_DIR: String;
     BridgeRequestId: String;
+    RequestJSON: String;
 
 {..............................................................................}
 { The suite inserts the per-user exchange path into its generated runtime.     }
@@ -49,14 +50,12 @@ begin
                 // Parse the array in the next lines
                 i := i + 1; // Move to the next line (should be '[')
                 
-                while (i < RequestData.Count) and (Pos(']', RequestData[i]) = 0) do
+                while (i < RequestData.Count) and (Copy(Trim(RequestData[i]), 1, 1) <> ']') do
                 begin
                     // This is an array element
                     // Extract the designator value
                     ParamValue := RequestData[i];
-                    ParamValue := StringReplace(ParamValue, '"', '', REPLACEALL);
-                    ParamValue := StringReplace(ParamValue, ',', '', REPLACEALL);
-                    ParamValue := Trim(ParamValue);
+                    ParamValue := TrimJSON(ParamValue);
                     
                     if (ParamValue <> '') and (ParamValue <> '[') then
                         DesignatorsList.Add(ParamValue);
@@ -110,13 +109,11 @@ begin
                 // Parse the array in the next lines
                 i := i + 1; // Move to the next line (should be '[')
                 
-                while (i < RequestData.Count) and (Pos(']', RequestData[i]) = 0) do
+                while (i < RequestData.Count) and (Copy(Trim(RequestData[i]), 1, 1) <> ']') do
                 begin
                     // Extract the net name
                     ParamValue := RequestData[i];
-                    ParamValue := StringReplace(ParamValue, '"', '', REPLACEALL);
-                    ParamValue := StringReplace(ParamValue, ',', '', REPLACEALL);
-                    ParamValue := Trim(ParamValue);
+                    ParamValue := TrimJSON(ParamValue);
                     
                     if (ParamValue <> '') and (ParamValue <> '[') then
                         SourceList.Add(ParamValue);
@@ -172,12 +169,10 @@ begin
                 // Parse the array in the next lines
                 i := i + 1; // Move to the next line (should be '[')
 
-                while (i < RequestData.Count) and (Pos(']', RequestData[i]) = 0) do
+                while (i < RequestData.Count) and (Copy(Trim(RequestData[i]), 1, 1) <> ']') do
                 begin
                     ParamValue := RequestData[i];
-                    ParamValue := StringReplace(ParamValue, '"', '', REPLACEALL);
-                    ParamValue := StringReplace(ParamValue, ',', '', REPLACEALL);
-                    ParamValue := Trim(ParamValue);
+                    ParamValue := TrimJSON(ParamValue);
 
                     if (ParamValue <> '') and (ParamValue <> '[') then
                         DesignatorsList.Add(ParamValue);
@@ -234,15 +229,11 @@ begin
                 // Parse the array in the next lines
                 i := i + 1; // Move to the next line (should be '[')
 
-                while (i < RequestData.Count) and (Pos(']', RequestData[i]) = 0) do
+                while (i < RequestData.Count) and (Copy(Trim(RequestData[i]), 1, 1) <> ']') do
                 begin
                     // Extract the pin data
                     ParamValue := RequestData[i];
-                    ParamValue := StringReplace(ParamValue, '"', '', REPLACEALL);
-                    ParamValue := StringReplace(ParamValue, ',', '', REPLACEALL);
-                    ParamValue := Trim(ParamValue);
-                    // Unescape JSON backslashes (e.g. \\ -> \ for Altium overbar notation)
-                    ParamValue := StringReplace(ParamValue, '\\', '\', REPLACEALL);
+                    ParamValue := TrimJSON(ParamValue);
 
                     if (ParamValue <> '') and (ParamValue <> '[') then
                         PinsList.Add(ParamValue);
@@ -256,12 +247,10 @@ begin
                 // Parse the array in the next lines
                 i := i + 1; // Move to the next line (should be '[')
 
-                while (i < RequestData.Count) and (Pos(']', RequestData[i]) = 0) do
+                while (i < RequestData.Count) and (Copy(Trim(RequestData[i]), 1, 1) <> ']') do
                 begin
                     ParamValue := RequestData[i];
-                    ParamValue := StringReplace(ParamValue, '"', '', REPLACEALL);
-                    ParamValue := StringReplace(ParamValue, ',', '', REPLACEALL);
-                    ParamValue := Trim(ParamValue);
+                    ParamValue := TrimJSON(ParamValue);
 
                     if (ParamValue <> '') and (ParamValue <> '[') then
                         GraphicsList.Add(ParamValue);
@@ -316,13 +305,11 @@ begin
                 // Parse the array in the next lines
                 i := i + 1; // Move to the next line (should be '[')
                 
-                while (i < RequestData.Count) and (Pos(']', RequestData[i]) = 0) do
+                while (i < RequestData.Count) and (Copy(Trim(RequestData[i]), 1, 1) <> ']') do
                 begin
                     // Extract the layer name
                     ParamValue := RequestData[i];
-                    ParamValue := StringReplace(ParamValue, '"', '', REPLACEALL);
-                    ParamValue := StringReplace(ParamValue, ',', '', REPLACEALL);
-                    ParamValue := Trim(ParamValue);
+                    ParamValue := TrimJSON(ParamValue);
                     
                     if (ParamValue <> '') and (ParamValue <> '[') then
                         SourceList.Add(ParamValue);
@@ -377,7 +364,6 @@ begin
                 ValueStart := Pos(':', RequestData[i]) + 1;
                 ParamValue := Copy(RequestData[i], ValueStart, Length(RequestData[i]) - ValueStart + 1);
                 ParamValue := TrimJSON(ParamValue);
-                ParamValue := StringReplace(ParamValue, '"', '', REPLACEALL);
                 Designator := Trim(ParamValue);
             end
             // Look for x
@@ -444,13 +430,11 @@ begin
                 // Parse the array in the next lines
                 i := i + 1; // Move to the next line (should be '[')
                 
-                while (i < RequestData.Count) and (Pos(']', RequestData[i]) = 0) do
+                while (i < RequestData.Count) and (Copy(Trim(RequestData[i]), 1, 1) <> ']') do
                 begin
                     // Extract the designator value
                     ParamValue := RequestData[i];
-                    ParamValue := StringReplace(ParamValue, '"', '', REPLACEALL);
-                    ParamValue := StringReplace(ParamValue, ',', '', REPLACEALL);
-                    ParamValue := Trim(ParamValue);
+                    ParamValue := TrimJSON(ParamValue);
                     
                     if (ParamValue <> '') and (ParamValue <> '[') then
                         DesignatorsList.Add(ParamValue);
@@ -634,12 +618,10 @@ begin
                 // Parse the array in the next lines
                 i := i + 1; // Move to the next line (should be '[')
 
-                while (i < RequestData.Count) and (Pos(']', RequestData[i]) = 0) do
+                while (i < RequestData.Count) and (Copy(Trim(RequestData[i]), 1, 1) <> ']') do
                 begin
                     ParamValue := RequestData[i];
-                    ParamValue := StringReplace(ParamValue, '"', '', REPLACEALL);
-                    ParamValue := StringReplace(ParamValue, ',', '', REPLACEALL);
-                    ParamValue := Trim(ParamValue);
+                    ParamValue := TrimJSON(ParamValue);
 
                     if (ParamValue <> '') and (ParamValue <> '[') then
                         DesignatorsList.Add(ParamValue);
@@ -676,12 +658,10 @@ begin
                 // Parse the array in the next lines
                 i := i + 1; // Move to the next line (should be '[')
 
-                while (i < RequestData.Count) and (Pos(']', RequestData[i]) = 0) do
+                while (i < RequestData.Count) and (Copy(Trim(RequestData[i]), 1, 1) <> ']') do
                 begin
                     ParamValue := RequestData[i];
-                    ParamValue := StringReplace(ParamValue, '"', '', REPLACEALL);
-                    ParamValue := StringReplace(ParamValue, ',', '', REPLACEALL);
-                    ParamValue := Trim(ParamValue);
+                    ParamValue := TrimJSON(ParamValue);
 
                     if (ParamValue <> '') and (ParamValue <> '[') then
                         DesignatorsList.Add(ParamValue);
@@ -726,13 +706,11 @@ begin
                 // Parse the array in the next lines
                 i := i + 1; // Move to the next line (should be '[')
 
-                while (i < RequestData.Count) and (Pos(']', RequestData[i]) = 0) do
+                while (i < RequestData.Count) and (Copy(Trim(RequestData[i]), 1, 1) <> ']') do
                 begin
                     // Extract the placement value
                     ParamValue := RequestData[i];
-                    ParamValue := StringReplace(ParamValue, '"', '', REPLACEALL);
-                    ParamValue := StringReplace(ParamValue, ',', '', REPLACEALL);
-                    ParamValue := Trim(ParamValue);
+                    ParamValue := TrimJSON(ParamValue);
 
                     if (ParamValue <> '') and (ParamValue <> '[') then
                         PlacementsList.Add(ParamValue);
@@ -776,13 +754,11 @@ begin
                 // Parse the array in the next lines
                 i := i + 1; // Move to the next line (should be '[')
                 
-                while (i < RequestData.Count) and (Pos(']', RequestData[i]) = 0) do
+                while (i < RequestData.Count) and (Copy(Trim(RequestData[i]), 1, 1) <> ']') do
                 begin
                     // Extract the designator value
                     ParamValue := RequestData[i];
-                    ParamValue := StringReplace(ParamValue, '"', '', REPLACEALL);
-                    ParamValue := StringReplace(ParamValue, ',', '', REPLACEALL);
-                    ParamValue := Trim(ParamValue);
+                    ParamValue := TrimJSON(ParamValue);
                     
                     if (ParamValue <> '') and (ParamValue <> '[') then
                         SourceList.Add(ParamValue);
@@ -796,13 +772,11 @@ begin
                 // Parse the array in the next lines
                 i := i + 1; // Move to the next line (should be '[')
                 
-                while (i < RequestData.Count) and (Pos(']', RequestData[i]) = 0) do
+                while (i < RequestData.Count) and (Copy(Trim(RequestData[i]), 1, 1) <> ']') do
                 begin
                     // Extract the designator value
                     ParamValue := RequestData[i];
-                    ParamValue := StringReplace(ParamValue, '"', '', REPLACEALL);
-                    ParamValue := StringReplace(ParamValue, ',', '', REPLACEALL);
-                    ParamValue := Trim(ParamValue);
+                    ParamValue := TrimJSON(ParamValue);
                     
                     if (ParamValue <> '') and (ParamValue <> '[') then
                         DestList.Add(ParamValue);
@@ -871,13 +845,11 @@ begin
                 // Parse the array in the next lines
                 i := i + 1; // Move to the next line (should be '[')
                 
-                while (i < RequestData.Count) and (Pos(']', RequestData[i]) = 0) do
+                while (i < RequestData.Count) and (Copy(Trim(RequestData[i]), 1, 1) <> ']') do
                 begin
                     // Extract the container name
                     ParamValue := RequestData[i];
-                    ParamValue := StringReplace(ParamValue, '"', '', REPLACEALL);
-                    ParamValue := StringReplace(ParamValue, ',', '', REPLACEALL);
-                    ParamValue := Trim(ParamValue);
+                    ParamValue := TrimJSON(ParamValue);
                     
                     if (ParamValue <> '') and (ParamValue <> '[') then
                         ContainersList.Add(ParamValue);
@@ -946,12 +918,10 @@ begin
             else if (Pos('"pads"', RequestData[i]) > 0) then
             begin
                 i := i + 1;
-                while (i < RequestData.Count) and (Pos(']', RequestData[i]) = 0) do
+                while (i < RequestData.Count) and (Copy(Trim(RequestData[i]), 1, 1) <> ']') do
                 begin
                     ParamValue := RequestData[i];
-                    ParamValue := StringReplace(ParamValue, '"', '', REPLACEALL);
-                    ParamValue := StringReplace(ParamValue, ',', '', REPLACEALL);
-                    ParamValue := Trim(ParamValue);
+                    ParamValue := TrimJSON(ParamValue);
                     if (ParamValue <> '') and (ParamValue <> '[') then
                         PadsList.Add(ParamValue);
                     i := i + 1;
@@ -1131,8 +1101,7 @@ begin
     ParamValue := Copy(Line, ValueStart, Length(Line) - ValueStart + 1);
 
     // Trim only if it's not an array
-    if (Pos('[', ParamValue) = 0) then
-        ParamValue := TrimJSON(ParamValue);
+    ParamValue := LegacyJsonValue(RequestJSON, ParamName);
 
     // Add to parameters list
     if (ParamName <> '') and (ParamName <> 'command') then
@@ -1217,6 +1186,7 @@ begin
         RequestData := TStringList.Create;
         try
             RequestData.LoadFromFile(REQUEST_FILE);
+            RequestJSON := RequestData.Text;
 
             // Default command type
             CommandType := '';
@@ -1231,7 +1201,7 @@ begin
                 begin
                     ValueStart := Pos(':', Line) + 1;
                     CommandType := Copy(Line, ValueStart, Length(Line) - ValueStart + 1);
-                    CommandType := TrimJSON(CommandType);
+                    CommandType := LegacyJsonValue(RequestJSON, 'command');
                 end
                 else
                 begin
@@ -1240,7 +1210,7 @@ begin
                 end;
             end;
 
-            BridgeRequestId := Params.Values['request_id'];
+            BridgeRequestId := LegacyJsonValue(RequestJSON, 'request_id');
             { The request was consumed. Never read it again after a timeout. }
             DeleteFile(REQUEST_FILE);
 

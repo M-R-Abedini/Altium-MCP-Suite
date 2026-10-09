@@ -18,7 +18,7 @@ from eda_agent.bridge.exceptions import AltiumProtocolError
 
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'coffeenmusic/server'))
-from batch_safety import validate_batch_fields
+from batch_safety import validate_batch_fields, validate_legacy_json_text
 
 
 def extract(path,name,namespace):
@@ -41,6 +41,7 @@ def ownership(tmp_path,monkeypatch):
 def legacy_method(folder,clock=time):
     namespace=dict(Dict=dict,Any=object,REQUEST_FILE=folder/'request.json',RESPONSE_FILE=folder/'response.json',
                    json=json,uuid=uuid,time=clock,logger=MagicMock(),asyncio=asyncio,
+                   validate_legacy_json_text=validate_legacy_json_text,
                    begin_legacy=coord.begin_legacy,abandon_unlaunched_legacy=coord.abandon_unlaunched_legacy)
     return extract(ROOT/'coffeenmusic/server/main.py','_execute_command_locked',namespace)
 

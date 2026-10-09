@@ -20,6 +20,9 @@ use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncWrite, AsyncWriteExt, BufRea
 
 use crate::mcp::protocol::{JsonRpcError, JsonRpcResponse, OutgoingNotification};
 
+/// Bounds input allocation while allowing inline base64 library/STEP payloads.
+const MAX_MESSAGE_BYTES: usize = 64 * 1024 * 1024;
+
 /// Strips a single trailing `\n` and an optional preceding `\r` from a line.
 fn strip_trailing_newline(line: &mut String) {
     if line.ends_with('\n') {
@@ -33,20 +36,44 @@ fn strip_trailing_newline(line: &mut String) {
 /// Reads one newline-delimited message from an async buffered reader.
 ///
 /// Returns `None` on EOF. The trailing newline (and any preceding `\r`) is
-/// stripped. There is intentionally no line-length cap: some tools carry
-/// base64-encoded payloads (e.g. embedded STEP models via `write_pcblib`, or
-/// `extract_step_model` output) inline on a single JSON-RPC line, so a message
-/// may be multiple megabytes.
+/// stripped. Frames are limited to 64 MiB, including the delimiter. Oversized
+/// input closes the transport with InvalidData instead of allocating indefinitely.
 async fn read_message_line<R>(reader: &mut R) -> io::Result<Option<String>>
 where
     R: AsyncBufRead + Unpin,
 {
-    let mut line = String::new();
-    let bytes_read = reader.read_line(&mut line).await?;
-    if bytes_read == 0 {
-        // EOF.
-        return Ok(None);
+    read_message_line_bounded(reader, MAX_MESSAGE_BYTES).await
+}
+
+async fn read_message_line_bounded<R>(reader: &mut R, limit: usize) -> io::Result<Option<String>>
+where
+    R: AsyncBufRead + Unpin,
+{
+    let mut bytes = Vec::new();
+    loop {
+        let available = reader.fill_buf().await?;
+        if available.is_empty() {
+            if bytes.is_empty() {
+                return Ok(None);
+            }
+            break;
+        }
+        let newline = available.iter().position(|&b| b == b'\n');
+        let length = newline.map_or(available.len(), |index| index + 1);
+        if length > limit.saturating_sub(bytes.len()) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "MCP input exceeds the 64 MiB frame limit",
+            ));
+        }
+        bytes.extend_from_slice(&available[..length]);
+        reader.consume(length);
+        if newline.is_some() {
+            break;
+        }
     }
+    let mut line = String::from_utf8(bytes)
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
     strip_trailing_newline(&mut line);
     Ok(Some(line))
 }
@@ -274,6 +301,32 @@ mod tests {
         );
         // EOF.
         assert_eq!(read_message_line(&mut reader).await.unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn bounded_reader_rejects_large_frames_with_or_without_newline() {
+        for data in [b"123456789\n".as_slice(), b"123456789".as_slice()] {
+            let mut reader = std::io::Cursor::new(data);
+            let error = read_message_line_bounded(&mut reader, 8).await.unwrap_err();
+            assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        }
+    }
+
+    #[tokio::test]
+    async fn bounded_reader_handles_chunked_utf8_and_escaped_newlines() {
+        let input = "{\"text\":\"Ω\\nnext\"}\n{}\n";
+        let mut reader = BufReader::with_capacity(1, std::io::Cursor::new(input.as_bytes()));
+        let frame = read_message_line_bounded(&mut reader, 32).await.unwrap().unwrap();
+        assert_eq!(serde_json::from_str::<serde_json::Value>(&frame).unwrap()["text"], "Ω\nnext");
+        assert_eq!(read_message_line_bounded(&mut reader, 3).await.unwrap().as_deref(), Some("{}"));
+    }
+
+    #[tokio::test]
+    async fn bounded_reader_accepts_exact_limit_and_rejects_invalid_utf8() {
+        let mut reader = std::io::Cursor::new(b"1234567\n");
+        assert_eq!(read_message_line_bounded(&mut reader, 8).await.unwrap().as_deref(), Some("1234567"));
+        let mut reader = std::io::Cursor::new(b"\xff\n");
+        assert_eq!(read_message_line_bounded(&mut reader, 8).await.unwrap_err().kind(), io::ErrorKind::InvalidData);
     }
 
     #[tokio::test]

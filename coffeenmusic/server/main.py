@@ -22,7 +22,7 @@ import glob
 import re
 import uuid
 from bridge_coordination import begin_legacy, abandon_unlaunched_legacy
-from batch_safety import validate_batch_fields
+from batch_safety import validate_batch_fields, validate_legacy_json_text
 
 # Configure logging
 logging.basicConfig(
@@ -157,6 +157,7 @@ class AltiumBridge:
         ownership_started = False
         launch_attempted = False
         try:
+            validate_legacy_json_text(params)
             # Clean up any existing response file
             if RESPONSE_FILE.exists():
                 RESPONSE_FILE.unlink()
@@ -957,10 +958,33 @@ async def get_component_pins(ctx: Context, cmp_designators: list) -> str:
 SANDBOX_DIR = MCP_DIR / "SandboxScript"
 SANDBOX_PAS = SANDBOX_DIR / "Sandbox.pas"
 SANDBOX_PRJ = SANDBOX_DIR / "Sandbox.PrjScr"
-SANDBOX_LOG = EXCHANGE_DIR / "sandbox_log.txt"
-SANDBOX_RESULT = EXCHANGE_DIR / "sandbox_result.json"
 SANDBOX_BEGIN = "// === BEGIN EXPERIMENT"
 SANDBOX_END = "// === END EXPERIMENT"
+
+
+def prepare_sandbox(script, request_id):
+    """Render a private, per-invocation project without rewriting templates."""
+    validate_legacy_json_text(script)
+    directory = EXCHANGE_DIR / 'sandbox' / request_id
+    directory.mkdir(parents=True, exist_ok=False)
+    paths = {name: directory / filename for name, filename in (
+        ('log', 'log.txt'), ('result', 'result.json'),
+        ('completion', 'completed.json'), ('project', 'Sandbox.PrjScr'))}
+    src = SANDBOX_PAS.read_text(encoding='utf-8')
+    pre, rest = src.split(SANDBOX_BEGIN, 1)
+    marker_line, rest = rest.split('\n', 1)
+    _, post = rest.split(SANDBOX_END, 1)
+    body = '\n'.join('        ' + line if line.strip() else line for line in script.strip('\n').splitlines())
+    src = pre + SANDBOX_BEGIN + marker_line + '\n' + body + '\n        ' + SANDBOX_END + post
+    for key, value in [('LOG', paths['log']), ('RESULT', paths['result']),
+                       ('COMPLETION', paths['completion']), ('REQUEST_ID', request_id)]:
+        token = '__ALTIUM_MCP_SANDBOX_' + key + '__'
+        if src.count(token) != 1:
+            raise ValueError('Invalid sandbox template: ' + token)
+        src = src.replace(token, str(value).replace("'", "''"))
+    (directory / 'Sandbox.pas').write_text(src, encoding='utf-8')
+    paths['project'].write_bytes(SANDBOX_PRJ.read_bytes())
+    return paths
 
 
 def _dismiss_altium_dialogs():
@@ -1012,8 +1036,8 @@ async def run_altium_script(ctx: Context, script: str, timeout_seconds: int = 12
     debugger is stopped (Ctrl+F3) or Altium is restarted. This tool detects
     that state and reports exactly which statement died.
 
-    The script runs in a SEPARATE script project, so a crash here can never
-    break the other MCP tools.
+    Each call uses a separate project. A crash still occupies Altium's shared
+    script engine; other tools remain blocked until completion or manual recovery.
 
     Writing the script:
     - Call SandboxLog('...') before each risky statement. The log is flushed
@@ -1045,48 +1069,48 @@ async def run_altium_script(ctx: Context, script: str, timeout_seconds: int = 12
     """
     logger.info(f"run_altium_script: {len(script.splitlines())} lines")
 
+    if timeout_seconds <= 0:
+        return json.dumps({'success': False, 'error': 'timeout_seconds must be positive; no script was launched'})
+
     if not SANDBOX_PAS.exists() or not SANDBOX_PRJ.exists():
         return json.dumps({"success": False,
                            "error": f"sandbox project missing at {SANDBOX_DIR}"})
 
     try:
-        src = SANDBOX_PAS.read_text(encoding="utf-8")
-        pre, rest = src.split(SANDBOX_BEGIN, 1)
-        marker_line, rest = rest.split("\n", 1)
-        _, post = rest.split(SANDBOX_END, 1)
-        body = "\n".join("        " + ln if ln.strip() else ln
-                          for ln in script.strip("\n").splitlines())
-        SANDBOX_PAS.write_text(
-            pre + SANDBOX_BEGIN + marker_line + "\n" + body + "\n        " + SANDBOX_END + post,
-            encoding="utf-8")
+        request_id = uuid.uuid4().hex
+        paths = prepare_sandbox(script, request_id)
     except Exception as e:
         return json.dumps({"success": False, "error": f"could not inject script: {e}"})
 
-    for f in (SANDBOX_LOG, SANDBOX_RESULT):
-        if f.exists():
-            try:
-                f.unlink()
-            except OSError:
-                pass
-
     cmd = (f'"{altium_bridge.config.altium_exe_path}" -RScriptingSystem:RunScript('
-           f'ProjectName="{SANDBOX_PRJ}"^|ProcName="Sandbox>Run")')
-    subprocess.Popen(cmd, shell=True)
+           f'ProjectName="{paths["project"]}"|ProcName="Sandbox>Run")')
+    begin_legacy(request_id, paths['project'].parent / 'unused-request.json', paths['completion'])
+    try:
+        subprocess.Popen(cmd, shell=False, creationflags=subprocess.CREATE_NO_WINDOW)
+    except Exception:
+        abandon_unlaunched_legacy(request_id)
+        raise
 
-    start = time.time()
+    start = time.monotonic()
     dialogs = 0
-    while not SANDBOX_RESULT.exists() and time.time() - start < timeout_seconds:
+    completed = False
+    while time.monotonic() - start < timeout_seconds:
+        try:
+            acknowledgement = json.loads(paths['completion'].read_text(encoding='utf-8-sig'))
+            completed = isinstance(acknowledgement, dict) and acknowledgement.get('request_id') == request_id
+        except (OSError, ValueError):
+            completed = False
+        if completed:
+            break
         await asyncio.sleep(0.5)
-        if time.time() - start > 6:
-            dialogs += _dismiss_altium_dialogs()
 
     steps = []
-    if SANDBOX_LOG.exists():
-        steps = SANDBOX_LOG.read_text(encoding="utf-8", errors="replace").splitlines()
+    if paths['log'].exists():
+        steps = paths['log'].read_text(encoding="utf-8", errors="replace").splitlines()
 
-    if SANDBOX_RESULT.exists():
-        result_text = SANDBOX_RESULT.read_text(encoding="utf-8", errors="replace").strip()
-        return json.dumps({"success": True, "result": result_text, "steps": steps,
+    if completed and paths['result'].exists():
+        result_text = paths['result'].read_text(encoding="utf-8", errors="replace").strip()
+        return json.dumps({"success": 'EXCEPTION escaped the script body' not in steps, "result": result_text, "steps": steps,
                            "dialogs_dismissed": dialogs}, indent=2)
 
     if steps:
