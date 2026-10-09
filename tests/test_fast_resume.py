@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 @pytest.fixture
 def session(tmp_path, monkeypatch):
+    monkeypatch.setattr(coord.subprocess, 'CREATE_NO_WINDOW', 0, raising=False)
     work = tmp_path / 'work'; work.mkdir()
     script = tmp_path / 'script.PrjScr'; script.touch()
     exe = tmp_path / 'X2.exe'; exe.touch()

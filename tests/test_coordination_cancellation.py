@@ -2,6 +2,7 @@
 import asyncio
 import json
 import threading
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -15,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 @pytest.mark.parametrize('phase', ['stop', 'start'])
 @pytest.mark.parametrize('scoped', [False, True])
+@pytest.mark.skipif(sys.platform != 'win32', reason='Exercises real Windows cross-process file locking')
 def test_cancel_retains_lock_until_worker_finishes(tmp_path, monkeypatch, phase, scoped):
     monkeypatch.setattr(coord, 'LOCK', tmp_path / 'engine.lock')
     started, release, finished = threading.Event(), threading.Event(), threading.Event()
@@ -81,6 +83,7 @@ def test_invalid_launch_state_never_launches(tmp_path, monkeypatch, content):
     assert marker.read_text() == content
 
 
+@pytest.mark.skipif(sys.platform != 'win32', reason='Exercises real Windows cross-process file locking')
 def test_manual_stop_confirmation_can_clear_damaged_launch_state(tmp_path, monkeypatch):
     marker = tmp_path / 'launch.json'; marker.write_text('[]')
     for name, value in {'WORKSPACE': tmp_path, 'RUNTIME': tmp_path,

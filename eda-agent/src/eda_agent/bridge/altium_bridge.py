@@ -1,3 +1,4 @@
+# Modified by M-R-Abedini; see root MODIFICATIONS.md.
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2026 George Saliba <george.saliba@salitronic.com>
 """Communication bridge between Python and Altium Designer via file-based IPC.

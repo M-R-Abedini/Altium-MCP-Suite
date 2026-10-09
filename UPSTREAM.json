@@ -2,19 +2,20 @@
   "eda-agent": {
     "upstream": "https://github.com/salitronic/eda-agent.git",
     "snapshot_commit": "1b60105cbe0c4bd557007b87bc04dda2fd4ef9a1",
-    "files": 556,
-    "bytes": 10843557
+    "license": "Apache-2.0",
+    "license_file": "eda-agent/LICENSE",
+    "notice_file": "eda-agent/NOTICE"
   },
   "coffeenmusic": {
     "upstream": "https://github.com/coffeenmusic/altium-mcp.git",
     "snapshot_commit": "36a3e000a1dd404727a6f09519994ddc36fa7808",
-    "files": 54,
-    "bytes": 3736384
+    "license": "MIT",
+    "license_file": "coffeenmusic/LICENSE"
   },
   "altium-designer-mcp": {
     "upstream": "https://github.com/embedded-society/altium-designer-mcp.git",
     "snapshot_commit": "59264d50f1b528d3e9714facc9957944081f063d",
-    "files": 172,
-    "bytes": 5883039
+    "license": "GPL-3.0-or-later",
+    "license_file": "altium-designer-mcp/LICENCE"
   }
 }

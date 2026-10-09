@@ -12,7 +12,7 @@ MCP servers that let an AI read and edit your Altium schematics, PCBs, and libra
 
 - Read and edit the open schematic: add components, draw wires, place net labels and power ports, edit parameters, pull a BOM or netlist.
 - Work the PCB: move components, lay tracks and vias, check placement clearances, panelize.
-- Audit the design: orphan net labels, floating ports, unconnected IC pins, missing decoupling caps, designator collisions, off-grid parts — or one 31-point lint sweep over schematic and PCB.
+- Audit the design: orphan net labels, floating ports, unconnected IC pins, missing decoupling caps, designator collisions, off-grid parts — or 33 lint checks in one call, with optional DRC.
 - Check connectivity with four read-only tools: snapshot pin-to-net assignments (SHA-256 digest), per-pin contracts (expected net, or intentional NC with a reason), before/after diffs, and schematic↔PCB pad parity in both directions.
 - Calculate trace width, impedance, and length budgets. These are calculators, not a signal-integrity proof.
 - Read and write `.SchLib` / `.PcbLib` library files.
@@ -32,7 +32,7 @@ MCP servers that let an AI read and edit your Altium schematics, PCBs, and libra
 - Experimental. Some operations can crash Altium's DelphiScript engine and stop the polling loop — back up your design before letting the AI edit it.
 - Native save and script-backed UI commands can wait during a handler. The loop releases the engine after about two idle seconds; background pings do not extend that deadline. The next coordinated tool call restarts it automatically.
 - EDA JSON parameters above U+00FF (Ω, Chinese text) are rejected before dispatch to prevent silent `?` substitution. Full Unicode transport is not implemented.
-- Network paths must be mapped drives; UNC paths don't open.
+- The EDA transport preserves UNC paths; access to the share depends on Windows permissions.
 - `proj_sync_pcb` requires `allow_modal=True`; the schematic→PCB ECO still opens an interactive dialog.
 - The connectivity checkers verify pin assignments, not copper. They can't see data you didn't feed them.
 - An open modal dialog blocks script commands; Win32 dialog diagnostics remain available. Busy handlers reject new dispatch. Timed-out requests are withdrawn if not yet consumed; in-flight edits cannot be cancelled, so inspect the design before retrying.
@@ -72,4 +72,4 @@ See [the contributing guide](CONTRIBUTING.md) for development setup, tests, tran
 
 ## License
 
-New suite code is MIT. Bundled projects keep their own licenses — see [UPSTREAM.json](UPSTREAM.json).
+Suite glue: MIT. EDA backend: Apache-2.0; legacy backend: MIT; Rust library backend: GPL-3.0-or-later. See [license scope and exceptions](THIRD_PARTY_NOTICES.md) and [upstream snapshots](UPSTREAM.json).

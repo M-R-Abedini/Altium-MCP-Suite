@@ -1,3 +1,4 @@
+# Modified by M-R-Abedini; see root MODIFICATIONS.md.
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2026 George Saliba <george.saliba@salitronic.com>
 """Design-review orchestration tools.
@@ -506,7 +507,7 @@ def register_review_tools(mcp):
         summary: dict[str, dict[str, int]] = {}
         failed: list[str] = []
 
-        # ``checks`` folds the 31 standalone audit_* tools into this one:
+        # ``checks`` combines the shared native audits and BOM checks:
         # pass a subset of section names to run only those. None = run all.
         wanted = set(checks) if checks else None
 

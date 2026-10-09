@@ -17,10 +17,13 @@ import uuid
 
 ROOT = Path(__file__).resolve().parent
 ROOT_MODULES = ('eda_stdio.py', 'bridge_coordination.py', 'suite_config.py')
+NOTICE_FILES = ('LICENSE', 'THIRD_PARTY_NOTICES.md', 'UPSTREAM.json', 'MODIFICATIONS.md',
+                 'eda-agent/LICENSE', 'eda-agent/NOTICE', 'coffeenmusic/LICENSE',
+                 'altium-designer-mcp/LICENCE')
 
 
 def deployment_files(root=ROOT):
-    files = [root / name for name in ROOT_MODULES]
+    files = [root / name for name in (*ROOT_MODULES, *NOTICE_FILES)]
     for directory in ('eda-agent/src', 'eda-agent/scripts/altium', 'coffeenmusic/server'):
         for path in (root / directory).rglob('*'):
             relative = path.relative_to(root / directory)
@@ -39,9 +42,12 @@ async def smoke(destination, python=sys.executable, servers=('eda', 'legacy')):
     env = dict(os.environ)
     env.pop('PYTHONPATH', None)
     with tempfile.TemporaryDirectory(prefix='altium-installed-smoke-') as scratch:
+        env['ALTIUM_EXE'] = str(Path(scratch) / 'not-installed' / 'X2.EXE')
         env['ALTIUM_MCP_RUNTIME'] = str(Path(scratch) / 'runtime')
         env['EDA_AGENT_WORKSPACE'] = str(Path(scratch) / 'workspace')
         env['EDA_AGENT_POINTER_FILE'] = str(Path(scratch) / 'pointer.txt')
+        env['EDA_AGENT_TOOLSET'] = 'full'
+        env['EDA_AGENT_BACKEND'] = 'altium'
         for name in servers:
             script = destination / ('eda_stdio.py' if name == 'eda' else 'coffeenmusic/server/codex_stdio.py')
             args = [str(script)] + (['--no-dashboard'] if name == 'eda' else [])

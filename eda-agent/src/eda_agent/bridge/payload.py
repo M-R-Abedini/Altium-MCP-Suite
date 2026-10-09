@@ -1,3 +1,4 @@
+# Modified by M-R-Abedini; see root MODIFICATIONS.md.
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2026 George Saliba <george.saliba@salitronic.com>
 """One sanitiser for the batch-payload wire format.
