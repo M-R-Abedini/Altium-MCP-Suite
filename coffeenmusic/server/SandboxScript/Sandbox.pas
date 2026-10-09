@@ -1,8 +1,7 @@
 // Isolated DelphiScript sandbox used by the run_altium_script MCP tool.
 //
-// This is deliberately a SEPARATE script project from Altium_API: a compile
-// error or crash in user-supplied script must never break the working MCP
-// tooling.
+// Each invocation uses a separate generated project and exchange directory.
+// The suite retains engine ownership until the final completion acknowledgement.
 //
 // SandboxLog() flushes to disk on every call, so when a script dies silently
 // (Altium leaves it paused in the debugger with no dialog) the log still shows
@@ -36,21 +35,16 @@ var
     ResultText : String;
     OutLines   : TStringList;
 begin
-    LogPath := 'C:\Users\Public\altium_mcp\sandbox_log.txt';
-    OutPath := 'C:\Users\Public\altium_mcp\sandbox_result.json';
+    LogPath := '__ALTIUM_MCP_SANDBOX_LOG__';
+    OutPath := '__ALTIUM_MCP_SANDBOX_RESULT__';
     LogLines := TStringList.Create;
+    try
     ResultText := '{"sandbox": "no result set"}';
     SandboxLog('sandbox start');
 
     try
         // === BEGIN EXPERIMENT (rewritten by the run_altium_script tool) ===
-        SandboxLog('compile-check the exporter by loading it and calling a harmless entry point');
-        S1 := 'c:\Users\stephen.thompson\Documents\Claude Code\PCB_RL\exporter\Export_PCB_Data.pas';
-        SandboxLog('file exists: ' + BoolToStr(FileExists(S1), True));
-        SandboxLog('running ExportAllPCBsInFolderAuto via RunScriptFile');
-        Client.SendMessage('ScriptingSystem:RunScriptFile',
-            'FileName=' + S1 + '|ProcName=ExportAllPCBsInFolderAuto', 512, Client.CurrentView);
-        ResultText := 'dispatched';
+        ResultText := '{"sandbox":"empty experiment"}';
         // === END EXPERIMENT ===
     except
         SandboxLog('EXCEPTION escaped the script body');
@@ -63,6 +57,17 @@ begin
     try
         OutLines.Text := ResultText;
         OutLines.SaveToFile(OutPath);
+    finally
+        OutLines.Free;
+    end;
+    finally
+        LogLines.Free;
+    end;
+    // Only a fully completed invocation can authorize another script launch.
+    OutLines := TStringList.Create;
+    try
+        OutLines.Text := '{"request_id":"__ALTIUM_MCP_SANDBOX_REQUEST_ID__"}';
+        OutLines.SaveToFile('__ALTIUM_MCP_SANDBOX_COMPLETION__');
     finally
         OutLines.Free;
     end;

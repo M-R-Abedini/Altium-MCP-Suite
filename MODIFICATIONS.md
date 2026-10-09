@@ -2,6 +2,8 @@
 
 ## Added 2026-10-09
 
+- External analysis: fix legacy JSON punctuation/escapes and native direct-member lookup, reject unsupported input before publication, protect 23 iterator scopes, and bound Rust stdin frames to 64 MiB. The snippet sandbox now generates matching private paths, retains ownership until native completion, avoids shell launch and leaves dialogs for the operator. See [claim-by-claim findings and native validation](docs/review/EXTERNAL_ANALYSIS_2026-10-09.md). EDA script version: `2026.10.09.review1`.
+
 - Follow-up: cancellation during engine stop/start now drains the worker under the shared lock before propagating cancellation (asyncio and AnyIO). Launch state is validated and published atomically; malformed state fails with manual recovery instructions. Installed live tests verified legacy read-only handover, idle release/recovery, and cancellation during real native stop/start.
 
 - Legacy handover now requires the current editor session's final clean-shutdown acknowledgement. Ping timeouts and stop-file consumption no longer authorize a second script launch; pending stop files are withdrawn on failure. See [targeted review, open findings and regression evidence](docs/review/REVIEW_2026-10-09.md).

@@ -15,6 +15,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def method(name, namespace):
+    from test_review_fixes import validate_legacy_json_text
+    namespace.setdefault('validate_legacy_json_text', validate_legacy_json_text)
     tree = ast.parse((ROOT / 'coffeenmusic/server/main.py').read_text(encoding='utf-8'))
     cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'AltiumBridge')
     node = next(n for n in cls.body if isinstance(n, ast.AsyncFunctionDef) and n.name == name)
