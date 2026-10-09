@@ -70,6 +70,10 @@ async def main(live=False):
                             if live:
                                 import bridge_coordination as coordination
                                 if name == 'eda':
+                                    # Establish the current editor session before
+                                    # testing a stop, including after an editor restart.
+                                    established = await client.call_tool('app_context', {})
+                                    assert not established.isError and established.structuredContent['bridge_answering'], established
                                     with coordination.engine_lock():
                                         coordination.stop_eda()
                                     reply = await client.call_tool('app_context', {})
@@ -125,4 +129,8 @@ async def main(live=False):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--live', action='store_true')
-    asyncio.run(main(parser.parse_args().live))
+    parser.add_argument('--root', type=Path, default=ROOT)
+    options = parser.parse_args()
+    ROOT = options.root.resolve()
+    sys.path.insert(0, str(ROOT))
+    asyncio.run(main(options.live))

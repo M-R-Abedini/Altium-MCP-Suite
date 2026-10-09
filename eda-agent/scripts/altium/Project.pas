@@ -178,9 +178,29 @@ Begin
             { client projects included. app_save_all is the tool for that,    }
             { and its name says so.                                           }
             SaveProjectMembers(Project);
+            If Not ProjectDefinitionSaveDispatched Then
+            Begin
+                Result := BuildErrorResponse(RequestId, 'SAVE_UNCONFIRMED',
+                    'Could not dispatch a project-scoped definition save');
+                Exit;
+            End;
+            If CountDirtyInProject(Project) > 0 Then
+            Begin
+                Result := BuildErrorResponse(RequestId, 'SAVE_UNCONFIRMED',
+                    'Project members remain modified after saving');
+                Exit;
+            End;
+            If Not FileExists(Project.DM_ProjectFullPath) Then
+            Begin
+                Result := BuildErrorResponse(RequestId, 'SAVE_UNCONFIRMED',
+                    'Project definition is absent after saving');
+                Exit;
+            End;
             Result := BuildSuccessResponse(RequestId,
                 '{"success":true,"project_path":"'
-                + EscapeJsonString(Project.DM_ProjectFullPath) + '"}');
+                + EscapeJsonString(Project.DM_ProjectFullPath) + '"'
+                + ',"document_count":' + IntToStr(Project.DM_LogicalDocumentCount)
+                + ',"variant_count":' + IntToStr(Project.DM_ProjectVariantCount) + '}');
         End
         Else
             Result := BuildErrorResponse(RequestId, 'PROJECT_NOT_FOUND', 'Project not found');
@@ -204,10 +224,10 @@ End;
 { looking the project up again.                                               }
 Function Proj_Close(Params : String; RequestId : String) : String;
 Var
-    ProjectPath : String;
+    ProjectPath, PreviousPath : String;
     SaveFirst, Closed : Boolean;
     Workspace : IWorkspace;
-    Project : IProject;
+    Project, Previous, Focused : IProject;
 Begin
     ProjectPath := ExtractJsonValue(Params, 'project_path');
     SaveFirst := ExtractJsonValue(Params, 'save') <> 'false';
@@ -224,12 +244,43 @@ Begin
         Begin
             ProjectPath := Project.DM_ProjectFullPath;
             If SaveFirst Then
+            Begin
                 SaveProjectMembers(Project);
+                If CountDirtyInProject(Project) > 0 Then
+                Begin
+                    Result := BuildErrorResponse(RequestId, 'SAVE_UNCONFIRMED',
+                        'Project remains modified; close aborted');
+                    Exit;
+                End;
+            End;
 
-            ResetParameters;
-            AddStringParameter('ObjectKind', 'Project');
-            AddStringParameter('FileName', ProjectPath);
-            RunProcess('WorkspaceManager:CloseObject');
+            Previous := Workspace.DM_FocusedProject;
+            PreviousPath := '';
+            If Previous <> Nil Then PreviousPath := Previous.DM_ProjectFullPath;
+            Project.DM_SetAsCurrentProject;
+            Try
+                Focused := Workspace.DM_FocusedProject;
+                If Focused = Nil Then
+                Begin
+                    Result := BuildErrorResponse(RequestId, 'CLOSE_UNCONFIRMED', 'Could not focus the target project');
+                    Exit;
+                End;
+                If UpperCase(Focused.DM_ProjectFullPath) <> UpperCase(ProjectPath) Then
+                Begin
+                    Result := BuildErrorResponse(RequestId, 'CLOSE_UNCONFIRMED', 'Focused project does not match target');
+                    Exit;
+                End;
+                ResetParameters;
+                AddStringParameter('ObjectKind', 'FocusedProjectAndDocuments');
+                RunProcess('WorkspaceManager:CloseObject');
+            Finally
+                { Do not dereference the project that was just closed. }
+                If (PreviousPath <> '') And (UpperCase(PreviousPath) <> UpperCase(ProjectPath)) Then
+                Begin
+                    Previous := FindProjectByPath(Workspace, PreviousPath);
+                    If Previous <> Nil Then Previous.DM_SetAsCurrentProject;
+                End;
+            End;
 
             { Confirm. A cancelled save prompt aborts the close, and the      }
             { process layer cannot report that.                               }
@@ -284,7 +335,7 @@ Begin
                 If Not First Then Data := Data + ',';
                 First := False;
                 DocInfo := '{"file_name":"' + EscapeJsonString(ExtractFileName(Doc.DM_FileName)) + '"';
-                DocInfo := DocInfo + ',"file_path":"' + EscapeJsonString(Doc.DM_FileName) + '"';
+                DocInfo := DocInfo + ',"file_path":"' + EscapeJsonString(Doc.DM_FullPath) + '"';
                 DocInfo := DocInfo + ',"document_kind":"' + EscapeJsonString(Doc.DM_DocumentKind) + '"}';
                 Data := Data + DocInfo;
             End;
@@ -631,6 +682,7 @@ Begin
         { tool precisely when the in-editor state has diverged from the     }
         { cached netlist.                                                   }
         Try SaveAllDirty(0); Except End;
+        Project.DM_ResetLastCompileTimeForAllDocuments;
         LastCompileTick := 0;
         SmartCompile(Project);
     End;
@@ -658,6 +710,11 @@ Begin
     FilterComp := ExtractJsonValue(Params, 'component');
     FilterNet := ExtractJsonValue(Params, 'net_name');
     Limit := StrToIntDef(ExtractJsonValue(Params, 'limit'), 500);
+    If Limit < 0 Then
+    Begin
+        Result := BuildErrorResponse(RequestId, 'INVALID_LIMIT', 'limit must be zero (unlimited) or positive');
+        Exit;
+    End;
 
     Workspace := GetWorkspace;
     If Workspace = Nil Then
@@ -689,13 +746,13 @@ Begin
     GetCompiledDocs(Project, DocCount, UsePhysical);
     For I := 0 To DocCount - 1 Do
     Begin
-        If Count >= Limit Then Break;
+        If (Limit > 0) And (Count >= Limit) Then Break;
         Doc := GetCompiledDoc(Project, I, UsePhysical);
         If Doc = Nil Then Continue;
 
         For J := 0 To Doc.DM_ComponentCount - 1 Do
         Begin
-            If Count >= Limit Then Break;
+            If (Limit > 0) And (Count >= Limit) Then Break;
             Comp := Doc.DM_Components(J);
             If Comp = Nil Then Continue;
 
@@ -704,7 +761,7 @@ Begin
 
             For K := 0 To Comp.DM_PinCount - 1 Do
             Begin
-                If Count >= Limit Then Break;
+                If (Limit > 0) And (Count >= Limit) Then Break;
                 Pin := Comp.DM_Pins(K);
                 If Pin = Nil Then Continue;
 
@@ -2487,6 +2544,46 @@ End;
 { Params: project_path (optional)                                             }
 {..............................................................................}
 
+{ Persisted GUIDs are not exposed by the documented IProjectVariant API. }
+Function PersistedVariantId(Project : IProject; Variant : IProjectVariant; Index : Integer) : String;
+Var
+    Ini : TIniFile;
+    Section : String;
+Begin
+    Result := '';
+    If (Project = Nil) Or (Variant = Nil) Then Exit;
+    If Not FileExists(Project.DM_ProjectFullPath) Then Exit;
+    Ini := TIniFile.Create(Project.DM_ProjectFullPath);
+    Try
+        Section := 'ProjectVariant' + IntToStr(Index + 1);
+        If Ini.ReadString(Section, 'Description', '') = Variant.DM_Description Then
+            Result := Ini.ReadString(Section, 'UniqueId', '');
+    Finally
+        Ini.Free;
+    End;
+End;
+
+Function ResolveVariantIndex(Project : IProject; Selector : String) : Integer;
+Var
+    I, Matches : Integer;
+    Variant : IProjectVariant;
+Begin
+    Result := -1;
+    Matches := 0;
+    For I := 0 To Project.DM_ProjectVariantCount - 1 Do
+    Begin
+        Variant := Project.DM_ProjectVariants(I);
+        If Variant = Nil Then Continue;
+        If (Selector = PersistedVariantId(Project, Variant, I))
+            Or (Selector = Variant.DM_Description) Or (Selector = Variant.DM_Name) Then
+        Begin
+            Result := I;
+            Matches := Matches + 1;
+        End;
+    End;
+    If Matches > 1 Then Result := -2;
+End;
+
 Function Proj_GetVariants(Params : String; RequestId : String) : String;
 Var
     ProjectPath : String;
@@ -2523,6 +2620,8 @@ Begin
 
         VarInfo := '{"name":"' + EscapeJsonString(Variant.DM_Name) + '"';
         VarInfo := VarInfo + ',"description":"' + EscapeJsonString(Variant.DM_Description) + '"';
+        VarInfo := VarInfo + ',"index":' + IntToStr(I);
+        VarInfo := VarInfo + ',"unique_id":"' + EscapeJsonString(PersistedVariantId(Project, Variant, I)) + '"';
 
         { Component variations }
         VarInfo := VarInfo + ',"variations":[';
@@ -2546,6 +2645,7 @@ Begin
                 KindStr := 'Unknown(' + IntToStr(CompVar.DM_VariationKind) + ')';
 
             CompInfo := '{"designator":"' + EscapeJsonString(CompVar.DM_PhysicalDesignator) + '"';
+            CompInfo := CompInfo + ',"unique_id":"' + EscapeJsonString(CompVar.DM_UniqueId) + '"';
             CompInfo := CompInfo + ',"kind":"' + KindStr + '"';
             CompInfo := CompInfo + ',"alternate_part":"' + EscapeJsonString(CompVar.DM_AlternatePart) + '"';
 
@@ -2575,7 +2675,7 @@ Begin
     End;
     Data := Data + ']';
 
-    Result := BuildSuccessResponse(RequestId, '{"variants":' + Data + ',"count":' + IntToStr(Project.DM_ProjectVariantCount) + '}');
+    Result := BuildSuccessResponse(RequestId, '{"project_path":"' + EscapeJsonString(Project.DM_ProjectFullPath) + '","variants":' + Data + ',"count":' + IntToStr(Project.DM_ProjectVariantCount) + '}');
 End;
 
 {..............................................................................}
@@ -2633,7 +2733,7 @@ Begin
         Variant := Project.DM_ProjectVariants(V);
         If V > 0 Then VariantsJson := VariantsJson + ',';
         If Variant <> Nil Then
-            VariantsJson := VariantsJson + '"' + EscapeJsonString(Variant.DM_Name) + '"'
+            VariantsJson := VariantsJson + '"' + EscapeJsonString(Variant.DM_Description) + '"'
         Else
             VariantsJson := VariantsJson + '""';
     End;
@@ -2683,7 +2783,7 @@ Begin
 
         If I > 0 Then RowsJson := RowsJson + ',';
         RowsJson := RowsJson + '{"designator":"' + EscapeJsonString(Desig) +
-            '","cells":' + CellsJson + '}';
+            '","unique_id":"' + EscapeJsonString(Comp.DM_UniqueId) + '","cells":' + CellsJson + '}';
     End;
     RowsJson := RowsJson + ']';
 
@@ -2738,7 +2838,8 @@ Var
     I : Integer;
     Found : Boolean;
 Begin
-    VariantName := ExtractJsonValue(Params, 'variant_name');
+    VariantName := ExtractJsonValue(Params, 'variant_id');
+    If VariantName = '' Then VariantName := ExtractJsonValue(Params, 'variant_name');
     ProjectPath := ExtractJsonValue(Params, 'project_path');
 
     If VariantName = '' Then
@@ -2754,12 +2855,19 @@ Begin
     Else Project := Workspace.DM_FocusedProject;
     If Project = Nil Then Begin Result := BuildErrorResponse(RequestId, 'NO_PROJECT', 'No project found'); Exit; End;
 
+    I := ResolveVariantIndex(Project, VariantName);
+    If I = -2 Then
+    Begin
+        Result := BuildErrorResponse(RequestId, 'AMBIGUOUS_VARIANT', 'Use a unique display description or persisted UniqueId');
+        Exit;
+    End;
+    If I >= 0 Then VariantName := Project.DM_ProjectVariants(I).DM_Description;
     { Verify variant exists }
     Found := False;
     For I := 0 To Project.DM_ProjectVariantCount - 1 Do
     Begin
         Variant := Project.DM_ProjectVariants(I);
-        If (Variant <> Nil) And (Variant.DM_Name = VariantName) Then
+        If (Variant <> Nil) And (Variant.DM_Description = VariantName) Then
         Begin
             Found := True;
             Break;
@@ -2786,7 +2894,7 @@ Begin
     ActualName := '';
     Try
         Current := Project.DM_CurrentProjectVariant;
-        If Current <> Nil Then ActualName := Current.DM_Name;
+        If Current <> Nil Then ActualName := Current.DM_Description;
     Except End;
 
     If ActualName = VariantName Then
@@ -2830,7 +2938,8 @@ Var
     I, Target, PreCount, PostCount, Entries : Integer;
     StillPresent : Boolean;
 Begin
-    VariantName := ExtractJsonValue(Params, 'variant_name');
+    VariantName := ExtractJsonValue(Params, 'variant_id');
+    If VariantName = '' Then VariantName := ExtractJsonValue(Params, 'variant_name');
     ProjectPath := ExtractJsonValue(Params, 'project_path');
 
     If VariantName = '' Then
@@ -2858,12 +2967,19 @@ Begin
     PreCount := 0;
     Try PreCount := Project.DM_ProjectVariantCount; Except End;
 
+    Target := ResolveVariantIndex(Project, VariantName);
+    If Target = -2 Then
+    Begin
+        Result := BuildErrorResponse(RequestId, 'AMBIGUOUS_VARIANT', 'Use a unique display description or persisted UniqueId');
+        Exit;
+    End;
+    If Target >= 0 Then VariantName := Project.DM_ProjectVariants(Target).DM_Description;
     Target := -1;
     Entries := -1;
     For I := 0 To PreCount - 1 Do
     Begin
         Variant := Project.DM_ProjectVariants(I);
-        If (Variant <> Nil) And (Variant.DM_Name = VariantName) Then
+        If (Variant <> Nil) And (Variant.DM_Description = VariantName) Then
         Begin
             Target := I;
             { Reported so the caller learns what the deletion cost. A      }
@@ -2902,7 +3018,7 @@ Begin
     For I := 0 To PostCount - 1 Do
     Begin
         Variant := Project.DM_ProjectVariants(I);
-        If (Variant <> Nil) And (Variant.DM_Name = VariantName) Then
+        If (Variant <> Nil) And (Variant.DM_Description = VariantName) Then
         Begin
             StillPresent := True;
             Break;
@@ -3069,8 +3185,9 @@ Begin
     Else Project := Workspace.DM_FocusedProject;
     If Project = Nil Then Begin Result := BuildErrorResponse(RequestId, 'NO_PROJECT', 'No project found'); Exit; End;
 
-    { Compile to populate violations }
+    { Connectivity compile alone does not refresh validation messages. }
     SmartCompile(Project);
+    Project.DM_Validate;
 
     Data := '[';
     First := True;
@@ -3081,16 +3198,12 @@ Begin
         Begin
             Violation := Project.DM_Violations(I);
             If Violation = Nil Then Continue;
+            If Violation.DM_IsSuppressed And Not Project.DM_ReportSuppressedErrorsInMessages Then Continue;
 
             If Not First Then Data := Data + ',';
             First := False;
 
-            { Severity is deliberately omitted: DM_ErrorLevelString is a
-              compile-time undeclared identifier in DelphiScript, and
-              DM_ErrorLevel hasn't been confirmed as declared either. Use
-              DM_ShortDescriptorString (documented on IDMObject base) rather
-              than the undocumented DM_DescriptorString. DM_OwnerDocumentName
-              is documented on IDMObject and is safe. }
+            { IViolation exposes native severity and suppression state. }
             Msg := '';
             Try Msg := Violation.DM_ShortDescriptorString; Except Msg := ''; End;
 
@@ -3099,6 +3212,8 @@ Begin
 
             Data := Data + '{"message":"' + EscapeJsonString(Msg) + '"';
             Data := Data + ',"source":"' + EscapeJsonString(Src) + '"';
+            Data := Data + ',"severity":"' + EscapeJsonString(ErrorLevelToString(Violation.DM_ErrorLevel)) + '"';
+            Data := Data + ',"suppressed":' + BoolToJsonStr(Violation.DM_IsSuppressed);
             Data := Data + '}';
             Inc(Count);
         End;
@@ -4290,6 +4405,7 @@ Begin
 
     PrevTick := LastCompileTick;
     Try SaveAllDirty(0); Except End;
+    Project.DM_ResetLastCompileTimeForAllDocuments;
     LastCompileTick := 0;
     SmartCompile(Project);
     NewTick := LastCompileTick;

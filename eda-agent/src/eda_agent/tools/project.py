@@ -7,6 +7,8 @@ from ..bridge import get_bridge
 from .option_hints import project_option_collision
 from .datasheet_hints import tag_response
 from .bulk_hints import BulkHintTracker
+from ..project_variants import (ProjectFile, enrich_variants, resolve_variant,
+                                verified_save, edit_variants)
 
 
 def register_project_tools(mcp):
@@ -78,7 +80,7 @@ def register_project_tools(mcp):
         params = {}
         if project_path:
             params["project_path"] = project_path
-        result = await bridge.send_command_async("project.save", params)
+        result = await verified_save(bridge, project_path)
         return result
 
     @mcp.tool()
@@ -255,7 +257,7 @@ def register_project_tools(mcp):
             component: Filter by component designator. Empty = all.
             net_name: Filter by net name. Empty = all.
             project_path: Optional project path. If None, uses active.
-            limit: Max pin records (default 500). Raise for big boards.
+            limit: Max pin records (default 500). Zero means unlimited; negatives are rejected.
             force_recompile: Save all dirty docs, invalidate the
                 SmartCompile cache, recompile. Costs one extra
                 compile (~5-10 s on real designs). Use when you need
@@ -274,6 +276,8 @@ def register_project_tools(mcp):
             # Guaranteed-fresh read after user edits:
             fresh = proj_get_nets(force_recompile=True, limit=10000)
         """
+        if limit < 0:
+            raise ValueError("limit must be zero (unlimited) or positive")
         bridge = get_bridge()
         params: dict[str, Any] = {"limit": str(limit)}
         if component:
@@ -1233,7 +1237,7 @@ def register_project_tools(mcp):
 
         Returns:
             Dictionary with "variants" array and "count". Each variant has
-            name, description, and variations array (designator, kind,
+            unique_id, display_name, name, description, persisted, and variations array (designator, kind,
             alternate_part, parameters).
         """
         bridge = get_bridge()
@@ -1241,7 +1245,7 @@ def register_project_tools(mcp):
         if project_path:
             params["project_path"] = project_path
         result = await bridge.send_command_async("project.get_variants", params)
-        return result
+        return enrich_variants(result)
 
     @mcp.tool()
     async def proj_get_active_variant(
@@ -1263,30 +1267,47 @@ def register_project_tools(mcp):
         result = await bridge.send_command_async(
             "project.get_active_variant", params
         )
+        listing = enrich_variants(await bridge.send_command_async("project.get_variants", params))
+        matches = [v for v in listing.get("variants", [])
+                   if v.get("description") == result.get("description")]
+        result["unique_id"] = matches[0]["unique_id"] if len(matches) == 1 else ""
+        result["display_name"] = result.get("description") or result.get("name", "")
         return result
 
     @mcp.tool()
     async def proj_set_active_variant(
-        variant_name: str,
+        variant_name: str = "",
         project_path: Optional[str] = None,
+        variant_id: str = "",
     ) -> dict[str, Any]:
-        """Switch the active project variant.
+        """Activate a variant by stable UniqueId, or an unambiguous display/name alias.
 
-        Args:
-            variant_name: Name of the variant to activate
-            project_path: Optional project path. If None, uses active project.
-
-        Returns:
-            Dictionary confirming the switch
+        Saves and reopens only the target project to persist CurrentVariant.
+        Document focus can change on reopen. Use variant_id from proj_list_variants.
+        Pass "[No Variations]" to return to the base design.
         """
         bridge = get_bridge()
-        params: dict[str, Any] = {"variant_name": variant_name}
-        if project_path:
-            params["project_path"] = project_path
-        result = await bridge.send_command_async(
-            "project.set_active_variant", params
-        )
-        return result
+        params = {"project_path": project_path} if project_path else {}
+        listing = enrich_variants(await bridge.send_command_async("project.get_variants", params))
+        selector = variant_id or variant_name
+        if selector == "[No Variations]":
+            label, identity = "", ""
+        else:
+            target = resolve_variant(listing["variants"], selector)
+            label, identity = target["display_name"], target["unique_id"]
+        def mutate(file):
+            # Revalidate after the save, which may have changed project metadata.
+            if identity and not any(v.get("UniqueId") == identity and v.get("Description") == label
+                                    for v in file.variants()):
+                raise ValueError("Variant identity changed while saving")
+            file.set("Design", "CurrentVariant", label)
+            return identity
+        async def verify(path, uid):
+            current = await bridge.send_command_async("project.get_active_variant", {"project_path": path})
+            actual = current.get("description", "") if current.get("name") != "[No Variations]" else ""
+            if actual != label:
+                raise RuntimeError("Native active-variant readback did not match")
+        return await edit_variants(bridge, listing["project_path"], mutate, verify)
 
     @mcp.tool()
     async def proj_export_variant_matrix_csv(
@@ -1384,7 +1405,7 @@ def register_project_tools(mcp):
         listing = await bridge.send_command_async("project.get_variants", params)
         variants = (listing or {}).get("variants", []) if isinstance(listing, dict) else []
         active = await bridge.send_command_async("project.get_active_variant", params)
-        original = (active or {}).get("name") if isinstance(active, dict) else None
+        original = ((active or {}).get("description") or (active or {}).get("name")) if isinstance(active, dict) else None
 
         base = Path(output_dir) if output_dir else get_config().workspace_dir
         base.mkdir(parents=True, exist_ok=True)
@@ -1394,7 +1415,7 @@ def register_project_tools(mcp):
 
         exported: list[dict[str, Any]] = []
         for var in variants:
-            vname = var.get("name") if isinstance(var, dict) else str(var)
+            vname = (var.get("description") or var.get("name")) if isinstance(var, dict) else str(var)
             if not vname:
                 continue
             out_pdf = base / f"{_safe(vname)}.pdf"
@@ -1402,7 +1423,9 @@ def register_project_tools(mcp):
                                      "ok": False, "error": ""}
             try:
                 set_params = dict(params, variant_name=vname)
-                await bridge.send_command_async("project.set_active_variant", set_params)
+                switched = await bridge.send_command_async("project.set_active_variant", set_params)
+                if isinstance(switched, dict) and switched.get("success") is False:
+                    raise RuntimeError(switched.get("reason") or "Variant switch failed")
                 res = await bridge.send_command_async(
                     "project.export_pdf", {"output_path": str(out_pdf)}
                 )
@@ -1426,9 +1449,11 @@ def register_project_tools(mcp):
         restore_error = ""
         if original:
             try:
-                await bridge.send_command_async(
+                switched = await bridge.send_command_async(
                     "project.set_active_variant", dict(params, variant_name=original)
                 )
+                if isinstance(switched, dict) and switched.get("success") is False:
+                    raise RuntimeError(switched.get("reason") or "Variant restore failed")
                 restored = original
             except Exception as exc:
                 restore_error = str(exc)
@@ -1455,29 +1480,81 @@ def register_project_tools(mcp):
         description: str = "",
         project_path: Optional[str] = None,
     ) -> dict[str, Any]:
-        """Create a new project variant.
+        """Create a native variant, save/reopen the target, and verify its GUID.
 
-        After creating, use `proj_set_active_variant` to switch to it,
-        and `obj_modify` to configure component variations.
-
-        Args:
-            name: Name for the new variant
-            description: Optional description
-            project_path: Optional project path. If None, uses active project.
-
-        Returns:
-            Dictionary confirming creation with name and description
+        Altium stores one visible description; description, when supplied,
+        is the display label, otherwise name is used. No components are excluded
+        initially. Use proj_set_variant_fitted for assembly differences.
         """
         bridge = get_bridge()
-        params: dict[str, Any] = {"name": name}
-        if description:
-            params["description"] = description
-        if project_path:
-            params["project_path"] = project_path
-        result = await bridge.send_command_async(
-            "project.create_variant", params
-        )
+        label = description or name
+        def mutate(file):
+            return file.create(label)
+        async def verify(path, uid):
+            listing = enrich_variants(await bridge.send_command_async("project.get_variants", {"project_path": path}))
+            variant = resolve_variant(listing["variants"], uid)
+            if variant["display_name"] != label or variant.get("variations"):
+                raise RuntimeError("Native created-variant readback did not match")
+        return await edit_variants(bridge, project_path, mutate, verify)
+
+    @mcp.tool()
+    async def proj_set_variant_fitted(
+        variant_id: str,
+        updates: list[dict[str, Any]],
+        project_path: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Bulk-set assembly state by native component UniqueIds.
+
+        updates: [{"unique_id": <full compiled UID>, "fitted": true/false}].
+        Obtain component IDs from proj_get_variant_matrix. Rejects duplicates,
+        missing IDs and alternate-part overrides. Preserves parameter overrides.
+        Saves, backs up, closes and reopens only the target .PrjPcb, then verifies
+        every requested state through the native matrix and variation readers.
+        """
+        if not updates:
+            raise ValueError("updates must contain at least one component")
+        bridge = get_bridge()
+        params = {"project_path": project_path} if project_path else {}
+        listing = enrich_variants(await bridge.send_command_async("project.get_variants", params))
+        target = resolve_variant(listing["variants"], variant_id)
+        path = listing["project_path"]
+        matrix = await bridge.send_command_async("project.get_variant_matrix", {"project_path": path})
+        def mutate(file):
+            file.fitted(target["unique_id"], updates, matrix["rows"])
+            return target["unique_id"]
+        async def verify(path, uid):
+            params = {"project_path": path}
+            native = enrich_variants(await bridge.send_command_async("project.get_variants", params))
+            variant = resolve_variant(native["variants"], uid)
+            entries = {v["unique_id"]: v for v in variant["variations"]}
+            matrix = await bridge.send_command_async("project.get_variant_matrix", params)
+            labels = matrix["variants"]
+            if labels.count(variant["display_name"]) != 1:
+                raise RuntimeError("Native matrix has an ambiguous variant heading")
+            column = labels.index(variant["display_name"])
+            rows = {v["unique_id"]: v for v in matrix["rows"]}
+            for update in updates:
+                key = update["unique_id"]
+                expected = "Fitted" if update["fitted"] else "Not Fitted"
+                # Altium omits a default Fitted entry from its variation list.
+                # The complete native matrix must still confirm that state.
+                native_kind = entries.get(key, {}).get("kind", "Fitted")
+                if native_kind != expected or rows.get(key, {}).get("cells", [])[column] != expected:
+                    raise RuntimeError("Native fitted-state readback did not match: " + key)
+        result = await edit_variants(bridge, path, mutate, verify)
+        if result.get("success"):
+            result["updated_count"] = len(updates)
         return result
+
+    @mcp.tool()
+    async def proj_get_variant_matrix(project_path: Optional[str] = None) -> dict[str, Any]:
+        """Read every physical component's full UniqueId and per-variant fitted state.
+
+        Rows contain designator, unique_id and cells parallel to variants
+        (visible descriptions). Use these IDs with proj_set_variant_fitted.
+        """
+        return await get_bridge().send_command_async("project.get_variant_matrix",
+            {"project_path": project_path} if project_path else {})
 
     @mcp.tool()
     async def proj_delete_variant(

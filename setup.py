@@ -10,6 +10,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--altium-exe', required=True, type=Path)
     parser.add_argument('--library-dir', action='append', default=[], type=Path)
+    parser.add_argument('--toolset', choices=('full', 'minimal'), default='full',
+                        help='minimal advertises two discovery tools; all EDA operations remain reachable')
     args = parser.parse_args()
     if not args.altium_exe.is_file():
         parser.error('Altium X2.EXE does not exist at that path')
@@ -18,7 +20,7 @@ def main():
     (root / 'local-settings.json').write_text(json.dumps(settings, indent=2), encoding='utf-8')
     scripts = suite_config.configure_environment()
     config = {'mcpServers': {
-        'eda-agent': {'command': sys.executable, 'args': [str(root / 'eda_stdio.py')]},
+        'eda-agent': {'command': sys.executable, 'args': [str(root / 'eda_stdio.py'), '--toolset', args.toolset]},
         'altium': {'command': sys.executable, 'args': [str(root / 'coffeenmusic/server/codex_stdio.py')]},
     }}
     binary = root / 'altium-designer-mcp/target/release/altium-designer-mcp.exe'

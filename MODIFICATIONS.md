@@ -1,6 +1,16 @@
 # Local changes — 2026-10-06
 
+## Added 2026-10-09
+
+- Follow-up: cancellation during engine stop/start now drains the worker under the shared lock before propagating cancellation (asyncio and AnyIO). Launch state is validated and published atomically; malformed state fails with manual recovery instructions. Installed live tests verified legacy read-only handover, idle release/recovery, and cancellation during real native stop/start.
+
+- Legacy handover now requires the current editor session's final clean-shutdown acknowledgement. Ping timeouts and stop-file consumption no longer authorize a second script launch; pending stop files are withdrawn on failure. See [targeted review, open findings and regression evidence](docs/review/REVIEW_2026-10-09.md).
+
 ## Added 2026-10-08
+
+- Performance follow-up (`2026.10.08.perf1`): native clean-stop/session acknowledgements avoid five seconds of failed probes after idle release. Editor-session, modal, legacy ownership, busy-handler and launch-cooldown guards still apply. Background health traffic uses a nonblocking lock and a one-second maximum wait; plain foreground ping reuses its confirmed health response. Minimal mode now lazily builds exact FastMCP schemas and validates arguments; CLI selection no longer re-execs past the coordination wrapper. Setup exposes `--toolset`; read-only measurements and regression evidence are in [performance review](docs/review/PERFORMANCE_2026-10-08.md).
+
+- Storage/variant follow-up: installed-directory deployment with dependency manifest and initialization checks; project-definition save and close now verify native focus; `proj_save` verifies persisted document/variant metadata. Native variant GUIDs/display descriptions, guarded creation/switching and bulk fitted-state updates are supported with backups and native readback. Zero-limit semantics, unsupported owner-property rejection and typed TextFrame queries are corrected. See [validation and workflow](docs/review/STORAGE_VARIANTS_2026-10-08.md). Script version: `2026.10.08.storage3`.
 
 - Native-save follow-up: added `engine_idle_release_ms` (default 2000; 0 disables), independent of the legacy disconnect timer. Background pings do not renew it. Foreground preflight reserves enough time for the actual command. Release occurs between handlers, without saving documents. The coordinated entry point restarts the loop on demand.
 - Startup now publishes `bridge-ready.json` after request purges and form initialization; the coordinator waits for it before publishing a launch probe. This removes the startup-request race exposed by short idle release. Normal shutdown removes the marker, and Python background keepalive treats its absence as idle release rather than a fault.
