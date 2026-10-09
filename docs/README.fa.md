@@ -62,6 +62,8 @@ python -m venv .venv
 
 ورودی‌های تولیدشده در <span dir="ltr"><code>mcp.local.json</code></span> یا <span dir="ltr"><code>codex.local.toml</code></span> را به تنظیمات کلاینت اضافه و اتصال‌ها را دوباره راه‌اندازی کنید. پروژه را در آلتیوم باز کنید و با <span dir="ltr"><code>app_context</code></span> وضعیت پل را بررسی کنید.
 
+برای کاهش حجم معرفی ابزارها، گزینهٔ <span dir="ltr"><code>--toolset minimal</code></span> را به نصب یا اجرای سرور اصلی اضافه کنید. ابزار را با <span dir="ltr"><code>tool_catalog</code></span> و گزینهٔ <span dir="ltr"><code>with_schema=True</code></span> پیدا کنید و از طریق <span dir="ltr"><code>tool_invoke</code></span> اجرا کنید. همهٔ عملیات در دسترس می‌مانند؛ تعریف ورودی‌ها هنگام نیاز بارگذاری و مانند حالت کامل اعتبارسنجی می‌شود. [نتایج اندازه‌گیری](review/PERFORMANCE_2026-10-08.md).
+
 </div>
 
 <div dir="ltr">

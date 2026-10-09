@@ -48,6 +48,8 @@ python -m venv .venv
 
 把生成的 `mcp.local.json`（或 `codex.local.toml`）条目合并到 MCP 客户端配置，重启连接。在 Altium 里打开项目，调用 `app_context` 检查桥的状态。
 
+为减少工具列表大小，可在安装或启动主服务器时添加 `--toolset minimal`。先用 `tool_catalog(query="...", with_schema=True)` 获取参数，再用 `tool_invoke` 执行。所有操作仍可用，参数定义按需加载，验证规则与完整模式一致。参见[实测结果](review/PERFORMANCE_2026-10-08.md)。
+
 ```powershell
 Push-Location altium-designer-mcp
 cargo build --release --locked
