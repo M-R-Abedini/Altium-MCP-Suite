@@ -62,6 +62,8 @@ python -m venv .venv
 
 ادمج المدخلات المولّدة في <span dir="ltr"><code>mcp.local.json</code></span> أو <span dir="ltr"><code>codex.local.toml</code></span> في إعدادات عميل <span dir="ltr"><code>MCP</code></span> وأعد تشغيل الاتصالات. افتح مشروعك في <span dir="ltr"><code>Altium</code></span> واستدعِ <span dir="ltr"><code>app_context</code></span> للتحقق من حالة الجسر.
 
+لتقليل حجم قائمة الأدوات، أضف <span dir="ltr"><code>--toolset minimal</code></span> عند التثبيت أو تشغيل الخادم الرئيسي. اكتشف الأداة عبر <span dir="ltr"><code>tool_catalog</code></span> مع <span dir="ltr"><code>with_schema=True</code></span> ثم شغّلها عبر <span dir="ltr"><code>tool_invoke</code></span>. تبقى جميع العمليات متاحة؛ تُحمّل تعريفات المعاملات عند الحاجة وتُتحقق وفق قواعد الوضع الكامل. راجع [نتائج القياس](review/PERFORMANCE_2026-10-08.md).
+
 </div>
 
 <div dir="ltr">

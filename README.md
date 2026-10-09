@@ -16,6 +16,7 @@ MCP servers that let an AI read and edit your Altium schematics, PCBs, and libra
 - Check connectivity with four read-only tools: snapshot pin-to-net assignments (SHA-256 digest), per-pin contracts (expected net, or intentional NC with a reason), before/after diffs, and schematic↔PCB pad parity in both directions.
 - Calculate trace width, impedance, and length budgets. These are calculators, not a signal-integrity proof.
 - Read and write `.SchLib` / `.PcbLib` library files.
+- Manage native assembly variants by GUID, bulk-update fitted states, and export their component matrix. Changes use project backups and native readback; see the [variant workflow](docs/review/STORAGE_VARIANTS_2026-10-08.md).
 - Two bridges, one script engine: a shared lock keeps the two Python bridges from fighting over Altium's script engine, and every request carries an ID so a late answer to an old request is never accepted.
 
 ## What's still in development
@@ -49,6 +50,8 @@ python -m venv .venv
 ```
 
 Merge the generated `mcp.local.json` (or `codex.local.toml`) into your MCP client config and restart its connections. Open your project in Altium and call `app_context` to check the bridge.
+
+For a smaller tool list, pass `--toolset minimal` to `setup.py` or the EDA server. Discover an operation with `tool_catalog(query="...", with_schema=True)`, then call `tool_invoke(name="...", arguments={...})`. All operations remain available; schemas load on demand with the same input validation as full mode. See [measured latency and tool-list size](docs/review/PERFORMANCE_2026-10-08.md).
 
 ```powershell
 Push-Location altium-designer-mcp
