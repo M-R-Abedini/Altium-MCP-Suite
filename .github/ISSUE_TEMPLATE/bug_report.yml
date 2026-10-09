@@ -1,0 +1,66 @@
+name: Bug report
+description: Report a reproducible setup, bridge, tool, or library-server problem.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For setup and usage questions, use [Q&A](https://github.com/M-R-Abedini/Altium-MCP-Suite/discussions/categories/q-a).
+        Remove credentials, private design data, and personal paths from anything you share.
+  - type: input
+    id: revision
+    attributes:
+      label: Suite commit
+      description: Run git rev-parse HEAD in the suite checkout.
+      placeholder: Full commit SHA
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include Windows, Python, Altium, and MCP client versions. For Rust library problems, also include the Rust version.
+      placeholder: |
+        Windows:
+        Python:
+        Altium Designer:
+        MCP client:
+    validations:
+      required: true
+  - type: dropdown
+    id: server
+    attributes:
+      label: Affected server
+      options:
+        - eda-agent
+        - coffeenmusic / altium
+        - altium-designer-mcp / altium_libraries
+        - Setup or multiple servers
+        - Unsure
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Include tool names and sanitized arguments, active document type, and whether a modal dialog was open. Use a synthetic design if a file is needed.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+      description: Include the error or tool response, and whether the operation changed the design before it failed.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Logs or screenshots
+      description: Optional, sanitized evidence from the MCP client or bridge. Include app_context output if the EDA bridge responds.

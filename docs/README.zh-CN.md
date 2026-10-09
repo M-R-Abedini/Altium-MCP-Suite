@@ -59,6 +59,10 @@ Pop-Location
 
 库服务器是可选的（需要锁定版本的 Rust 工具链和 Visual Studio C++ 构建工具）。多个目录可重复 `--library-dir`。
 
+## 问题与贡献
+
+安装和使用问题请到 [Q&A](https://github.com/M-R-Abedini/Altium-MCP-Suite/discussions/categories/q-a) 提问。报告错误和功能建议请使用 [Issues 表单](https://github.com/M-R-Abedini/Altium-MCP-Suite/issues/new/choose)。[英文贡献指南](../CONTRIBUTING.md)介绍开发环境、测试、翻译和共同作者署名。
+
 ## 许可
 
 套件新代码 MIT。收录的项目保留各自许可——见 [UPSTREAM.json](../UPSTREAM.json)。

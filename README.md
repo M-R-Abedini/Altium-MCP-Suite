@@ -62,6 +62,12 @@ Pop-Location
 
 The library server is optional (needs the pinned Rust toolchain + VS C++ build tools). Repeat `--library-dir` for more directories.
 
+## Questions and contributions
+
+Ask setup and usage questions in [Q&A](https://github.com/M-R-Abedini/Altium-MCP-Suite/discussions/categories/q-a).
+For bugs and feature requests, use [Issues](https://github.com/M-R-Abedini/Altium-MCP-Suite/issues/new/choose).
+See [the contributing guide](CONTRIBUTING.md) for development setup, tests, translations, and crediting collaborators.
+
 ## License
 
 New suite code is MIT. Bundled projects keep their own licenses — see [UPSTREAM.json](UPSTREAM.json).
