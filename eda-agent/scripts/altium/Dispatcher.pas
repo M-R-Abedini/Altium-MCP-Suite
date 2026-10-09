@@ -346,11 +346,17 @@ Var
     HadRequest     : Boolean;
     I              : Integer;
     ActiveTickCount : Integer;
+    SessionId      : String;
 Begin
     If Running Then Exit;
 
     InitDefaultConfig(0);
     EnsureWorkspaceDir(0);
+    { Invalidate the prior stop proof before any startup work. A coordinator
+      may reuse it only after this session finishes its complete cleanup. }
+    DeleteFile(WorkspaceDir + 'bridge-stopped.json');
+    DeleteFile(WorkspaceDir + 'bridge-ready.json');
+    SessionId := FormatDateTime('yyyymmddhhnnsszzz', Now) + '-' + IntToStr(GetTickCount);
     LoadMCPConfig(0);
     { Startup purge: nothing on disk can belong to a live exchange, because no
       loop was running to serve it. Responses are purged here but NOT in
@@ -386,7 +392,7 @@ Begin
     LastActivityMs := GetTickCount;
     LastWorkMs := LastActivityMs;
     WriteFileContent(WorkspaceDir + 'bridge-ready.json',
-        '{"script_version":"' + SCRIPT_VERSION + '"}');
+        '{"script_version":"' + SCRIPT_VERSION + '","session_id":"' + SessionId + '"}');
 
     Try
         While Running Do
@@ -537,6 +543,13 @@ Begin
     AppendLog(FormatLogStamp(0) + ',0,_session_end,requests=' + IntToStr(StatusRequestCount) + ',reason=' + StopReason);
     HideStatusForm(0);
     CleanupMCPServer(0);
+    { Publish ONLY after cleanup and its final ProcessMessages. Errors and
+      quitting retain conservative recovery; missing readiness is not proof. }
+    If (StopReason = 'engine_idle_release') Or (StopReason = 'idle_timeout') Or
+       (StopReason = 'coordinator_stop_file') Or (StopReason = 'command_or_external_stop') Then
+        WriteFileContent(WorkspaceDir + 'bridge-stopped.json',
+            '{"script_version":"' + SCRIPT_VERSION + '","session_id":"' + SessionId +
+            '","reason":"' + StopReason + '"}');
 End;
 
 {..............................................................................}

@@ -14,7 +14,7 @@ Const
     // returns, mismatch means Altium is running a stale compiled script
     // (DelphiScript caches compiled units until the script project is
     // reopened or Altium is restarted).
-    SCRIPT_VERSION = '2026.10.08.local2';
+    SCRIPT_VERSION = '2026.10.08.perf1';
 
     // How far up the mechanical layers a pair tidy looks. Altium allows 1024,
     // and checking every combination of those is a million probes for a stack
@@ -80,6 +80,7 @@ Var
     { Documents the last save pass actually reached. See
       SaveOneDocByDocRef. Reset by App_SaveAll before each pass. }
     SaveAttempts : Integer;
+    ProjectDefinitionSaveDispatched : Boolean;
     LastCompiledProject : IProject;
 
     { Silent cast-failure counter, incremented every time a defensive       }
@@ -629,17 +630,36 @@ End;
 Procedure SaveProjectMembers(Project : IProject);
 Var
     J : Integer;
-    ProjectServerDoc : IServerDocument;
+    Workspace : IWorkspace;
+    Previous, Focused : IProject;
 Begin
+    ProjectDefinitionSaveDispatched := False;
     If Project = Nil Then Exit;
     For J := 0 To Project.DM_LogicalDocumentCount - 1 Do
         SaveOneDocByDocRef(Project.DM_LogicalDocuments(J));
-    // The project file itself, when it's a real on-disk project
+    { Synthetic free-document projects have no definition to save. }
+    If Project.DM_ProjectFullPath = '' Then Exit;
+    If Not FileExists(Project.DM_ProjectFullPath) Then Exit;
+    { A project definition is not an IServerDocument. Save it through the
+      project-scoped native process, including variant and library metadata. }
+    Workspace := GetWorkspace;
+    If Workspace = Nil Then Exit;
+    Previous := Workspace.DM_FocusedProject;
+    Project.DM_SetAsCurrentProject;
     Try
-        ProjectServerDoc := Client.GetDocumentByPath(Project.DM_ProjectFullPath);
-        If (ProjectServerDoc <> Nil) And ProjectServerDoc.Modified Then
-            Try ProjectServerDoc.DoFileSave(''); Except End;
-    Except End;
+        Focused := Workspace.DM_FocusedProject;
+        { FileName is NOT a target selector for SaveObject. Never dispatch
+          it unless the native focused project is the requested one. }
+        If Focused = Nil Then Exit;
+        If UpperCase(Focused.DM_ProjectFullPath) <> UpperCase(Project.DM_ProjectFullPath) Then Exit;
+        ResetParameters;
+        AddStringParameter('ObjectKind', 'FocusedProject');
+        AddStringParameter('SaveMode', 'Standard');
+        RunProcess('WorkspaceManager:SaveObject');
+        ProjectDefinitionSaveDispatched := True;
+    Finally
+        If Previous <> Nil Then Previous.DM_SetAsCurrentProject;
+    End;
 End;
 
 { CountDirtyInProject / CountDirtyDocuments - how many documents are STILL     }

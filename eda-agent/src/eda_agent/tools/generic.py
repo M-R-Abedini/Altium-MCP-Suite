@@ -35,7 +35,7 @@ def register_generic_tools(mcp):
             object_type: Altium object type constant.
                 Schematic: "eNetLabel", "ePort", "ePowerObject", "eSchComponent",
                 "eWire", "eBus", "eBusEntry", "eParameter", "ePin",
-                "eLabel", "eLine", "eRectangle", "eSheetSymbol", "eSheetEntry", "eNoERC", "eJunction"
+                "eLabel", "eLine", "eRectangle", "eSheetSymbol", "eSheetEntry", "eNoERC", "eJunction", "eTextFrame"
                 PCB: "eTrackObject", "ePadObject", "eViaObject", "eComponentObject",
                 "eArcObject", "eFillObject", "eTextObject", "eRuleObject", "eDimensionObject"
             properties: Comma-separated property names to return.
@@ -95,11 +95,21 @@ def register_generic_tools(mcp):
                 "Text=VCC", match net labels with Text equal to VCC
                 "Designator.Text=R1", match component with designator R1
                 "" (empty), match all objects of the type
-            limit: Maximum number of objects to return (0 = unlimited)
+            limit: Maximum number of objects to return (0 = unlimited; negatives rejected).
+            Schematic eTextFrame supports Text, Location.X/Y and Corner.X/Y.
+            OwnerDesignator and Owner.Designator.Text are unsupported and rejected;
+            use proj_get_nets for component/pin ownership. Other unsupported reads
+            are reported in the properties diagnostic object.
 
         Returns:
             Dictionary with "objects" array and "count"
         """
+        if limit < 0:
+            raise ValueError("limit must be zero (unlimited) or positive")
+        requested = {p.strip().casefold() for p in properties.split(',')}
+        requested.update(p.split('=', 1)[0].strip().casefold() for p in filter.split('|'))
+        if requested & {'ownerdesignator', 'owner.designator.text', 'owner.designator'}:
+            raise ValueError("Unsupported pin-owner property; use proj_get_nets for component/pin ownership")
         bridge = get_bridge()
         params = {
             "scope": scope,

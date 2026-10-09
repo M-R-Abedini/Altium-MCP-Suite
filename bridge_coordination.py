@@ -1,7 +1,9 @@
 """Serialize Altium script engines and recover only before dispatching a command."""
 import asyncio
 import contextlib
+import contextvars
 import json
+import math
 import msvcrt
 import subprocess
 import time
@@ -16,6 +18,114 @@ LOCK = RUNTIME / 'altium-engine.lock'
 LAUNCH_STATE = RUNTIME / 'bridge-launch.json'
 SCRIPT = None
 EXE = None
+
+
+async def run_engine_worker(function):
+    """Drain non-cancellable native coordination before releasing its lock.
+
+    AnyIO cancellation scopes and direct asyncio Task.cancel are both used
+    by MCP clients. Neither can stop an already running Python thread.
+    """
+    import anyio
+    cancelled = None
+    with anyio.CancelScope(shield=True):
+        worker = asyncio.get_running_loop().run_in_executor(
+            None, contextvars.copy_context().run, function)
+        while not worker.done():
+            try:
+                await asyncio.shield(worker)
+            except asyncio.CancelledError as error:
+                cancelled = error
+            except Exception:
+                break  # Retrieve the worker's exception below.
+        if cancelled is not None:
+            try:
+                worker.result()
+            except Exception as error:
+                log_event('cancelled_engine_worker_failed', error=str(error))
+            raise cancelled
+        result = worker.result()
+    # Deliver scoped cancellation before the caller can dispatch its tool.
+    await anyio.lowlevel.checkpoint_if_cancelled()
+    return result
+
+
+def _launch_attempted_at():
+    try:
+        previous = json.loads(LAUNCH_STATE.read_text(encoding='utf-8'))
+    except FileNotFoundError:
+        return 0
+    except (OSError, ValueError) as error:
+        raise RuntimeError('Bridge launch state is unreadable; no script was launched. '
+                           'Confirm the script is stopped, then use --confirm-script-stopped.') from error
+    attempted = previous.get('attempted_at') if isinstance(previous, dict) else None
+    try:
+        valid = type(attempted) in (int, float) and math.isfinite(attempted) and attempted > 0
+    except OverflowError:
+        valid = False
+    if not valid:
+        raise RuntimeError('Bridge launch state is invalid; no script was launched. '
+                           'Confirm the script is stopped, then use --confirm-script-stopped.')
+    return attempted
+
+# A missing ready file alone does not prove that the native engine stopped.
+# Only a clean native shutdown of the session we actually pinged permits a
+# fast restart. Older scripts and damaged markers keep the two-probe path.
+_CLEAN_STOPS = {'engine_idle_release', 'idle_timeout',
+                'coordinator_stop_file', 'command_or_external_stop'}
+
+
+def _read_marker(name):
+    try:
+        value = json.loads((WORKSPACE / name).read_text(encoding='utf-8-sig'))
+        return value if isinstance(value, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _remember_session(state):
+    """Record native identity only after a matching health response."""
+    ready = _read_marker('bridge-ready.json')
+    if not state or not isinstance(ready.get('session_id'), str) or not ready['session_id']:
+        return
+    if not isinstance(ready.get('script_version'), str) or not ready['script_version']:
+        return
+    temporary = None
+    try:
+        owner = dict(pid=state['pid'], session_started_at=_session_started_at(state['pid']),
+                     session_id=ready['session_id'], script_version=ready['script_version'])
+        if _read_marker('bridge-owner.json') == owner:
+            return
+        target = WORKSPACE / 'bridge-owner.json'
+        temporary = target.with_name(target.name + '.' + uuid.uuid4().hex + '.tmp')
+        temporary.write_text(json.dumps(owner), encoding='utf-8')
+        temporary.replace(target)
+    except Exception:
+        # Failure to record identity disables the shortcut; never loses a reply.
+        pass
+    finally:
+        if temporary is not None:
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+
+def _cleanly_released(state):
+    if not state or (WORKSPACE / 'bridge-ready.json').exists():
+        return False
+    owner = _read_marker('bridge-owner.json')
+    stopped = _read_marker('bridge-stopped.json')
+    if not isinstance(stopped.get('reason'), str) or stopped['reason'] not in _CLEAN_STOPS:
+        return False
+    for key in ('session_id', 'script_version'):
+        if not isinstance(owner.get(key), str) or not owner[key] or stopped.get(key) != owner[key]:
+            return False
+    try:
+        return (owner.get('pid') == state['pid']
+                and owner.get('session_started_at') == _session_started_at(state['pid']))
+    except Exception:
+        return False
 
 def _session_started_at(pid):
     import psutil
@@ -109,6 +219,17 @@ def engine_lock():
     finally:
         unlock(f)
 
+
+@contextlib.contextmanager
+def background_engine_lock():
+    """Health traffic yields immediately to foreground work on either bridge."""
+    f = try_lock()
+    try:
+        yield f is not None
+    finally:
+        if f is not None:
+            unlock(f)
+
 @contextlib.asynccontextmanager
 async def async_engine_lock():
     deadline = time.monotonic() + 180
@@ -194,33 +315,35 @@ def _file_ping(timeout, *, command_pending=False):
             p.unlink(missing_ok=True)
 
 def _ensure(probe):
-    _guard_editor()
+    state = _guard_editor()
     if _handler_busy():
         # A live handler is not a dead loop. Do not interrupt or replay it.
         log_event('busy_handler_no_restart')
         raise RuntimeError('An EDA handler is still running. No new command was queued; inspect the previous operation before retrying.')
-    try:
-        probe(2.0)
-        LAUNCH_STATE.unlink(missing_ok=True)
-        return
-    except TimeoutError:
-        pass
-    # A second health check avoids launching over a temporarily slow editor.
+    released = _cleanly_released(state)
+    if not released:
+        try:
+            result = probe(2.0)
+            _remember_session(state)
+            LAUNCH_STATE.unlink(missing_ok=True)
+            return result
+        except TimeoutError:
+            pass
+        # A second health check avoids launching over a temporarily slow editor.
+        state = _guard_editor()
+        if _handler_busy():
+            raise RuntimeError('An EDA handler started during the health check. No new command was queued.')
+        try:
+            result = probe(3.0)
+            _remember_session(state)
+            LAUNCH_STATE.unlink(missing_ok=True)
+            return result
+        except TimeoutError:
+            pass
     _guard_editor()
     if _handler_busy():
         raise RuntimeError('An EDA handler started during the health check. No new command was queued.')
-    try:
-        probe(3.0)
-        LAUNCH_STATE.unlink(missing_ok=True)
-        return
-    except TimeoutError:
-        pass
-    _guard_editor()
-    try:
-        previous = json.loads(LAUNCH_STATE.read_text(encoding='utf-8'))
-    except (OSError, ValueError):
-        previous = {}
-    if time.time() - previous.get('attempted_at', 0) < 45:
+    if time.time() - _launch_attempted_at() < 45:
         raise TimeoutError('A bridge startup was already attempted recently. No duplicate Altium process was launched.')
     script = SCRIPT or prepare_runtime()['eda']
     executable = EXE or altium_exe()
@@ -229,23 +352,32 @@ def _ensure(probe):
     ready = WORKSPACE / 'bridge-ready.json'
     ready.unlink(missing_ok=True)
     LAUNCH_STATE.parent.mkdir(parents=True, exist_ok=True)
-    LAUNCH_STATE.write_text(json.dumps({'attempted_at': time.time()}), encoding='utf-8')
+    launch_temp = LAUNCH_STATE.with_name(LAUNCH_STATE.name + '.' + uuid.uuid4().hex + '.tmp')
+    try:
+        launch_temp.write_text(json.dumps({'attempted_at': time.time()}), encoding='utf-8')
+        launch_temp.replace(LAUNCH_STATE)
+    finally:
+        launch_temp.unlink(missing_ok=True)
+    # Consume the shutdown evidence before launch, even if the launcher fails.
+    (WORKSPACE / 'bridge-stopped.json').unlink(missing_ok=True)
+    (WORKSPACE / 'bridge-owner.json').unlink(missing_ok=True)
     command = '"%s" -RScriptingSystem:RunScript(ProjectName="%s"|ProcName="Dispatcher>StartMCPServer")' % (executable, script)
     process = subprocess.Popen(command, creationflags=subprocess.CREATE_NO_WINDOW)
-    log_event('bridge_launch', launcher_pid=process.pid, script=str(script))
+    log_event('bridge_launch', launcher_pid=process.pid, script=str(script), clean_release=released)
     deadline = time.monotonic() + 45
     while time.monotonic() < deadline:
         time.sleep(.3)
-        _guard_editor()
+        state = _guard_editor()
         # Startup purges orphan requests. Do not publish a health request
         # until that purge and the status-form initialization have finished.
         if not ready.exists():
             continue
         try:
-            probe(2.0)
+            result = probe(2.0)
+            _remember_session(state)
             LAUNCH_STATE.unlink(missing_ok=True)
             log_event('bridge_ready')
-            return
+            return result
         except TimeoutError:
             pass
     raise TimeoutError('Altium did not start the EDA bridge. Inspect the script error or modal; no command was replayed.')
@@ -258,32 +390,47 @@ def ensure_eda(bridge, execute):
             return execute(bridge, 'application.ping', {'command_pending': True}, timeout)
         except AltiumTimeoutError as error:
             raise TimeoutError(str(error)) from error
-    _ensure(probe)
+    return _ensure(probe)
 
 def start_eda():
-    _ensure(_file_ping)
+    return _ensure(_file_ping)
 
 def stop_eda():
-    _guard_editor()
+    state = _guard_editor()
     WORKSPACE.mkdir(parents=True, exist_ok=True)
     if _handler_busy():
         raise RuntimeError('An EDA handler is still running; refusing to stop it for the other bridge')
+    if _cleanly_released(state):
+        return
     # Only publish a stop if the polling loop actually answers. An unconsumed
     # sentinel must not kill a later session that happens to start meanwhile.
     try:
         _file_ping(2.0, command_pending=True)
     except TimeoutError:
-        return
+        # A slow/unresponsive engine is not an available engine. Idle release
+        # may race the ping, but only its session-bound final proof is enough.
+        state = _guard_editor()
+        if not _handler_busy() and _cleanly_released(state):
+            return
+        raise TimeoutError('EDA shutdown is not confirmed; refusing legacy handover. '
+                           'Establish a session with the coordinated EDA bridge before retrying.') from None
+    _remember_session(state)
     stop = WORKSPACE / 'stop'
     log_event('handover_stop')
     stop.write_text('1', encoding='utf-8')
     deadline = time.monotonic() + 5
-    while stop.exists() and time.monotonic() < deadline:
-        time.sleep(.05)
-    if stop.exists():
+    try:
+        while time.monotonic() < deadline:
+            state = _guard_editor()
+            if not _handler_busy() and _cleanly_released(state):
+                return
+            # Native code consumes the stop file BEFORE hiding its form and
+            # cleaning up. Wait for the final acknowledgement, not consumption.
+            time.sleep(.05)
+        raise TimeoutError('EDA shutdown is not confirmed; refusing a second bridge launch')
+    finally:
+        # An unconsumed sentinel must not terminate a later session.
         stop.unlink(missing_ok=True)
-        raise TimeoutError('EDA did not acknowledge the stop; refusing a second bridge launch')
-    time.sleep(.5)
 
 def reset_after_manual_stop():
     """Explicit operator assertion: the script was stopped in Altium's IDE."""
@@ -299,6 +446,7 @@ def reset_after_manual_stop():
             pending = json.loads(marker.read_text(encoding='utf-8'))
             Path(pending['request_path']).unlink(missing_ok=True)
             marker.unlink(missing_ok=True)
+        LAUNCH_STATE.unlink(missing_ok=True)
         log_event('manual_ownership_reset', pid=state['pid'])
 
 if __name__ == '__main__':

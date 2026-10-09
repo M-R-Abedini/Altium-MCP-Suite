@@ -55,7 +55,8 @@ class CoordinationTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError,'handler'):coord.stop_eda()
         self.assertFalse((coord.WORKSPACE/'stop').exists())
     def test_stopped_loop_does_not_leave_stop_sentinel(self):
-        with patch.object(coord,'_file_ping',side_effect=TimeoutError()):coord.stop_eda()
+        with patch.object(coord,'_file_ping',side_effect=TimeoutError()):
+            with self.assertRaisesRegex(TimeoutError,'not confirmed'):coord.stop_eda()
         self.assertFalse((coord.WORKSPACE/'stop').exists())
 
 def load_function(path,name,namespace):
@@ -66,7 +67,9 @@ def load_function(path,name,namespace):
 
 class WrapperTests(unittest.TestCase):
     def namespace(self):
-        return {'threading':threading,'engine_lock':contextlib.nullcontext,'ensure_eda':MagicMock(),'original':MagicMock(return_value={'ok':True})}
+        return {'threading':threading,'engine_lock':contextlib.nullcontext,
+                'background_engine_lock':lambda:contextlib.nullcontext(True),
+                'ensure_eda':MagicMock(),'original':MagicMock(return_value={'ok':True})}
     def test_user_command_is_dispatched_once_after_health_check(self):
         n=self.namespace();fn=load_function(ROOT/'eda_stdio.py','coordinated',n)
         fn(object(),'generic.modify_objects',{},10)
@@ -84,21 +87,57 @@ class WrapperTests(unittest.TestCase):
     def test_stop_does_not_restart_a_stopped_bridge(self):
         n=self.namespace();fn=load_function(ROOT/'eda_stdio.py','coordinated',n)
         fn(object(),'application.stop_server',{},10);n['ensure_eda'].assert_not_called()
+    def test_background_health_yields_when_another_bridge_owns_the_lock(self):
+        n=self.namespace();n['background_engine_lock']=lambda:contextlib.nullcontext(False)
+        fn=load_function(ROOT/'eda_stdio.py','coordinated',n)
+        with patch.object(threading,'current_thread',return_value=types.SimpleNamespace(name='altium-keepalive')):
+            self.assertEqual(fn(object(),'application.ping',{},5),{'engine_busy':True})
+        n['ensure_eda'].assert_not_called();n['original'].assert_not_called()
+    def test_background_health_cannot_hold_the_lock_for_five_seconds(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            work=pathlib.Path(temporary);(work/'bridge-ready.json').touch()
+            n=self.namespace();fn=load_function(ROOT/'eda_stdio.py','coordinated',n)
+            bridge=types.SimpleNamespace(config=types.SimpleNamespace(workspace_dir=work))
+            with patch.object(threading,'current_thread',return_value=types.SimpleNamespace(name='altium-keepalive')):
+                fn(bridge,'application.ping',{},5)
+            n['original'].assert_called_once_with(bridge,'application.ping',{},1.0)
+            n['ensure_eda'].assert_not_called()
+    def test_plain_foreground_ping_reuses_preflight_result(self):
+        n=self.namespace();n['ensure_eda'].return_value={'pong':True}
+        fn=load_function(ROOT/'eda_stdio.py','coordinated',n)
+        self.assertEqual(fn(object(),'application.ping',{},10),{'pong':True})
+        n['original'].assert_not_called()
+    def test_ping_with_parameters_keeps_its_explicit_semantics(self):
+        n=self.namespace();fn=load_function(ROOT/'eda_stdio.py','coordinated',n)
+        fn(object(),'application.ping',{'command_pending':False},10)
+        n['original'].assert_called_once()
     def test_legacy_handover_restores_engine_even_when_tool_fails(self):
         events=[]
         @contextlib.asynccontextmanager
         async def lock():yield
         async def original(*a,**kw):events.append('tool');raise ValueError('tool failure')
-        n={'OFFLINE':{'get_server_status'},'original':original,'async_engine_lock':lock,'asyncio':asyncio,
+        n={'OFFLINE':{'get_server_status'},'original':original,'async_engine_lock':lock,'asyncio':asyncio,'run_engine_worker':coord.run_engine_worker,
            'stop_eda':lambda:events.append('stop'),'start_eda':lambda:events.append('restore'),'log_event':MagicMock(),'sys':sys}
         fn=load_function(ROOT/'coffeenmusic/server/codex_stdio.py','coordinated',n)
         with self.assertRaises(ValueError):asyncio.run(fn('get_schematic_data',{}))
         self.assertEqual(events,['stop','tool','restore'])
+    def test_unconfirmed_shutdown_never_dispatches_the_legacy_tool(self):
+        @contextlib.asynccontextmanager
+        async def lock():yield
+        from unittest.mock import AsyncMock
+        original=AsyncMock()
+        n={'OFFLINE':set(),'original':original,'async_engine_lock':lock,'asyncio':asyncio,'run_engine_worker':coord.run_engine_worker,
+           'stop_eda':MagicMock(side_effect=TimeoutError('shutdown is not confirmed')),
+           'start_eda':MagicMock(),'log_event':MagicMock(),'sys':sys}
+        fn=load_function(ROOT/'coffeenmusic/server/codex_stdio.py','coordinated',n)
+        with self.assertRaisesRegex(TimeoutError,'not confirmed'):
+            asyncio.run(fn('get_schematic_data',{}))
+        original.assert_not_called();n['start_eda'].assert_not_called()
     def test_offline_legacy_status_does_not_stop_engine(self):
         @contextlib.asynccontextmanager
         async def lock():yield
         async def original(*a,**kw):return {'ok':True}
-        n={'OFFLINE':{'get_server_status'},'original':original,'async_engine_lock':lock,'asyncio':asyncio,
+        n={'OFFLINE':{'get_server_status'},'original':original,'async_engine_lock':lock,'asyncio':asyncio,'run_engine_worker':coord.run_engine_worker,
            'stop_eda':MagicMock(),'start_eda':MagicMock(),'log_event':MagicMock(),'sys':sys}
         fn=load_function(ROOT/'coffeenmusic/server/codex_stdio.py','coordinated',n)
         asyncio.run(fn('get_server_status',{}));n['stop_eda'].assert_not_called()

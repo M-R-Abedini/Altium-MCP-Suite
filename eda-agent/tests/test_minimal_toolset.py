@@ -159,7 +159,7 @@ async def test_catalog_exposes_parameters_so_invoke_need_not_guess(
         assert spelling in entry["parameters"], (
             f"{spelling} is accepted but the catalog does not list it, so "
             f"a client reading the schema cannot discover it")
-        assert entry["parameters"][spelling]["type"] == "number"
+        assert {s["type"] for s in entry["parameters"][spelling]["anyOf"]} == {"number", "null"}
     assert "copper_oz" in entry["parameters"]
 
     # Either discovered spelling must actually work when invoked, and
@@ -208,7 +208,7 @@ async def test_schema_shape_is_identical_in_both_toolsets(full_server,
         t for t in r["tools"]
         if t["name"] == "pcb_calc_trace_width_for_current")
     assert pick(a)["required"] == pick(b)["required"]
-    assert set(pick(a)["parameters"]) == set(pick(b)["parameters"])
+    assert pick(a)["parameters"] == pick(b)["parameters"]
 
 
 # --------------------------------------------------------------------

@@ -124,6 +124,7 @@ def register_meta_tools(mcp):
         tools = await mcp.list_tools()
         q = query.lower().strip()
         out = []
+        matched = []
         cat_counts: dict[str, int] = {}
         for t in tools:
             md = tool_metadata(t.name)
@@ -140,13 +141,8 @@ def register_meta_tools(mcp):
             rec = dict(md)
             if with_description:
                 rec["description"] = desc.split("\n", 1)[0][:200]
-            if with_schema:
-                # A FastMCP tool and a captured ToolSpec both expose
-                # inputSchema, so this reads the same in either toolset.
-                schema = getattr(t, "inputSchema", None) or {}
-                rec["parameters"] = schema.get("properties", {})
-                rec["required"] = schema.get("required", [])
             out.append(rec)
+            matched.append((rec, t))
         out.sort(key=lambda r: (r["category"], r["name"]))
         result: dict[str, Any] = {
             "count": len(out),
@@ -154,15 +150,17 @@ def register_meta_tools(mcp):
             "tools": out,
         }
         if with_schema and len(out) > _SCHEMA_CAP:
-            # Returning hundreds of schemas would defeat the purpose of
-            # the minimal toolset, so drop them and say so rather than
-            # truncate silently.
-            for entry in out:
-                entry.pop("parameters", None)
-                entry.pop("required", None)
+            # Decide the cap BEFORE constructing any hidden tool schemas.
             result["schema_omitted"] = (
                 f"{len(out)} tools matched, over the {_SCHEMA_CAP} cap; "
                 f"narrow with category/query to get parameters")
+        elif with_schema:
+            for rec, tool in matched:
+                schema = getattr(tool, "inputSchema", None) or {}
+                rec["parameters"] = schema.get("properties", {})
+                rec["required"] = schema.get("required", [])
+                if "$defs" in schema:
+                    rec["$defs"] = schema["$defs"]
         return result
 
     @mcp.tool()

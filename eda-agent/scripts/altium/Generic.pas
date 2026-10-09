@@ -73,7 +73,8 @@ Begin
     Else If N = 'sheetentry'      Then Result := eSheetEntry
     Else If N = 'noerc'           Then Result := eNoERC
     Else If N = 'junction'        Then Result := eJunction
-    Else If N = 'image'           Then Result := eImage;
+    Else If N = 'image'           Then Result := eImage
+    Else If N = 'textframe'       Then Result := eTextFrame;
 End;
 
 { What the refusal should have said. }
@@ -82,7 +83,7 @@ Begin
     Result := 'eNetLabel, ePort, ePowerObject, eSchComponent, eWire, eBus, '
             + 'eBusEntry, eParameter, eParameterSet, ePin, eLabel, eLine, '
             + 'eRectangle, eSheetSymbol, eSheetEntry, eNoERC, eJunction, '
-            + 'eImage';
+            + 'eImage, eTextFrame';
 End;
 
 { The refusal itself, in one place.                                          }
@@ -400,9 +401,11 @@ End;
 
 Function GetSchProperty(Obj : ISch_GraphicalObject; PropName : String) : String;
 Var
+    TF : ISch_TextFrame;
     R : ISch_Rectangle;
     L : ISch_Line;
     Comp : ISch_Component;
+    NoERC : ISch_NoERC;
     Crn : TLocation;
     Have : Boolean;
     POrient, PLen, PCoord : Integer;
@@ -437,7 +440,14 @@ Begin
                 L := Obj;
                 Crn := L.Corner;
                 Have := True;
+            End
+            Else If Obj.ObjectId = eTextFrame Then
+            Begin
+                TF := Obj;
+                Crn := TF.Corner;
+                Have := True;
             End;
+            If Not Have Then NotePropertyDiag('unreadable', PropName);
             If Have Then
             Begin
                 If PropName = 'Corner.X' Then
@@ -620,11 +630,30 @@ Begin
              Or (UpperCase(PropName) = 'VERTICES') Then
             Result := GetSchVertexProperty(Obj, PropName)
 
+        // Scoped NoERC properties; never late-bind these on another object type.
+        Else If (PropName = 'SuppressAll') Or (PropName = 'IsActive')
+             Or (PropName = 'StrErrorKindSetToSuppress')
+             Or (PropName = 'StrConnectionPairsToSuppress') Then
+        Begin
+            If Obj.ObjectId <> eNoERC Then
+            Begin
+                NotePropertyDiag('unreadable', PropName);
+                Exit;
+            End;
+            NoERC := Obj;
+            If PropName = 'SuppressAll' Then Result := BoolToJsonStr(NoERC.SuppressAll)
+            Else If PropName = 'IsActive' Then Result := BoolToJsonStr(NoERC.IsActive)
+            Else If PropName = 'StrConnectionPairsToSuppress' Then Result := NoERC.StrConnectionPairsToSuppress
+            Else Result := NoERC.StrErrorKindSetToSuppress;
+        End
+
         // Boolean properties
         Else If PropName = 'IsHidden'    Then Result := BoolToJsonStr(Obj.IsHidden)
         Else If PropName = 'IsSolid'     Then Result := BoolToJsonStr(Obj.IsSolid)
-        Else If PropName = 'IsMirrored'  Then Result := BoolToJsonStr(Obj.IsMirrored);
+        Else If PropName = 'IsMirrored'  Then Result := BoolToJsonStr(Obj.IsMirrored)
+        Else NotePropertyDiag('unknown', PropName);
     Except
+        NotePropertyDiag('unreadable', PropName);
         Result := '';
     End;
 End;
@@ -646,6 +675,7 @@ Var
     R : ISch_Rectangle;
     L : ISch_Line;
     Comp : ISch_Component;
+    NoERC : ISch_NoERC;
     Matched : Boolean;
     { Separate from Matched on purpose. Matched says the property NAME is
       one this build writes; WroteOK says the value actually landed, read
@@ -837,6 +867,27 @@ Begin
         Else If PropName = 'PinLength'   Then Obj.PinLength := MilsToCoord(StrToIntDef(Value, 0))
         Else If PropName = 'XSize'       Then Obj.XSize := MilsToCoord(StrToIntDef(Value, 0))
         Else If PropName = 'YSize'       Then Obj.YSize := MilsToCoord(StrToIntDef(Value, 0))
+
+        // Scope each suppression explicitly; broad suppression is never inferred.
+        Else If (PropName = 'SuppressAll') Or (PropName = 'IsActive')
+             Or (PropName = 'StrErrorKindSetToSuppress')
+             Or (PropName = 'StrConnectionPairsToSuppress') Then
+        Begin
+            If Obj.ObjectId <> eNoERC Then
+            Begin
+                WroteOK := False;
+            End
+            Else
+            Begin
+                NoERC := Obj;
+                If PropName = 'SuppressAll' Then NoERC.SuppressAll := StrToBool(Value)
+                Else If PropName = 'IsActive' Then NoERC.IsActive := StrToBool(Value)
+                Else If PropName = 'StrConnectionPairsToSuppress' Then NoERC.StrConnectionPairsToSuppress := Value
+                Else If Value = 'NetWithNoDrivingSource' Then
+                    NoERC.StrErrorKindSetToSuppress := StringFromErrorKindSet(MkSet(eError_NetWithNoDrivingSource))
+                Else NoERC.StrErrorKindSetToSuppress := Value;
+            End;
+        End
 
         // Boolean properties
         Else If PropName = 'IsHidden'    Then Obj.IsHidden := StrToBool(Value)
@@ -1717,6 +1768,11 @@ Begin
     FilterStr := ExtractJsonValue(Params, 'filter');
     PropsStr := ExtractJsonValue(Params, 'properties');
     Limit := StrToIntDef(ExtractJsonValue(Params, 'limit'), 0);
+    If Limit < 0 Then
+    Begin
+        Result := BuildErrorResponse(RequestId, 'INVALID_LIMIT', 'limit must be zero (unlimited) or positive');
+        Exit;
+    End;
 
     If PropsStr = '' Then PropsStr := 'Location.X,Location.Y';
     { Start clean, so the reply describes THIS query. }
@@ -2415,6 +2471,8 @@ Function Gen_RunERC(Params : String; RequestId : String) : String;
 Var
     Workspace : IWorkspace;
     Project : IProject;
+    Cancelled : LongBool;
+    Compiled : Boolean;
 Begin
     Workspace := GetWorkspace;
     If Workspace = Nil Then
@@ -2430,12 +2488,20 @@ Begin
         Exit;
     End;
 
-    // Compile the project first (required before ERC)
-    SmartCompile(Project);
+    // All=True is the native full compilation; DM_Compile can reuse a
+    // model that predates changed NoERC directives and label positions.
+    Cancelled := False;
+    Compiled := Project.DM_CompileEx(True, Cancelled);
+    If Cancelled Or Not Compiled Then
+    Begin
+        Result := BuildErrorResponse(RequestId, 'ERC_UNCONFIRMED',
+            'Native full compilation did not complete');
+        Exit;
+    End;
 
-    // Run ERC via RunProcess
-    ResetParameters;
-    RunProcess('Sch:ERC');
+    // Validate through the documented project API, rather than a process
+    // id that cannot confirm that ERC actually ran.
+    Project.DM_Validate;
 
     Result := BuildSuccessResponse(RequestId,
         '{"success":true,"message":"ERC completed on project"}');
@@ -3093,6 +3159,9 @@ Begin
         If Not First Then JsonItems := JsonItems + ',';
         First := False;
         JsonItems := JsonItems + '{"index":' + IntToStr(I) +
+            ',"suppressed":' + BoolToJsonStr(Violation.DM_IsSuppressed) +
+            ',"severity":"' + EscapeJsonString(ErrorLevelToString(Violation.DM_ErrorLevel)) + '"' +
+            ',"error_kind":' + IntToStr(Ord(Violation.DM_ErrorKind)) +
             ',"description":"' + EscapeJsonString(Desc) +
             '","detail":"' + EscapeJsonString(Detail) +
             '","related_object_count":' + IntToStr(RelCount) +

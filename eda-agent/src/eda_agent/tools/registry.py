@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import inspect
 from dataclasses import dataclass
+from functools import cached_property
 from typing import Any, Callable, Optional
 
 __all__ = ["MINIMAL_TOOLS", "ToolRegistry", "ToolSpec"]
@@ -39,19 +40,6 @@ __all__ = ["MINIMAL_TOOLS", "ToolRegistry", "ToolSpec"]
 MINIMAL_TOOLS = ("tool_catalog", "tool_invoke")
 
 
-def _json_type(annotation: Any) -> str:
-    """Best-effort JSON type name for a Python annotation."""
-    text = str(annotation)
-    if annotation is inspect.Parameter.empty:
-        return "any"
-    for needle, name in (("bool", "boolean"), ("int", "integer"),
-                         ("float", "number"), ("str", "string"),
-                         ("list", "array"), ("dict", "object")):
-        if needle in text:
-            return name
-    return "any"
-
-
 @dataclass
 class ToolSpec:
     """The subset of a FastMCP tool that the meta-tools actually read."""
@@ -60,31 +48,17 @@ class ToolSpec:
     description: str
     fn: Callable
 
+    @cached_property
+    def native_tool(self):
+        # Use the same schema and argument validator as the full server.
+        # Compile only tools whose schemas or execution were requested.
+        from mcp.server.fastmcp.tools import Tool
+        return Tool.from_function(self.fn, name=self.name)
+
     @property
     def inputSchema(self) -> dict[str, Any]:
-        """A JSON-Schema-ish view, matching what FastMCP exposes.
-
-        Same attribute name and shape as ``mcp.types.Tool.inputSchema``
-        so ``tool_catalog`` can read parameters identically whether it is
-        looking at a real MCP tool or a captured one.
-        """
-        props: dict[str, Any] = {}
-        required: list[str] = []
-        try:
-            sig = inspect.signature(self.fn)
-        except (TypeError, ValueError):
-            return {"type": "object", "properties": {}, "required": []}
-        for name, param in sig.parameters.items():
-            if name == "self" or param.kind in (
-                    param.VAR_POSITIONAL, param.VAR_KEYWORD):
-                continue
-            entry: dict[str, Any] = {"type": _json_type(param.annotation)}
-            if param.default is inspect.Parameter.empty:
-                required.append(name)
-            elif isinstance(param.default, (str, int, float, bool)):
-                entry["default"] = param.default
-            props[name] = entry
-        return {"type": "object", "properties": props, "required": required}
+        """Exact FastMCP schema, including arrays, nullable fields and enums."""
+        return self.native_tool.parameters
 
 
 class ToolRegistry:
@@ -139,10 +113,7 @@ class ToolRegistry:
         spec = self._tools.get(name)
         if spec is None:
             raise KeyError(f"unknown tool: {name}")
-        result = spec.fn(**(arguments or {}))
-        if inspect.isawaitable(result):
-            result = await result
-        return result
+        return await spec.native_tool.run(arguments or {})
 
     # -- plain accessors ----------------------------------------------
     @property

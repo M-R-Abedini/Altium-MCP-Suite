@@ -36,9 +36,22 @@ def format_variant_matrix_csv(matrix: dict[str, Any]) -> str:
     trailing newline.
     """
     variants = list(matrix.get("variants") or [])
+    # Native descriptions can collide too. Keep every heading unique without
+    # reordering columns or changing any fitted-state cell.
+    used = {"Component"}
+    headings = []
+    for position, variant in enumerate(variants, 1):
+        base = str(variant or "Variant")
+        label = base
+        suffix = position
+        while label in used:
+            label = f"{base} [{suffix}]"
+            suffix += 1
+        used.add(label)
+        headings.append(label)
     rows = matrix.get("rows") or []
 
-    lines = [_csv_row(["Component", *variants])]
+    lines = [_csv_row(["Component", *headings])]
     n = len(variants)
     for row in rows:
         cells = row.get("cells") or []

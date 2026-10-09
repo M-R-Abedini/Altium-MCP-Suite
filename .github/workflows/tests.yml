@@ -16,7 +16,10 @@ jobs:
       - run: python -m pytest tests/test_bridge.py tests/test_recovery.py tests/test_workspace_pointer_isolation.py tests/test_timeout_looks_for_a_dialog.py tests/test_units.py tests/test_websocket_framing.py -q
         working-directory: eda-agent
       - name: Connectivity verification and MCP discovery
-        run: python -m pytest tests/design/test_connectivity_contracts.py tests/design/test_verify_nets.py tests/test_tool_registration_consistency.py tests/test_tool_metadata.py tests/test_tool_catalog.py tests/test_minimal_toolset.py -q
+        run: python -m pytest tests/design/test_connectivity_contracts.py tests/design/test_verify_nets.py tests/test_tool_registration_consistency.py tests/test_tool_metadata.py tests/test_tool_catalog.py tests/test_minimal_toolset.py tests/test_registry_schema_validation.py -q
+        working-directory: eda-agent
+      - name: Project persistence and assembly variants
+        run: python -m pytest tests/test_project_variants_persistence.py tests/test_query_input_consistency.py tests/test_variant_matrix_csv.py tests/test_print_all_variants_restore.py tests/test_handlers_verify_their_outcome.py -q
         working-directory: eda-agent
   rust:
     runs-on: ubuntu-latest
