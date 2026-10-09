@@ -43,5 +43,9 @@ smoke uses no editor and verifies initialization plus four connectivity tools.
 - Altium Designer 26.10.1 live checks passed: `app_context`, `app_ping`,
   `get_all_designators`, `get_all_nets` and a harmless private sandbox snippet.
   SHA-256 hashes of all **13** project/schematic/PCB files were unchanged.
+- Installed live smoke also verified clean stop/restart, legacy handover, idle
+  release despite background pings, recovery after release and engine release
+  at test exit. Corrupt-marker manual reset was tested with temporary state and
+  a simulated editor; it was not invoked against the live design.
 - Linux portable checks and Rust source compilation run in GitHub CI. This
   workstation has no Rust toolchain; no Rust source changed in this review.
