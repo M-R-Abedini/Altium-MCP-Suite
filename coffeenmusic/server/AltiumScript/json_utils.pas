@@ -1,3 +1,6 @@
+{ JSON parsing helpers adapted from eda-agent/scripts/altium/Main.pas. }
+{ Copyright (c) 2026 George Saliba <george.saliba@salitronic.com>. }
+{ Apache-2.0; see eda-agent/LICENSE and eda-agent/NOTICE in this suite. }
 Function IsWhitespaceOrColon(S : String; Idx : Integer) : Boolean;
 Var
     C : String;
