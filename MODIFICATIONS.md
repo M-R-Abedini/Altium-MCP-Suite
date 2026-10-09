@@ -1,6 +1,8 @@
-# Local changes — 2026-10-06
+# Local changes
 
 ## Added 2026-10-09
+
+- Second external review: allow explicit manual recovery from corrupt legacy ownership while retaining the marker for diagnosis; validate settings and Pascal templates even under optimized Python; classify keepalive by thread identity. Add direct-pytest bootstrapping, portable regression CI and installation-independent stdio smoke checks. Synchronize four README pages and document license scope. See [verified claims](docs/review/SECOND_ANALYSIS_2026-10-09.md).
 
 - External analysis: fix legacy JSON punctuation/escapes and native direct-member lookup, reject unsupported input before publication, protect 23 iterator scopes, and bound Rust stdin frames to 64 MiB. The snippet sandbox now generates matching private paths, retains ownership until native completion, avoids shell launch and leaves dialogs for the operator. See [claim-by-claim findings and native validation](docs/review/EXTERNAL_ANALYSIS_2026-10-09.md). EDA script version: `2026.10.09.review1`.
 

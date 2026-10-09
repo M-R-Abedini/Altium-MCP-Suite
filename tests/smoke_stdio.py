@@ -19,9 +19,14 @@ async def main(live=False):
     env = dict(os.environ)
     with tempfile.TemporaryDirectory(prefix='altium-suite-smoke-') as scratch:
         if not live:
+            # Protocol/schema checks must not discover or launch a real editor.
+            env['ALTIUM_EXE'] = str(Path(scratch) / 'not-installed' / 'X2.EXE')
             env['ALTIUM_MCP_RUNTIME'] = str(Path(scratch) / 'runtime')
             env['EDA_AGENT_WORKSPACE'] = str(Path(scratch) / 'workspace')
             env['EDA_AGENT_POINTER_FILE'] = str(Path(scratch) / 'pointer.txt')
+            env['EDA_AGENT_TOOLSET'] = 'full'
+            env['EDA_AGENT_BACKEND'] = 'altium'
+            env.pop('PYTHONPATH', None)
         for name, script in [('eda', ROOT / 'eda_stdio.py'), ('legacy', ROOT / 'coffeenmusic/server/codex_stdio.py')]:
             args = [str(script)] + (['--no-dashboard'] if name == 'eda' else [])
             parameters = StdioServerParameters(command=sys.executable, args=args, env=env)

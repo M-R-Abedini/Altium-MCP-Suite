@@ -12,6 +12,8 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install -r requirements.txt
+      - name: Offline stdio startup without an Altium installation
+        run: python tests/smoke_stdio.py
       - run: python -m pytest tests -q
       - run: python -m pytest tests/test_bridge.py tests/test_recovery.py tests/test_workspace_pointer_isolation.py tests/test_timeout_looks_for_a_dialog.py tests/test_units.py tests/test_websocket_framing.py -q
         working-directory: eda-agent
@@ -21,6 +23,17 @@ jobs:
       - name: Project persistence and assembly variants
         run: python -m pytest tests/test_project_variants_persistence.py tests/test_query_input_consistency.py tests/test_variant_matrix_csv.py tests/test_print_all_variants_restore.py tests/test_handlers_verify_their_outcome.py -q
         working-directory: eda-agent
+  portable-python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements.txt
+      - name: Portable checks (native Windows API checks explicitly skipped)
+        run: pytest tests -q
   rust:
     runs-on: ubuntu-latest
     timeout-minutes: 30

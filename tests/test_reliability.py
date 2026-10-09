@@ -15,6 +15,7 @@ class CoordinationTests(unittest.TestCase):
             p=patch.object(coord,key,value);p.start();self.addCleanup(p.stop)
         p=patch.object(coord,'_editor_state',return_value={'pid':77,'blocked':False});self.state=p.start();self.addCleanup(p.stop)
         p=patch.object(coord.subprocess,'Popen');self.launch=p.start();self.launch.return_value.pid=123;self.addCleanup(p.stop)
+        p=patch.object(coord.subprocess,'CREATE_NO_WINDOW',0,create=True);p.start();self.addCleanup(p.stop)
         def ready(*args,**kwargs):
             (work/'bridge-ready.json').write_text('{}')
             return self.launch.return_value
@@ -80,8 +81,9 @@ class WrapperTests(unittest.TestCase):
         n['original'].assert_called_once()
     def test_keepalive_never_resurrects_detached_loop(self):
         n=self.namespace();fn=load_function(ROOT/'eda_stdio.py','coordinated',n)
-        with patch.object(threading,'current_thread',return_value=types.SimpleNamespace(name='altium-keepalive')):
-            result=fn(types.SimpleNamespace(config=types.SimpleNamespace(workspace_dir=ROOT/'nonexistent-workspace')),'application.ping',{},5)
+        worker=types.SimpleNamespace(name='renamed-keepalive')
+        with patch.object(threading,'current_thread',return_value=worker):
+            result=fn(types.SimpleNamespace(_keepalive_thread=worker,config=types.SimpleNamespace(workspace_dir=ROOT/'nonexistent-workspace')),'application.ping',{},5)
         self.assertEqual(result,{'engine_released':True})
         n['ensure_eda'].assert_not_called();n['original'].assert_not_called()
     def test_stop_does_not_restart_a_stopped_bridge(self):
@@ -90,18 +92,25 @@ class WrapperTests(unittest.TestCase):
     def test_background_health_yields_when_another_bridge_owns_the_lock(self):
         n=self.namespace();n['background_engine_lock']=lambda:contextlib.nullcontext(False)
         fn=load_function(ROOT/'eda_stdio.py','coordinated',n)
-        with patch.object(threading,'current_thread',return_value=types.SimpleNamespace(name='altium-keepalive')):
-            self.assertEqual(fn(object(),'application.ping',{},5),{'engine_busy':True})
+        worker=types.SimpleNamespace(name='renamed-keepalive')
+        with patch.object(threading,'current_thread',return_value=worker):
+            self.assertEqual(fn(types.SimpleNamespace(_keepalive_thread=worker),'application.ping',{},5),{'engine_busy':True})
         n['ensure_eda'].assert_not_called();n['original'].assert_not_called()
     def test_background_health_cannot_hold_the_lock_for_five_seconds(self):
         with tempfile.TemporaryDirectory() as temporary:
             work=pathlib.Path(temporary);(work/'bridge-ready.json').touch()
             n=self.namespace();fn=load_function(ROOT/'eda_stdio.py','coordinated',n)
-            bridge=types.SimpleNamespace(config=types.SimpleNamespace(workspace_dir=work))
-            with patch.object(threading,'current_thread',return_value=types.SimpleNamespace(name='altium-keepalive')):
+            worker=types.SimpleNamespace(name='renamed-keepalive')
+            bridge=types.SimpleNamespace(_keepalive_thread=worker,config=types.SimpleNamespace(workspace_dir=work))
+            with patch.object(threading,'current_thread',return_value=worker):
                 fn(bridge,'application.ping',{},5)
             n['original'].assert_called_once_with(bridge,'application.ping',{},1.0)
             n['ensure_eda'].assert_not_called()
+    def test_foreground_thread_named_keepalive_still_dispatches_user_command(self):
+        n=self.namespace();fn=load_function(ROOT/'eda_stdio.py','coordinated',n)
+        with patch.object(threading,'current_thread',return_value=types.SimpleNamespace(name='altium-keepalive')):
+            fn(types.SimpleNamespace(_keepalive_thread=object()),'generic.modify_objects',{},10)
+        n['ensure_eda'].assert_called_once();n['original'].assert_called_once()
     def test_plain_foreground_ping_reuses_preflight_result(self):
         n=self.namespace();n['ensure_eda'].return_value={'pong':True}
         fn=load_function(ROOT/'eda_stdio.py','coordinated',n)
@@ -142,6 +151,7 @@ class WrapperTests(unittest.TestCase):
         fn=load_function(ROOT/'coffeenmusic/server/codex_stdio.py','coordinated',n)
         asyncio.run(fn('get_server_status',{}));n['stop_eda'].assert_not_called()
 
+@unittest.skipUnless(sys.platform == 'win32', 'Requires Windows window metadata APIs')
 class ProcessTests(unittest.TestCase):
     def test_editor_is_selected_instead_of_earlier_headless_launcher(self):
         import win32gui,win32process
@@ -156,6 +166,7 @@ class ProcessTests(unittest.TestCase):
 class MousePrimitiveTests(unittest.TestCase):
     def test_ctypes_imports_are_defined_for_all_mouse_paths(self):
         self.assertTrue(hasattr(windows,'wintypes'));self.assertTrue(hasattr(windows,'byref'))
+    @unittest.skipUnless(sys.platform == 'win32', 'Requires the Windows ctypes API')
     def test_click_and_drag_use_mocked_input_without_name_error(self):
         import ctypes
         user32=MagicMock();user32.GetSystemMetrics.return_value=1920

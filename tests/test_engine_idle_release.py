@@ -45,6 +45,7 @@ def test_launch_probe_waits_until_native_startup_has_finished(tmp_path,monkeypat
     monkeypatch.setattr(coord,'_guard_editor',lambda:None)
     monkeypatch.setattr(coord,'_handler_busy',lambda:False)
     launched=[]
+    monkeypatch.setattr(coord.subprocess,'CREATE_NO_WINDOW',0,raising=False)
     monkeypatch.setattr(coord.subprocess,'Popen',lambda *a,**kw:launched.append(True) or SimpleNamespace(pid=1))
     waits=[]
     def sleep(seconds):

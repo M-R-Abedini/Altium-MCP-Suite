@@ -29,7 +29,7 @@ from eda_agent.bridge.altium_bridge import AltiumBridge
 original = AltiumBridge._execute_command
 
 def coordinated(self, command, params, timeout):
-    background = threading.current_thread().name == 'altium-keepalive'
+    background = threading.current_thread() is getattr(self, '_keepalive_thread', None)
     if background:
         with background_engine_lock() as acquired:
             if not acquired:

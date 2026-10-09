@@ -64,6 +64,21 @@ cargo test --locked --all-targets
 Pop-Location
 ```
 
+The Altium editor backend and its real file-lock/UI tests require Windows.
+Portable root tests run on Linux in CI; native Windows API tests are explicitly
+skipped there. Both `pytest tests -q` and `python -m pytest tests -q` work from
+the repository root. Linux checks do not establish Altium compatibility.
+
+Check both Python stdio entry points without an Altium installation:
+
+```powershell
+.\.venv\Scripts\python.exe tests/smoke_stdio.py
+```
+
+This test uses isolated runtime paths and a deliberately nonexistent executable;
+it checks protocol startup, schemas and offline tools. `--live` uses the real
+configured editor and also checks native handover and recovery.
+
 Documentation changes should have working links and commands that match the
 current code. Before committing, run `git diff --check` and inspect `git diff`.
 
@@ -92,6 +107,10 @@ Keep those trailers when squash-merging a jointly authored PR.
 
 This suite includes snapshots of three upstream projects. Their source
 repositories and snapshot commits are recorded in [UPSTREAM.json](UPSTREAM.json).
-Preserve their license notices; new suite code uses [MIT](LICENSE). Explain
-changes to bundled code so maintainers can distinguish suite fixes from the
-original snapshot.
+Preserve their license notices; original suite code uses [MIT](LICENSE).
+Bundled EDA code is Apache-2.0, legacy code is MIT with file-specific exceptions,
+and Rust library code is GPL-3.0-or-later. Follow
+[the license scope](THIRD_PARTY_NOTICES.md); keep Apache modification notices and
+attribution, and retain GPL terms when changing or redistributing the Rust backend.
+Do not relabel copied upstream code as MIT. Explain changes to bundled code so
+maintainers can distinguish suite fixes from the original snapshot.

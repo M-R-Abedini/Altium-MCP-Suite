@@ -11,7 +11,18 @@ ROOT = Path(__file__).resolve().parent
 
 def settings():
     path = ROOT / 'local-settings.json'
-    return json.loads(path.read_text(encoding='utf-8')) if path.exists() else {}
+    try:
+        value = json.loads(path.read_text(encoding='utf-8-sig'))
+    except FileNotFoundError:
+        return {}
+    except (OSError, ValueError) as error:
+        raise RuntimeError(f'Cannot read {path}. Repair the JSON or regenerate it with setup.py --altium-exe.') from error
+    if not isinstance(value, dict):
+        raise RuntimeError(f'{path} must contain a JSON object. Regenerate it with setup.py --altium-exe.')
+    executable = value.get('altium_exe')
+    if executable is not None and (not isinstance(executable, str) or not executable.strip()):
+        raise RuntimeError(f'{path}: altium_exe must be a non-empty path string.')
+    return value
 
 
 def runtime_dir():
@@ -60,7 +71,8 @@ def prepare_runtime():
             temporary = target.with_name(target.name + '.' + uuid.uuid4().hex + '.tmp')
             if kind == 'legacy' and path.name == 'Altium_API.pas':
                 text = path.read_text(encoding='utf-8')
-                assert text.count('__ALTIUM_MCP_EXCHANGE_DIR__') == 1
+                if text.count('__ALTIUM_MCP_EXCHANGE_DIR__') != 1:
+                    raise RuntimeError(f'{path} must contain exactly one exchange-directory placeholder; no legacy script was generated.')
                 literal = (str(exchange) + '\\').replace("'", "''")
                 temporary.write_text(text.replace('__ALTIUM_MCP_EXCHANGE_DIR__', literal), encoding='utf-8')
             else:

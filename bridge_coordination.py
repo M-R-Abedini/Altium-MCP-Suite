@@ -4,7 +4,6 @@ import contextlib
 import contextvars
 import json
 import math
-import msvcrt
 import subprocess
 import time
 import uuid
@@ -189,6 +188,12 @@ def log_event(event, **details):
         pass
 
 def try_lock():
+    # Importing configuration and offline checks does not require Windows.
+    # Native engine ownership still uses the Windows cross-process lock.
+    try:
+        import msvcrt
+    except ModuleNotFoundError as error:
+        raise RuntimeError('Altium engine coordination requires Windows (msvcrt).') from error
     LOCK.parent.mkdir(parents=True, exist_ok=True)
     f = LOCK.open('a+b')
     if f.tell() == 0:
@@ -203,6 +208,7 @@ def try_lock():
     return f
 
 def unlock(f):
+    import msvcrt
     f.seek(0)
     msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
     f.close()
@@ -443,9 +449,27 @@ def reset_after_manual_stop():
                 path.unlink(missing_ok=True)
         marker = _legacy_marker()
         if marker.exists():
-            pending = json.loads(marker.read_text(encoding='utf-8'))
-            Path(pending['request_path']).unlink(missing_ok=True)
-            marker.unlink(missing_ok=True)
+            # Normal dispatch fails closed on damaged ownership. Only this
+            # explicit assertion that the native script stopped can retire it.
+            try:
+                pending = json.loads(marker.read_text(encoding='utf-8-sig'))
+                request = Path(pending['request_path']).resolve()
+                if not (request.is_relative_to(RUNTIME.resolve()) or
+                        request.is_relative_to(WORKSPACE.resolve())):
+                    raise ValueError('Request path is outside the configured runtime/workspace')
+                if request.exists() and not request.is_file():
+                    raise ValueError('Request path is not a file')
+                if request.name not in {'request.json', 'unused-request.json'}:
+                    raise ValueError('Request path is not a legacy inbox')
+            except (ValueError, KeyError, TypeError) as error:
+                archive = marker.with_name('legacy-operation.corrupt-' + uuid.uuid4().hex + '.json')
+                marker.replace(archive)
+                log_event('manual_ownership_archive', archive=str(archive), error=str(error))
+            else:
+                request.unlink(missing_ok=True)
+                marker.unlink(missing_ok=True)
+        # The fixed legacy inbox may survive a damaged or missing marker.
+        (RUNTIME / 'legacy-exchange' / 'request.json').unlink(missing_ok=True)
         LAUNCH_STATE.unlink(missing_ok=True)
         log_event('manual_ownership_reset', pid=state['pid'])
 
