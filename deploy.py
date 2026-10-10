@@ -16,7 +16,7 @@ import tempfile
 import uuid
 
 ROOT = Path(__file__).resolve().parent
-ROOT_MODULES = ('eda_stdio.py', 'bridge_coordination.py', 'suite_config.py')
+ROOT_MODULES = ('eda_stdio.py', 'bridge_coordination.py', 'suite_config.py', 'script_projects.py')
 NOTICE_FILES = ('LICENSE', 'THIRD_PARTY_NOTICES.md', 'UPSTREAM.json', 'MODIFICATIONS.md',
                  'eda-agent/LICENSE', 'eda-agent/NOTICE', 'coffeenmusic/LICENSE',
                  'altium-designer-mcp/LICENCE')

@@ -8,6 +8,7 @@ import uuid
 import pytest
 
 import bridge_coordination as coord
+from script_projects import register_sandbox_project
 from test_review_fixes import ROOT, extract, ownership, validate_legacy_json_text
 
 
@@ -20,7 +21,8 @@ def functions(folder, clock, launcher):
                      logger=MagicMock(), Context=object, asyncio=asyncio, time=clock,
                      subprocess=SimpleNamespace(Popen=launcher, CREATE_NO_WINDOW=0),
                      altium_bridge=SimpleNamespace(config=SimpleNamespace(altium_exe_path='X2.EXE')),
-                     begin_legacy=coord.begin_legacy, abandon_unlaunched_legacy=coord.abandon_unlaunched_legacy)
+                     begin_legacy=coord.begin_legacy, abandon_unlaunched_legacy=coord.abandon_unlaunched_legacy,
+                     register_sandbox_project=register_sandbox_project)
     extract(source, 'prepare_sandbox', namespace)
     return extract(source, 'run_altium_script', namespace), namespace
 

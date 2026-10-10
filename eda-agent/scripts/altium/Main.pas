@@ -1,4 +1,4 @@
-{ Modified 2026-10-06 by M-R-Abedini; see root MODIFICATIONS.md. }
+{ Modified 2026-10-10 by M-R-Abedini; see root MODIFICATIONS.md. }
 { SPDX-License-Identifier: Apache-2.0                                   }
 { Copyright (c) 2026 George Saliba <george.saliba@salitronic.com>                                      }
 {..............................................................................}
@@ -14,7 +14,9 @@ Const
     // returns, mismatch means Altium is running a stale compiled script
     // (DelphiScript caches compiled units until the script project is
     // reopened or Altium is restarted).
-    SCRIPT_VERSION = '2026.10.10.review6';
+    SCRIPT_VERSION = '2026.10.10.lifecycle1';
+    SUITE_SCRIPT_PROJECT = '__ALTIUM_MCP_SCRIPT_PROJECT__';
+    SUITE_SCRIPT_CATALOG = '__ALTIUM_MCP_SCRIPT_CATALOG__';
 
     // How far up the mechanical layers a pair tidy looks. Altium allows 1024,
     // and checking every combination of those is a million probes for a stack

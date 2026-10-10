@@ -3,8 +3,8 @@ from pathlib import Path
 import hashlib
 import json
 import os
-import shutil
 import uuid
+from script_projects import PROJECT_NAMES, CATALOG, register_project, refresh_catalog
 
 ROOT = Path(__file__).resolve().parent
 
@@ -58,27 +58,42 @@ def prepare_runtime():
     projects = {}
     for kind, source in sources.items():
         files = sorted(p for p in source.iterdir() if p.suffix.lower() in {'.pas', '.dfm', '.prjscr'})
-        digest = hashlib.sha256(str(exchange).encode())
+        contents = {path: path.read_bytes() for path in files}
+        digest = hashlib.sha256(('script-project-lifecycle-v1:' + str(exchange)).encode())
         for path in files:
             digest.update(path.name.encode())
-            digest.update(path.read_bytes())
+            digest.update(contents[path])
         destination = runtime / 'scripts' / (kind + '-' + digest.hexdigest()[:16])
         destination.mkdir(parents=True, exist_ok=True)
+        project = destination / PROJECT_NAMES[kind]
+        hashes = {}
         for path in files:
-            target = destination / path.name
-            if target.exists():
-                continue
-            temporary = target.with_name(target.name + '.' + uuid.uuid4().hex + '.tmp')
+            name = PROJECT_NAMES[kind] if path.suffix.lower() == '.prjscr' else path.name
+            target = destination / name
+            data = contents[path]
+            if kind == 'eda' and path.name == 'Main.pas':
+                text = data.decode('utf-8')
+                for token, value in [('__ALTIUM_MCP_SCRIPT_PROJECT__', project),
+                                     ('__ALTIUM_MCP_SCRIPT_CATALOG__', runtime / CATALOG)]:
+                    if text.count(token) != 1:
+                        raise RuntimeError(f'{path} must contain exactly one {token} placeholder.')
+                    text = text.replace(token, str(value).replace("'", "''"))
+                data = text.encode('utf-8')
             if kind == 'legacy' and path.name == 'Altium_API.pas':
-                text = path.read_text(encoding='utf-8')
+                text = data.decode('utf-8')
                 if text.count('__ALTIUM_MCP_EXCHANGE_DIR__') != 1:
                     raise RuntimeError(f'{path} must contain exactly one exchange-directory placeholder; no legacy script was generated.')
                 literal = (str(exchange) + '\\').replace("'", "''")
-                temporary.write_text(text.replace('__ALTIUM_MCP_EXCHANGE_DIR__', literal), encoding='utf-8')
-            else:
-                shutil.copy2(path, temporary)
+                data = text.replace('__ALTIUM_MCP_EXCHANGE_DIR__', literal).encode('utf-8')
+            hashes[name] = hashlib.sha256(data).hexdigest()
+            if target.exists():
+                continue
+            temporary = target.with_name(target.name + '.' + uuid.uuid4().hex + '.tmp')
+            temporary.write_bytes(data)
             temporary.replace(target)
-        projects[kind] = destination / 'Altium_API.PrjScr'
+        register_project(project, kind, hashes)
+        projects[kind] = project
+    refresh_catalog(runtime)
     return projects
 
 

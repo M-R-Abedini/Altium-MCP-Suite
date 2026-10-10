@@ -1,4 +1,4 @@
-{ Modified 2026-10-06 by M-R-Abedini; see root MODIFICATIONS.md. }
+{ Modified 2026-10-10 by M-R-Abedini; see root MODIFICATIONS.md. }
 { SPDX-License-Identifier: Apache-2.0                                   }
 { Copyright (c) 2026 George Saliba <george.saliba@salitronic.com>                                      }
 {..............................................................................}
@@ -364,6 +364,7 @@ Begin
     CleanupOrphanRequests(0);
     CleanupOrphanResponses(0);
     CleanupOrphanProgress(0);
+    CleanupManagedScriptProjects(0);
     Running := True;
     StopReason := '';
     StopPath := WorkspaceDir + 'stop';
@@ -392,7 +393,8 @@ Begin
     LastActivityMs := GetTickCount;
     LastWorkMs := LastActivityMs;
     WriteFileContent(WorkspaceDir + 'bridge-ready.json',
-        '{"script_version":"' + SCRIPT_VERSION + '","session_id":"' + SessionId + '"}');
+        '{"script_version":"' + SCRIPT_VERSION + '","session_id":"' + SessionId +
+        '","project_path":"' + EscapeJsonString(SUITE_SCRIPT_PROJECT) + '"}');
 
     Try
         While Running Do

@@ -16,6 +16,7 @@ import win32ui
 import win32con
 import win32api
 from PIL import Image
+from script_projects import register_sandbox_project
 import io
 import base64
 import glob
@@ -984,6 +985,7 @@ def prepare_sandbox(script, request_id):
         src = src.replace(token, str(value).replace("'", "''"))
     (directory / 'Sandbox.pas').write_text(src, encoding='utf-8')
     paths['project'].write_bytes(SANDBOX_PRJ.read_bytes())
+    register_sandbox_project(paths['project'])
     return paths
 
 
