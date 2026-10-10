@@ -1,3 +1,4 @@
+{ Modified 2026-10-10 by M-R-Abedini; see root MODIFICATIONS.md. }
 { SPDX-License-Identifier: Apache-2.0                                   }
 { Copyright (c) 2026 George Saliba <george.saliba@salitronic.com>                                      }
 {..............................................................................}
@@ -222,12 +223,56 @@ End;
 { project stayed open and the reply still said success, so a caller could not }
 { tell a completed close from an abandoned one. The close is now confirmed by }
 { looking the project up again.                                               }
+Function ManagedScriptProjectCloseBlocker(Project : IProject; ExpectedCount : Integer) : String;
+Var
+    I : Integer;
+    Doc : IDocument;
+    ServerDoc : IServerDocument;
+    ParentPath : String;
+Begin
+    Result := 'project unavailable';
+    If Project = Nil Then Exit;
+    Try
+        Result := 'document count changed';
+        If Project.DM_LogicalDocumentCount <> ExpectedCount Then Exit;
+        Result := 'cannot read project editor state';
+        ParentPath := UpperCase(ExtractFilePath(Project.DM_ProjectFullPath));
+        ServerDoc := Client.GetDocumentByPath(Project.DM_ProjectFullPath);
+        If ServerDoc <> Nil Then
+            If ServerDoc.Modified Then
+            Begin Result := 'project modified'; Exit; End;
+        For I := 0 To Project.DM_LogicalDocumentCount - 1 Do
+        Begin
+            Result := 'cannot read source ' + IntToStr(I);
+            Doc := Project.DM_LogicalDocuments(I);
+            If Doc = Nil Then Exit;
+            Result := 'source outside generated project: ' + Doc.DM_FullPath;
+            If UpperCase(ExtractFilePath(Doc.DM_FullPath)) <> ParentPath Then Exit;
+            Result := 'cannot read source editor state: ' + Doc.DM_FullPath;
+            ServerDoc := Client.GetDocumentByPath(Doc.DM_FullPath);
+            If ServerDoc <> Nil Then
+            Begin
+                { Script editors can report Modified=False after SetModified. }
+                { Keep every resident source buffer; do not infer it is clean. }
+                Result := 'source editor open: ' + Doc.DM_FullPath;
+                Exit;
+            End;
+        End;
+        Result := '';
+    Except
+        { Retain the API stage so skipped cleanup can be diagnosed. }
+    End;
+End;
+
 Function Proj_Close(Params : String; RequestId : String) : String;
 Var
-    ProjectPath, PreviousPath : String;
+    ProjectPath, PreviousPath, PreviousDocumentPath, Blocker : String;
     SaveFirst, Closed : Boolean;
     Workspace : IWorkspace;
     Project, Previous, Focused : IProject;
+    FocusedDocument : IDocument;
+    SourceEditor : IServerDocument;
+    I : Integer;
 Begin
     ProjectPath := ExtractJsonValue(Params, 'project_path');
     SaveFirst := ExtractJsonValue(Params, 'save') <> 'false';
@@ -243,6 +288,23 @@ Begin
         If Project <> Nil Then
         Begin
             ProjectPath := Project.DM_ProjectFullPath;
+            If UpperCase(ProjectPath) = UpperCase(SUITE_SCRIPT_PROJECT) Then
+            Begin
+                Result := BuildErrorResponse(RequestId, 'SCRIPT_PROJECT_RUNNING',
+                    'The executing bridge cannot close itself; let it release the engine before closing it in Altium');
+                Exit;
+            End;
+            If ExtractJsonValue(Params, 'only_if_unmodified') = 'true' Then
+            Begin
+                Blocker := ManagedScriptProjectCloseBlocker(Project,
+                    StrToIntDef(ExtractJsonValue(Params, 'expected_document_count'), -1));
+                If Blocker <> '' Then
+                Begin
+                    Result := BuildSuccessResponse(RequestId,
+                        '{"success":false,"closed":false,"reason":"' + EscapeJsonString(Blocker) + '"}');
+                    Exit;
+                End;
+            End;
             If SaveFirst Then
             Begin
                 SaveProjectMembers(Project);
@@ -257,8 +319,43 @@ Begin
             Previous := Workspace.DM_FocusedProject;
             PreviousPath := '';
             If Previous <> Nil Then PreviousPath := Previous.DM_ProjectFullPath;
+            PreviousDocumentPath := '';
+            FocusedDocument := Workspace.DM_FocusedDocument;
+            If FocusedDocument <> Nil Then PreviousDocumentPath := FocusedDocument.DM_FullPath;
             Project.DM_SetAsCurrentProject;
             Try
+                { DM_SetAsCurrentProject does not focus an unloaded script's }
+                { editor. CloseObject must target the real document owner.  }
+                If UpperCase(ExtractFileExt(ProjectPath)) = '.PRJSCR' Then
+                Begin
+                    For I := 0 To Project.DM_LogicalDocumentCount - 1 Do
+                    Begin
+                        Project.DM_LogicalDocuments(I).DM_LoadDocument;
+                        SourceEditor := Client.GetDocumentByPath(Project.DM_LogicalDocuments(I).DM_FullPath);
+                        If SourceEditor <> Nil Then
+                        Begin
+                            Client.ShowDocument(SourceEditor);
+                            Break;
+                        End;
+                    End;
+                    FocusedDocument := Workspace.DM_FocusedDocument;
+                    If FocusedDocument = Nil Then
+                    Begin
+                        Result := BuildErrorResponse(RequestId, 'CLOSE_UNCONFIRMED', 'No source editor focused');
+                        Exit;
+                    End;
+                    Focused := FocusedDocument.DM_Project;
+                    If Focused = Nil Then
+                    Begin
+                        Result := BuildErrorResponse(RequestId, 'CLOSE_UNCONFIRMED', 'Source editor has no project');
+                        Exit;
+                    End;
+                    If UpperCase(Focused.DM_ProjectFullPath) <> UpperCase(ProjectPath) Then
+                    Begin
+                        Result := BuildErrorResponse(RequestId, 'CLOSE_UNCONFIRMED', 'Source editor belongs to another project');
+                        Exit;
+                    End;
+                End;
                 Focused := Workspace.DM_FocusedProject;
                 If Focused = Nil Then
                 Begin
@@ -279,6 +376,11 @@ Begin
                 Begin
                     Previous := FindProjectByPath(Workspace, PreviousPath);
                     If Previous <> Nil Then Previous.DM_SetAsCurrentProject;
+                End;
+                If PreviousDocumentPath <> '' Then
+                Begin
+                    SourceEditor := Client.GetDocumentByPath(PreviousDocumentPath);
+                    If SourceEditor <> Nil Then Client.ShowDocument(SourceEditor);
                 End;
             End;
 
@@ -302,6 +404,68 @@ Begin
     End
     Else
         Result := BuildErrorResponse(RequestId, 'NO_WORKSPACE', 'No workspace available');
+End;
+
+{ Only intact generated snapshots appear in the suite's atomic catalog.       }
+{ Closing older projects prevents content-addressed reloads cluttering the UI. }
+{ Never close this executing project, user projects, or modified sources.      }
+Procedure CleanupManagedScriptProjects(Dummy : Integer);
+Var
+    Entries : TStringList;
+    Workspace : IWorkspace;
+    Candidate, Name, RootPath, ParentPath, Reply : String;
+    I, ExpectedCount, ClosedCount, SkippedCount : Integer;
+Begin
+    If Pos('__ALTIUM_MCP_', SUITE_SCRIPT_CATALOG) > 0 Then Exit;
+    If Not FileExists(SUITE_SCRIPT_CATALOG) Then Exit;
+    Workspace := GetWorkspace;
+    If Workspace = Nil Then Exit;
+    RootPath := UpperCase(ExtractFilePath(SUITE_SCRIPT_CATALOG));
+    ClosedCount := 0;
+    SkippedCount := 0;
+    Entries := TStringList.Create;
+    Try
+        Try
+            Entries.LoadFromFile(SUITE_SCRIPT_CATALOG);
+            For I := 0 To Entries.Count - 1 Do
+            Begin
+                Candidate := ExtractJsonValue(Entries[I], 'project_path');
+                If UpperCase(Candidate) = UpperCase(SUITE_SCRIPT_PROJECT) Then Continue;
+                If (Pos('\..\', Candidate) > 0) Or (Pos('\.\', Candidate) > 0) Then Continue;
+                Name := UpperCase(ExtractFileName(Candidate));
+                ParentPath := UpperCase(ExtractFilePath(Candidate));
+                If Name = 'SANDBOX.PRJSCR' Then
+                Begin
+                    If Pos(RootPath + 'LEGACY-EXCHANGE\SANDBOX\', ParentPath) <> 1 Then Continue;
+                End
+                Else
+                Begin
+                    If (Name <> 'ALTIUMMCP-EDA.PRJSCR') And (Name <> 'ALTIUMMCP-LEGACY.PRJSCR')
+                       And (Name <> 'ALTIUM_API.PRJSCR') Then Continue;
+                    If Pos(RootPath + 'SCRIPTS\', ParentPath) <> 1 Then Continue;
+                End;
+                If FindProjectByPath(Workspace, Candidate) = Nil Then Continue;
+                ExpectedCount := StrToIntDef(ExtractJsonValue(Entries[I], 'document_count'), -1);
+                Reply := Proj_Close('{"project_path":"' + EscapeJsonString(Candidate) +
+                    '","save":false,"only_if_unmodified":true,"expected_document_count":' +
+                    IntToStr(ExpectedCount) + '}', 'script-cleanup');
+                If FindProjectByPath(Workspace, Candidate) = Nil Then
+                    ClosedCount := ClosedCount + 1
+                Else
+                Begin
+                    SkippedCount := SkippedCount + 1;
+                    AppendLog(FormatLogStamp(0) + ',0,_script_project_cleanup_skip,' + Reply);
+                End;
+            End;
+        Except
+            AppendLog(FormatLogStamp(0) + ',0,_script_project_cleanup,error');
+        End;
+    Finally
+        Entries.Free;
+    End;
+    If (ClosedCount > 0) Or (SkippedCount > 0) Then
+        AppendLog(FormatLogStamp(0) + ',0,_script_project_cleanup,closed=' +
+            IntToStr(ClosedCount) + ',skipped=' + IntToStr(SkippedCount));
 End;
 
 Function Proj_GetDocuments(Params : String; RequestId : String) : String;

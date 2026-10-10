@@ -18,6 +18,7 @@ MCP servers that let an AI read and edit your Altium schematics, PCBs, and libra
 - Read and write `.SchLib` / `.PcbLib` library files.
 - Manage native assembly variants by GUID, bulk-update fitted states, and export their component matrix. Changes use project backups and native readback; see the [variant workflow](docs/review/STORAGE_VARIANTS_2026-10-08.md).
 - Two bridges, one script engine: a shared lock keeps the two Python bridges from fighting over Altium's script engine, and every request carries an ID so a late answer to an old request is never accepted.
+- Script projects have distinct EDA/legacy names. On EDA startup, verified older generated projects are closed; edited sources are retained. [Lifecycle checks](docs/review/SCRIPT_PROJECT_LIFECYCLE_2026-10-10.md).
 
 ## What's still in development
 

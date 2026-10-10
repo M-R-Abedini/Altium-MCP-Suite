@@ -103,6 +103,16 @@ add a `Co-authored-by: Name <email>` trailer after a blank line in the commit
 message. See [GitHub's co-author instructions](https://docs.github.com/en/pull-requests/how-tos/commit-changes/creating-a-commit-with-multiple-authors).
 Keep those trailers when squash-merging a jointly authored PR.
 
+## Runtime scripts
+
+Edit source templates in the repository, then redeploy and restart the MCP
+connections. Runtime script snapshots are immutable: editing one makes
+regeneration fail explicitly and excludes it from automatic project closure.
+Copy a generated project outside the runtime first if you need an editable
+debug project. Older intact generations and completed private sandboxes close
+on EDA startup; their files remain on disk for diagnosis and rollback. See
+[the native lifecycle checks](docs/review/SCRIPT_PROJECT_LIFECYCLE_2026-10-10.md).
+
 ## Bundled sources and licenses
 
 This suite includes snapshots of three upstream projects. Their source

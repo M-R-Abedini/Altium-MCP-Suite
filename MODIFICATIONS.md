@@ -2,6 +2,8 @@
 
 ## Added 2026-10-10
 
+- Native script `2026.10.10.lifecycle1`: distinguish generated EDA/legacy project names, record ownership and expected file hashes, and close verified old generations and completed sandboxes before publishing readiness. Script-project close loads and focuses a source editor, verifies its project owner, confirms removal and restores previous focus. The executing project is excluded; changed files, membership counts and any resident source editor block automatic closure. In AD26, `SetModified(True)` on a script editor read back as false; cleanup therefore preserves open source buffers regardless of that flag. Deploy the new `script_projects.py` registry with the wrappers. Source snapshots remain on disk; repeated validation reuses hashes keyed by file size and modification time.
+
 - TextFrame Corner writes now use the typed ISch_TextFrame interface, matching the already supported read path. The old setter accepted the name but did nothing. The LCD note was resized away from signal ports and read back at 18200mil. A regression checks that the declared interface and write dispatch both exist. During local development a misplaced duplicate TF declaration failed native compilation; it was corrected before release, the error dismissed, and the bridge restarted with matching reviewed templates.
 
 - EDA native script `2026.10.10.review6`: guard schematic `Name` reads/writes by interface type, add `eNote` to generic CRUD, and implement custom sheet size with `UseCustomSheet` instead of the nonexistent `eSheetCustom` enum. Standard sheet selection explicitly disables custom dimensions.
