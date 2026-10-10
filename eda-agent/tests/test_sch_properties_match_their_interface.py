@@ -40,11 +40,13 @@ def _decommented(text: str) -> str:
     return re.sub(r"//.*", " ", text)
 
 
-@pytest.mark.parametrize("prop", ["Text", "Orientation"])
+@pytest.mark.parametrize("prop", ["Text", "Orientation", "Name"])
 def test_the_access_is_gated_by_type(prop):
     """Every read and write of these goes through a type check."""
     code = _decommented(_source())
-    guard = {"Text": "SchObjectHasText", "Orientation": "SchObjectHasOrientation"}[prop]
+    if prop == "Name":
+        code = code[code.index("Function GetSchProperty"):code.index("Function MatchesFilter")]
+    guard = {"Text": "SchObjectHasText", "Orientation": "SchObjectHasOrientation", "Name": "SchObjectHasName"}[prop]
 
     # \bObj\. and not just Obj\. : PowerObj.Orientation is a TYPED local
     # where the access is already correct, and matching it flagged code
@@ -134,3 +136,48 @@ def test_no_hardcoded_boundary_literals_elsewhere():
                 offenders.append(f"{path.name}:{i}")
     assert not offenders, (
         f"32-bit boundary literals outside the constant: {offenders}")
+
+
+def test_note_is_a_supported_object_type():
+    assert "N = 'note'" in _source()
+    assert "Then Result := eNote" in _source()
+
+
+def test_sheet_size_uses_custom_mode_instead_of_nonexistent_enum():
+    code = _decommented(_source())
+    start = code.index("Function Gen_SetSheetSize")
+    body = code[start:code.index("\nFunction ", start+1)]
+    assert "eSheetCustom" not in body
+    assert "SchDoc.UseCustomSheet := True" in body
+    assert "SchDoc.UseCustomSheet := False" in body
+
+
+def test_batch_modify_reads_matches_from_success_envelope_data():
+    # ProcessDocByPath and its siblings return BuildSuccessResponse;
+    # ExtractJsonValue intentionally does not search nested members.
+    code = _decommented(_source())
+    start = code.index("Function Gen_BatchModify")
+    body = code[start:code.index("\nFunction ", start+1)]
+    assert "OpData := ExtractJsonValue(OpResult, 'data')" in body
+    assert "ExtractJsonValue(OpData, 'matched')" in body
+    assert "ExtractJsonValue(OpResult, 'matched')" not in body
+    assert "ExtractJsonValue(OpResult, 'success') = 'true'" in body
+    assert "operation_failed:" in body
+    assert "(OpMatched = 0) And (Note = '')" in body
+
+
+def test_single_modern_batch_operation_does_not_need_a_separator():
+    code = _decommented(_source())
+    start = code.index("Function Gen_BatchModify")
+    body = code[start:code.index("\nFunction ", start+1)]
+    assert "(Copy(Operations, 1, 6) = 'scope=')" in body
+
+
+def test_text_frame_corner_is_writable_through_its_typed_interface():
+    code = _decommented(_source())
+    start = code.index("Function SetSchProperty")
+    body = code[start:code.index("Function MatchesFilter", start)]
+    assert "TF : ISch_TextFrame" in body
+    assert "Else If Obj.ObjectId = eTextFrame Then" in body
+    assert "TF.Corner := Crn" in body
+    assert "Else NotePropertyDiag('unknown', PropName)" in body

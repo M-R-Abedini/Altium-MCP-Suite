@@ -74,7 +74,8 @@ Begin
     Else If N = 'noerc'           Then Result := eNoERC
     Else If N = 'junction'        Then Result := eJunction
     Else If N = 'image'           Then Result := eImage
-    Else If N = 'textframe'       Then Result := eTextFrame;
+    Else If N = 'textframe'       Then Result := eTextFrame
+    Else If N = 'note'            Then Result := eNote;
 End;
 
 { What the refusal should have said. }
@@ -83,7 +84,7 @@ Begin
     Result := 'eNetLabel, ePort, ePowerObject, eSchComponent, eWire, eBus, '
             + 'eBusEntry, eParameter, eParameterSet, ePin, eLabel, eLine, '
             + 'eRectangle, eSheetSymbol, eSheetEntry, eNoERC, eJunction, '
-            + 'eImage, eTextFrame';
+            + 'eImage, eTextFrame, eNote';
 End;
 
 { The refusal itself, in one place.                                          }
@@ -151,6 +152,17 @@ Begin
     { Both of these name themselves with Name, not Text. }
     If (Obj.ObjectId = ePort) Or (Obj.ObjectId = eSheetEntry) Then
         Result := False;
+End;
+
+{ Name is absent on a sheet symbol (its caption is Designator.Text).
+  Guard before late binding: DelphiScript's undeclared-identifier modal
+  cannot be caught by Try/Except and stops the request polling loop. }
+Function SchObjectHasName(Obj : ISch_GraphicalObject) : Boolean;
+Begin
+    Result := False;
+    If Obj = Nil Then Exit;
+    Result := (Obj.ObjectId = ePort) Or (Obj.ObjectId = eSheetEntry)
+        Or (Obj.ObjectId = ePin) Or (Obj.ObjectId = eParameter);
 End;
 
 Function SchObjectHasOrientation(Obj : ISch_GraphicalObject) : Boolean;
@@ -470,7 +482,11 @@ Begin
                 Result := '';
             End;
         End
-        Else If PropName = 'Name'        Then Result := Obj.Name
+        Else If PropName = 'Name' Then
+        Begin
+            If SchObjectHasName(Obj) Then Result := Obj.Name
+            Else NotePropertyDiag('unreadable', PropName);
+        End
         Else If PropName = 'LibReference'       Then Result := Obj.LibReference
         Else If PropName = 'SourceLibraryName'  Then Result := Obj.SourceLibraryName
         Else If PropName = 'DesignItemId'       Then Result := Obj.DesignItemId
@@ -672,6 +688,7 @@ Function SetSchProperty(Obj : ISch_GraphicalObject; PropName : String; Value : S
 Var
     Loc : TLocation;
     Crn : TLocation;
+    TF : ISch_TextFrame;
     R : ISch_Rectangle;
     L : ISch_Line;
     Comp : ISch_Component;
@@ -734,7 +751,7 @@ Begin
             Else
                 Obj.Location := Loc;
         End
-        // Corner lives on ISch_Rectangle and ISch_Line only (not on the base
+        // Corner lives on ISch_Rectangle, ISch_Line and ISch_TextFrame (not on the base
         // ISch_GraphicalObject, the compiler rejects Obj.Corner regardless
         // of assignment target). Dispatch on ObjectId and narrow to a typed
         // local before touching Corner. See GetSchProperty for the read side.
@@ -759,7 +776,18 @@ Begin
                 Else
                     Crn.Y := MilsToCoord(StrToIntDef(Value, 0));
                 L.Corner := Crn;
-            End;
+            End
+            Else If Obj.ObjectId = eTextFrame Then
+            Begin
+                TF := Obj;
+                Crn := TF.Corner;
+                If PropName = 'Corner.X' Then
+                    Crn.X := MilsToCoord(StrToIntDef(Value, 0))
+                Else
+                    Crn.Y := MilsToCoord(StrToIntDef(Value, 0));
+                TF.Corner := Crn;
+            End
+            Else NotePropertyDiag('unknown', PropName);
         End
 
         // String properties (late-bound across all types, primitives only)
@@ -770,7 +798,11 @@ Begin
             Else
                 NotePropertyDiag('unknown', PropName);
         End
-        Else If PropName = 'Name'        Then Obj.Name := Value
+        Else If PropName = 'Name' Then
+        Begin
+            If SchObjectHasName(Obj) Then Obj.Name := Value
+            Else NotePropertyDiag('unknown', PropName);
+        End
         Else If PropName = 'LibReference'       Then Obj.LibReference := Value
         // SourceLibraryName is the design-cache field that records which
         // library a placed component came from. It is read in GetSchProperty
@@ -2329,7 +2361,7 @@ End;
 
 Function Gen_BatchModify(Params : String; RequestId : String) : String;
 Var
-    Operations, OpStr, Remaining, OpResult, Note : String;
+    Operations, OpStr, Remaining, OpResult, OpData, Note : String;
     Scope, ObjTypeStr, FilterStr, SetStr : String;
     ScopeType, ScopePath : String;
     ObjTypeInt, PipePos : Integer;
@@ -2350,7 +2382,10 @@ Begin
     ResultJson := '';
     ResultsJson := '';
     Remaining := Operations;
-    UseTilde := Pos('~~', Operations) > 0;
+    { A single modern operation has no separator, but still carries
+      named fields. Python's modern emitter always starts with scope=. }
+    UseTilde := (Pos('~~', Operations) > 0) Or
+                (Copy(Operations, 1, 6) = 'scope=');
 
     { Clear the property-write diagnostics buffer so this call only       }
     { surfaces issues raised by THIS batch, not anything left over.       }
@@ -2435,9 +2470,17 @@ Begin
             Else
                 OpResult := ProcessActiveDoc(ObjTypeInt, FilterStr, '', SetStr, 'modify', RequestId, 0);
 
-            OpMatched := StrToIntDef(ExtractJsonValue(OpResult, 'matched'), 0);
+            { Process* returns a protocol envelope. FindJsonMemberValue
+              deliberately reads only direct members: matched belongs to
+              data, not the envelope. Preserve a failed child operation as
+              an error instead of misreporting it as a zero-match filter. }
+            OpData := ExtractJsonValue(OpResult, 'data');
+            If ExtractJsonValue(OpResult, 'success') = 'true' Then
+                OpMatched := StrToIntDef(ExtractJsonValue(OpData, 'matched'), 0)
+            Else
+                Note := 'operation_failed: ' + ExtractJsonValue(OpResult, 'error');
             TotalMatched := TotalMatched + OpMatched;
-            If OpMatched = 0 Then Note := 'no_objects_matched';
+            If (OpMatched = 0) And (Note = '') Then Note := 'no_objects_matched';
             Inc(OpCount);
         End
         Else
@@ -3886,7 +3929,9 @@ Begin
         Else If StyleStr = 'TABLOID' Then SchDoc.SheetStyle := eSheetTabloid
         Else If StyleStr = 'CUSTOM' Then
         Begin
-            SchDoc.SheetStyle := eSheetCustom;
+            { Custom dimensions are selected by UseCustomSheet, not an enum.
+              eSheetCustom is not exposed on AD26 and stops the bridge. }
+            SchDoc.UseCustomSheet := True;
             If CustomW > 0 Then SchDoc.CustomX := MilsToCoord(CustomW);
             If CustomH > 0 Then SchDoc.CustomY := MilsToCoord(CustomH);
         End
@@ -3897,6 +3942,7 @@ Begin
                 'Unknown sheet style: ' + StyleStr);
             Exit;
         End;
+        If StyleStr <> 'CUSTOM' Then SchDoc.UseCustomSheet := False;
     Finally
         SchServer.ProcessControl.PostProcess(SchDoc, 'Edit');
     End;

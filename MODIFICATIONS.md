@@ -1,5 +1,15 @@
 # Local changes
 
+## Added 2026-10-10
+
+- TextFrame Corner writes now use the typed ISch_TextFrame interface, matching the already supported read path. The old setter accepted the name but did nothing. The LCD note was resized away from signal ports and read back at 18200mil. A regression checks that the declared interface and write dispatch both exist. During local development a misplaced duplicate TF declaration failed native compilation; it was corrected before release, the error dismissed, and the bridge restarted with matching reviewed templates.
+
+- EDA native script `2026.10.10.review6`: guard schematic `Name` reads/writes by interface type, add `eNote` to generic CRUD, and implement custom sheet size with `UseCustomSheet` instead of the nonexistent `eSheetCustom` enum. Standard sheet selection explicitly disables custom dimensions.
+- `Gen_BatchModify` now reads `matched` from the child response's `data` object. The JSON parser intentionally reads direct members; the former envelope-level lookup returned zero after a successful mutation. Failed child operations retain `operation_failed` instead of becoming an unmatched filter. A single modern operation is recognized by its `scope=` prefix even when no `~~` separator is present. No automatic replay was added.
+- Native AD26.10.1 validation: unsupported sheet-symbol `Name` is unreadable without stopping the bridge; notes can be queried/deleted; a 23300x16500mil custom Core sheet survives save/reopen and has no sheet-boundary ERC findings. Five library pin writes returned five matches and their types were read back from the saved library. A single C131 operation returned one match; a single missing-document operation preserved the NO_SCHEMATIC child error. `app_ping` confirms deployed/bundled version equality.
+- Validation: 55 focused pytest tests passed (`test_sch_properties_match_their_interface`, `test_delphiscript_lint`, `test_version_is_consistent`, `test_batch_tools`); monolithic build lint scanned 11 units with zero errors/warnings. No Computer Use fallback was needed.
+- Open limitations: `lib_reload_library` is PCB-library specific; its SchLib invocation closed the document but reported reopening failure. `app_save_all` can write loaded libraries as well as project sheets; check `still_dirty` and independently verify critical edits from saved/reopened data. Neither issue is claimed fixed here.
+
 ## Added 2026-10-09
 
 - Second external review: allow explicit manual recovery from corrupt legacy ownership while retaining the marker for diagnosis; validate settings and Pascal templates even under optimized Python; classify keepalive by thread identity. Add direct-pytest bootstrapping, portable regression CI and installation-independent stdio smoke checks. Synchronize four README pages and document license scope. See [verified claims](docs/review/SECOND_ANALYSIS_2026-10-09.md).
