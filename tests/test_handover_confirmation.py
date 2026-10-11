@@ -12,6 +12,7 @@ def native(tmp_path, monkeypatch):
     monkeypatch.setattr(coord, 'RUNTIME', tmp_path)
     monkeypatch.setattr(coord, '_editor_state', lambda: {'pid': 77, 'blocked': False})
     monkeypatch.setattr(coord, '_session_started_at', lambda pid: 100)
+    monkeypatch.setattr(coord, '_confirm_editor_return', lambda state: None)
     monkeypatch.setattr(coord, '_file_ping', MagicMock(return_value={'pong': True}))
     clock = [0.0]
     monkeypatch.setattr(coord.time, 'monotonic', lambda: clock[0])

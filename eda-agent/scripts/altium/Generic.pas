@@ -1381,70 +1381,76 @@ Begin
     If Mode = 'delete' Then
     Begin
         SchServer.ProcessControl.PreProcess(SchDoc, '');
-
-        { Parameters are owned by their component (or by the document for   }
-        { sheet-level params), NOT reachable/removable through the plain    }
-        { doc-level RemoveSchObject loop below. Dispatch by owner.          }
-        If ObjTypeInt = eParameter Then
-        Begin
-            DeleteParametersAnyOwner(SchDoc, FilterStr, TotalMatched);
-            SchServer.ProcessControl.PostProcess(SchDoc, 'Edit');
-            SchDoc.GraphicallyInvalidate;
-            Exit;
-        End;
-
-        MaxIter := 100000;
-        While MaxIter > 0 Do
-        Begin
-            Iterator := SchDoc.SchIterator_Create;
-            Iterator.AddFilter_ObjectSet(MkSet(ObjTypeInt));
-            FoundObj := Nil;
-            Obj := Iterator.FirstSchObject;
-            While Obj <> Nil Do
+        Try
+            { Parameters are owned by their component (or by the document for   }
+            { sheet-level params), NOT reachable/removable through the plain    }
+            { doc-level RemoveSchObject loop below. Dispatch by owner.          }
+            If ObjTypeInt = eParameter Then
             Begin
-                If MatchesFilter(Obj, FilterStr) Then
-                Begin
-                    FoundObj := Obj;
-                    Break;
-                End;
-                Obj := Iterator.NextSchObject;
+                DeleteParametersAnyOwner(SchDoc, FilterStr, TotalMatched);
+                Exit;
             End;
-            SchDoc.SchIterator_Destroy(Iterator);
-            If FoundObj = Nil Then Break;
-            { Sheet entries belong to their parent sheet symbol's child       }
-            { container, not the SchDoc. SchDoc.RemoveSchObject silently      }
-            { no-ops on them, leaving the entry placed. Walk sheet symbols    }
-            { until one of them accepts the remove. Try/Except absorbs the    }
-            { wrong-parent failures.                                          }
-            If ObjTypeInt = eSheetEntry Then
+
+            MaxIter := 100000;
+            While MaxIter > 0 Do
             Begin
-                Removed := False;
-                SymIter := SchDoc.SchIterator_Create;
-                SymIter.AddFilter_ObjectSet(MkSet(eSheetSymbol));
-                Try
-                    Sym := SymIter.FirstSchObject;
-                    While Sym <> Nil Do
+                Iterator := SchDoc.SchIterator_Create;
+                Iterator.AddFilter_ObjectSet(MkSet(ObjTypeInt));
+                FoundObj := Nil;
+                Obj := Iterator.FirstSchObject;
+                While Obj <> Nil Do
+                Begin
+                    If MatchesFilter(Obj, FilterStr) Then
                     Begin
-                        Try
-                            Sym.RemoveSchObject(FoundObj);
-                            Removed := True;
-                            Break;
-                        Except End;
-                        Sym := SymIter.NextSchObject;
+                        FoundObj := Obj;
+                        Break;
                     End;
-                Finally
-                    SchDoc.SchIterator_Destroy(SymIter);
+                    Obj := Iterator.NextSchObject;
                 End;
-                If Not Removed Then
-                    Try SchDoc.RemoveSchObject(FoundObj); Except End;
-            End
-            Else
-                SchDoc.RemoveSchObject(FoundObj);
-            Inc(TotalMatched);
-            Dec(MaxIter);
+                SchDoc.SchIterator_Destroy(Iterator);
+                If FoundObj = Nil Then Break;
+                { Sheet entries belong to their parent sheet symbol's child       }
+                { container, not the SchDoc. SchDoc.RemoveSchObject silently      }
+                { no-ops on them, leaving the entry placed. Walk sheet symbols    }
+                { until one of them accepts the remove. Try/Except absorbs the    }
+                { wrong-parent failures.                                          }
+                If ObjTypeInt = eSheetEntry Then
+                Begin
+                    Removed := False;
+                    SymIter := SchDoc.SchIterator_Create;
+                    SymIter.AddFilter_ObjectSet(MkSet(eSheetSymbol));
+                    Try
+                        Sym := SymIter.FirstSchObject;
+                        While Sym <> Nil Do
+                        Begin
+                            Try
+                                Sym.RemoveSchObject(FoundObj);
+                                Removed := True;
+                                Break;
+                            Except End;
+                            Sym := SymIter.NextSchObject;
+                        End;
+                    Finally
+                        SchDoc.SchIterator_Destroy(SymIter);
+                    End;
+                    If Not Removed Then
+                        Try SchDoc.RemoveSchObject(FoundObj); Except End;
+                End
+                Else If ObjTypeInt = eSchComponent Then
+                    { Unregister also frees the native object and invalidates its }
+                    { registration. RemoveSchObject only detaches the container; }
+                    { compiled multipart instances can keep referencing it.      }
+                    SchDoc.UnRegisterSchObjectFromContainer(FoundObj)
+                Else
+                    SchDoc.RemoveSchObject(FoundObj);
+                Inc(TotalMatched);
+                Dec(MaxIter);
+            End;
+        Finally
+            SchServer.ProcessControl.PostProcess(SchDoc, 'Edit');
+            If TotalMatched > 0 Then InvalidateCompileCache(0);
+            SchDoc.GraphicallyInvalidate;
         End;
-        SchServer.ProcessControl.PostProcess(SchDoc, 'Edit');
-        SchDoc.GraphicallyInvalidate;
         Exit;
     End;
 

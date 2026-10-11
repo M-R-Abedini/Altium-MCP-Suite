@@ -35,6 +35,7 @@ def ownership(tmp_path,monkeypatch):
     monkeypatch.setattr(coord,'WORKSPACE',tmp_path)
     monkeypatch.setattr(coord,'_editor_state',lambda:dict(pid=77,blocked=False))
     monkeypatch.setattr(coord,'_session_started_at',lambda pid:100)
+    monkeypatch.setattr(coord, '_confirm_editor_return', lambda state: None)
     return tmp_path
 
 

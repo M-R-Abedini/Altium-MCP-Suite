@@ -22,6 +22,7 @@ def session(tmp_path, monkeypatch):
         monkeypatch.setattr(coord, key, value)
     monkeypatch.setattr(coord, '_editor_state', lambda: {'pid': 77, 'blocked': False})
     monkeypatch.setattr(coord, '_session_started_at', lambda pid: 100)
+    monkeypatch.setattr(coord, '_confirm_editor_return', lambda state: None)
     monkeypatch.setattr(coord.time, 'sleep', lambda _: None)
     owner = {'pid': 77, 'session_started_at': 100, 'session_id': 'native-1', 'script_version': 'v1'}
     (work / 'bridge-owner.json').write_text(json.dumps(owner))

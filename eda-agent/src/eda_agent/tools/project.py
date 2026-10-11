@@ -89,10 +89,13 @@ def register_project_tools(mcp):
     ) -> dict[str, Any]:
         """Close a project where the backend supports safe native close.
 
-        Altium design-project close is currently refused before any save
-        or focus change: AD26 can hang when closing inside the polling
-        handler. Detach the bridge, then use Altium's Close Project command.
-        Script-project cleanup retains its separate native checks.
+        The suite wrapper releases the polling engine, closes the resolved
+        target in a single native invocation, and verifies completion.
+        save=True saves target members through Altium's standard-save process.
+        save=False can open Altium's decision dialog for unsaved edits; it
+        never discards changes automatically. A blocked close keeps engine
+        ownership until completion. Standalone polling deployments refuse
+        design-project close.
 
         Args:
             project_path: Optional path to specific project. If None, closes active project.
@@ -263,7 +266,7 @@ def register_project_tools(mcp):
             net_name: Filter by net name. Empty = all.
             project_path: Optional project path. If None, uses active.
             limit: Max pin records (default 500). Zero means unlimited; negatives are rejected.
-            force_recompile: Save all dirty docs, invalidate the
+            force_recompile: Save target project members/definition, invalidate the
                 SmartCompile cache, recompile. Costs one extra
                 compile (~5-10 s on real designs). Use when you need
                 a guaranteed-fresh netlist (e.g., after the user
@@ -1711,7 +1714,7 @@ def register_project_tools(mcp):
         Args:
             designator: Component designator (e.g., "U1", "R8")
             project_path: Optional project path. If None, uses active.
-            force_recompile: SaveAll + invalidate cache + recompile
+            force_recompile: Save target project + invalidate cache + recompile
                 before reading. Use when you need a guaranteed-fresh
                 netlist.
 
@@ -1771,7 +1774,7 @@ def register_project_tools(mcp):
         Args:
             designators: List of component designators.
             project_path: Optional project path.
-            force_recompile: SaveAll + invalidate cache + recompile
+            force_recompile: Save target project + invalidate cache + recompile
                 before reading. Use when you need a guaranteed-fresh
                 netlist.
 
@@ -1822,7 +1825,7 @@ def register_project_tools(mcp):
 
     @mcp.tool()
     async def proj_force_recompile() -> dict[str, Any]:
-        """Flush all dirty docs, invalidate the compile cache, and recompile.
+        """Save the focused project, invalidate its compile cache, and recompile.
 
         Use this when you need a guaranteed-fresh netlist, e.g.
         immediately before re-running a connectivity check the user

@@ -155,9 +155,12 @@ def _guard_legacy(state):
         if completion.exists():
             reply = json.loads(completion.read_text(encoding='utf-8-sig'))
             if isinstance(reply, dict) and reply.get('request_id') == pending['request_id']:
+                _confirm_editor_return(state)
                 marker.unlink(missing_ok=True)
                 completion.unlink(missing_ok=True)
                 return
+    except TimeoutError:
+        raise
     except (OSError, ValueError, KeyError, TypeError) as error:
         raise RuntimeError('Legacy operation ownership cannot be verified; no new script was launched.') from error
     raise RuntimeError('A legacy operation has not confirmed completion. No new script was launched. Wait for completion or stop the script manually and reset ownership.')
@@ -266,7 +269,38 @@ def _editor_state():
     if len(editors) != 1:
         raise RuntimeError('Expected one Altium editor; found %d. No script was launched.' % len(editors))
     hwnd, pid = editors[0]
-    return {'pid': pid, 'blocked': not win32gui.IsWindowEnabled(hwnd)}
+    return {'pid': pid, 'hwnd': hwnd, 'blocked': not win32gui.IsWindowEnabled(hwnd)}
+
+
+def _ui_thread_barrier(hwnd, timeout_ms):
+    """Read-only WM_NULL round trip; never sends a command or user input."""
+    import ctypes
+    from ctypes import wintypes
+    send = ctypes.WinDLL('user32', use_last_error=True).SendMessageTimeoutW
+    send.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM,
+                     wintypes.LPARAM, wintypes.UINT, wintypes.UINT,
+                     ctypes.POINTER(ctypes.c_size_t)]
+    send.restype = wintypes.LPARAM
+    result = ctypes.c_size_t()
+    # BLOCK | ABORTIFHUNG | ERRORONEXIT. WM_NULL has no side effects.
+    if not send(hwnd, 0, 0, 0, 0x23, timeout_ms, ctypes.byref(result)):
+        raise TimeoutError('Altium UI thread has not returned after native completion; engine ownership retained')
+
+
+def _confirm_editor_return(state):
+    """A final marker plus a UI round trip, under the shared engine lock.
+
+    Our native completion tails must not pump messages after publication.
+    This is a barrier for those tails, not a general DelphiScript VM-status API.
+    """
+    before = _editor_state()
+    identity = (before['pid'], before['hwnd'], _session_started_at(before['pid']))
+    if before['blocked'] or before['pid'] != state['pid']:
+        raise RuntimeError('Altium changed or became blocked before engine handover')
+    _ui_thread_barrier(before['hwnd'], 3000)
+    after = _editor_state()
+    if after['blocked'] or (after['pid'], after['hwnd'], _session_started_at(after['pid'])) != identity:
+        raise RuntimeError('Altium changed or became blocked during engine handover')
 
 def _guard_editor():
     state = _editor_state()
@@ -327,6 +361,8 @@ def _ensure(probe):
         log_event('busy_handler_no_restart')
         raise RuntimeError('An EDA handler is still running. No new command was queued; inspect the previous operation before retrying.')
     released = _cleanly_released(state)
+    if released:
+        _confirm_editor_return(state)
     if not released:
         try:
             result = probe(2.0)
@@ -415,12 +451,72 @@ def ensure_eda(bridge, execute):
 def start_eda():
     return _ensure(_file_ping)
 
+def close_project_once(params, timeout):
+    """Run one targeted native close with the polling engine released.
+
+    Caller holds engine_lock. Shared legacy ownership blocks every bridge
+    if this one-shot operation fails to finish; a close is never replayed.
+    """
+    from eda_agent.bridge.exceptions import AltiumCommandError, AltiumProtocolError
+    from eda_agent.bridge.payload import validate_wire_text
+    if not params.get('project_path'):
+        raise ValueError('One-shot project close requires a resolved project_path')
+    validate_wire_text(params)
+    stop_eda()
+    request_id = uuid.uuid4().hex
+    request = WORKSPACE / 'project-close-request.json'
+    response = WORKSPACE / ('close-response_' + request_id + '.json')
+    completion = WORKSPACE / ('close-completed_' + request_id + '.json')
+    begin_legacy(request_id, request, completion)
+    temp = request.with_suffix('.json.tmp')
+    launched = False
+    try:
+        temp.write_text(json.dumps({'id': request_id, 'params': params}), encoding='utf-8')
+        temp.replace(request)
+        script = SCRIPT or prepare_runtime()['eda']
+        executable = EXE or altium_exe()
+        command = '"%s" -RScriptingSystem:RunScript(ProjectName="%s"|ProcName="Dispatcher>CloseMCPProject")' % (executable, script)
+        subprocess.Popen(command, creationflags=subprocess.CREATE_NO_WINDOW)
+        launched = True
+        deadline = time.monotonic() + min(timeout, 60)
+        while time.monotonic() < deadline:
+            if completion.exists():
+                _guard_editor()
+                if _legacy_marker().exists():
+                    raise AltiumProtocolError(message='Close completion did not match its native owner')
+                reply = json.loads(response.read_text(encoding='utf-8-sig'))
+                if not isinstance(reply, dict) or reply.get('id') != request_id or type(reply.get('success')) is not bool:
+                    raise AltiumProtocolError(message='Invalid native project-close response')
+                if not reply['success']:
+                    error = reply.get('error') or {}
+                    raise AltiumCommandError(error.get('message', 'Native close failed'), code=error.get('code', 'CLOSE_FAILED'))
+                data = reply.get('data')
+                if (not isinstance(data, dict) or not isinstance(data.get('project_path'), str)
+                        or data['project_path'].casefold() != params['project_path'].casefold()
+                        or type(data.get('closed')) is not bool or type(data.get('success')) is not bool):
+                    raise AltiumProtocolError(message='Native close did not return readback for the requested project')
+                return data
+            if _editor_state()['blocked']:
+                raise RuntimeError('Native project close is blocked; ownership retained. Inspect Altium before retrying.')
+            time.sleep(.05)
+        raise TimeoutError('Native project close did not confirm completion; ownership retained. No close was replayed.')
+    finally:
+        temp.unlink(missing_ok=True)
+        request.unlink(missing_ok=True)
+        if not launched:
+            abandon_unlaunched_legacy(request_id)
+        if not _legacy_marker().exists():
+            response.unlink(missing_ok=True)
+            completion.unlink(missing_ok=True)
+
+
 def stop_eda():
     state = _guard_editor()
     WORKSPACE.mkdir(parents=True, exist_ok=True)
     if _handler_busy():
         raise RuntimeError('An EDA handler is still running; refusing to stop it for the other bridge')
     if _cleanly_released(state):
+        _confirm_editor_return(state)
         return
     # Only publish a stop if the polling loop actually answers. An unconsumed
     # sentinel must not kill a later session that happens to start meanwhile.
@@ -431,6 +527,7 @@ def stop_eda():
         # may race the ping, but only its session-bound final proof is enough.
         state = _guard_editor()
         if not _handler_busy() and _cleanly_released(state):
+            _confirm_editor_return(state)
             return
         raise TimeoutError('EDA shutdown is not confirmed; refusing legacy handover. '
                            'Establish a session with the coordinated EDA bridge before retrying.') from None
@@ -443,6 +540,7 @@ def stop_eda():
         while time.monotonic() < deadline:
             state = _guard_editor()
             if not _handler_busy() and _cleanly_released(state):
+                _confirm_editor_return(state)
                 return
             # Native code consumes the stop file BEFORE hiding its form and
             # cleaning up. Wait for the final acknowledgement, not consumption.
@@ -473,7 +571,7 @@ def reset_after_manual_stop():
                     raise ValueError('Request path is outside the configured runtime/workspace')
                 if request.exists() and not request.is_file():
                     raise ValueError('Request path is not a file')
-                if request.name not in {'request.json', 'unused-request.json'}:
+                if request.name not in {'request.json', 'unused-request.json', 'project-close-request.json'}:
                     raise ValueError('Request path is not a legacy inbox')
             except (ValueError, KeyError, TypeError) as error:
                 archive = marker.with_name('legacy-operation.corrupt-' + uuid.uuid4().hex + '.json')
@@ -484,6 +582,7 @@ def reset_after_manual_stop():
                 marker.unlink(missing_ok=True)
         # The fixed legacy inbox may survive a damaged or missing marker.
         (RUNTIME / 'legacy-exchange' / 'request.json').unlink(missing_ok=True)
+        (WORKSPACE / 'project-close-request.json').unlink(missing_ok=True)
         LAUNCH_STATE.unlink(missing_ok=True)
         log_event('manual_ownership_reset', pid=state['pid'])
 

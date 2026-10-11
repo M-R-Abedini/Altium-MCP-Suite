@@ -298,7 +298,7 @@ Begin
             { after a confirmed save, with no visible prompt to dismiss.    }
             { Refuse design-project close before saving or moving focus.    }
             { The verified script-snapshot cleanup below is still allowed.  }
-            If UpperCase(ExtractFileExt(ProjectPath)) <> '.PRJSCR' Then
+            If (UpperCase(ExtractFileExt(ProjectPath)) <> '.PRJSCR') And (Not ExternalCloseOnce) Then
             Begin
                 Result := BuildErrorResponse(RequestId, 'PROJECT_CLOSE_REQUIRES_UI',
                     'Design project close inside the MCP loop is disabled after an AD26 hang. Detach the bridge, then use Close Project in Altium. No save or close was attempted');
@@ -318,12 +318,23 @@ Begin
             If SaveFirst Then
             Begin
                 SaveProjectMembers(Project);
+                If Not ProjectDefinitionSaveDispatched Then
+                Begin
+                    Result := BuildErrorResponse(RequestId, 'SAVE_UNCONFIRMED', 'Project definition save was not dispatched; close aborted');
+                    Exit;
+                End;
                 If CountDirtyInProject(Project) > 0 Then
                 Begin
                     Result := BuildErrorResponse(RequestId, 'SAVE_UNCONFIRMED',
                         'Project remains modified; close aborted');
                     Exit;
                 End;
+            End;
+            If CountDirtyInProject(Project) > 0 Then
+            Begin
+                Result := BuildErrorResponse(RequestId, 'PROJECT_DIRTY',
+                    'Close without saving refuses modified members; no changes were discarded');
+                Exit;
             End;
 
             Previous := Workspace.DM_FocusedProject;
@@ -336,7 +347,7 @@ Begin
             Try
                 { DM_SetAsCurrentProject does not focus an unloaded script's }
                 { editor. CloseObject must target the real document owner.  }
-                If UpperCase(ExtractFileExt(ProjectPath)) = '.PRJSCR' Then
+                If (UpperCase(ExtractFileExt(ProjectPath)) = '.PRJSCR') Or ExternalCloseOnce Then
                 Begin
                     For I := 0 To Project.DM_LogicalDocumentCount - 1 Do
                     Begin
@@ -379,6 +390,7 @@ Begin
                 End;
                 ResetParameters;
                 AddStringParameter('ObjectKind', 'FocusedProjectAndDocuments');
+                InvalidateCompileCache(0);
                 RunProcess('WorkspaceManager:CloseObject');
             Finally
                 { Do not dereference the project that was just closed. }
@@ -843,10 +855,11 @@ End;
 { caller-dependency order.                                                    }
 {..............................................................................}
 
-Procedure ForceRecompileIfRequested(Project : IProject; Params : String);
+Function ForceRecompileIfRequested(Project : IProject; Params : String) : Boolean;
 Var
     Flag : String;
 Begin
+    Result := False;
     If Project = Nil Then Exit;
     Flag := LowerCase(ExtractJsonValue(Params, 'force_recompile'));
     If (Flag = 'true') Or (Flag = '1') Then
@@ -855,11 +868,15 @@ Begin
         { on-disk project structure in some code paths, and users hit this  }
         { tool precisely when the in-editor state has diverged from the     }
         { cached netlist.                                                   }
-        Try SaveAllDirty(0); Except End;
+        SaveProjectMembers(Project);
+        If Not ProjectDefinitionSaveDispatched Then Exit;
+        If CountDirtyInProject(Project) > 0 Then
+            Exit;
         Project.DM_ResetLastCompileTimeForAllDocuments;
-        LastCompileTick := 0;
+        InvalidateCompileCache(0);
         SmartCompile(Project);
     End;
+    Result := True;
 End;
 
 {..............................................................................}
@@ -908,7 +925,11 @@ Begin
     End;
 
     // Honor force_recompile BEFORE SmartCompile so the cache is fresh.
-    ForceRecompileIfRequested(Project, Params);
+    If Not ForceRecompileIfRequested(Project, Params) Then
+    Begin
+        Result := BuildErrorResponse(RequestId, 'PROJECT_SAVE_FAILED', 'Target project remains modified; forced compile aborted');
+        Exit;
+    End;
 
     // Compile to resolve net connectivity
     SmartCompile(Project);
@@ -1093,7 +1114,11 @@ Begin
     { Compile is only needed for Pin.DM_FlattenedNetName. force_recompile   }
     { stays honoured even when nets are skipped, callers using it have an  }
     { explicit reason to refresh the cache.                                 }
-    ForceRecompileIfRequested(Project, Params);
+    If Not ForceRecompileIfRequested(Project, Params) Then
+    Begin
+        Result := BuildErrorResponse(RequestId, 'PROJECT_SAVE_FAILED', 'Target project remains modified; forced compile aborted');
+        Exit;
+    End;
     If WithPinNets Then SmartCompile(Project);
     Found := False;
 
@@ -1279,7 +1304,11 @@ Begin
             Exit;
         End;
 
-        ForceRecompileIfRequested(Project, Params);
+        If Not ForceRecompileIfRequested(Project, Params) Then
+        Begin
+            Result := BuildErrorResponse(RequestId, 'PROJECT_SAVE_FAILED', 'Target project remains modified; forced compile aborted');
+            Exit;
+        End;
         If WithPinNets Then SmartCompile(Project);
 
         { Always use GetCompiledDocs so this handler enumerates the same        }
@@ -3509,7 +3538,11 @@ Begin
     Else Project := Workspace.DM_FocusedProject;
     If Project = Nil Then Begin Result := BuildErrorResponse(RequestId, 'NO_PROJECT', 'No project found'); Exit; End;
 
-    ForceRecompileIfRequested(Project, Params);
+    If Not ForceRecompileIfRequested(Project, Params) Then
+    Begin
+        Result := BuildErrorResponse(RequestId, 'PROJECT_SAVE_FAILED', 'Target project remains modified; forced compile aborted');
+        Exit;
+    End;
     SmartCompile(Project);
     Found := False;
 
@@ -3639,7 +3672,11 @@ Begin
             Exit;
         End;
 
-        ForceRecompileIfRequested(Project, Params);
+        If Not ForceRecompileIfRequested(Project, Params) Then
+        Begin
+            Result := BuildErrorResponse(RequestId, 'PROJECT_SAVE_FAILED', 'Target project remains modified; forced compile aborted');
+            Exit;
+        End;
         SmartCompile(Project);
 
         Data := '';
@@ -4578,10 +4615,11 @@ Begin
     End;
 
     PrevTick := LastCompileTick;
-    Try SaveAllDirty(0); Except End;
-    Project.DM_ResetLastCompileTimeForAllDocuments;
-    LastCompileTick := 0;
-    SmartCompile(Project);
+    If Not ForceRecompileIfRequested(Project, '{"force_recompile":true}') Then
+    Begin
+        Result := BuildErrorResponse(RequestId, 'PROJECT_SAVE_FAILED', 'Target project remains modified; forced compile aborted');
+        Exit;
+    End;
     NewTick := LastCompileTick;
 
     Result := BuildSuccessResponse(RequestId,

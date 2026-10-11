@@ -17,40 +17,67 @@ isolated native test projects. The hardware project was not a mutation target.
 | Compile-mask API gap | Added `sch_place_compile_mask`, `eCompileMask` queries, and typed Collapsed/corner updates. Native placement and toggling read back correctly. On this AD26 workflow `Collapsed=true` disables the exclusion. The new acceptance test checks state and geometry; it does not independently prove ERC/hierarchy exclusion. |
 | Custom-sheet size silently ineffective | Set effective `SheetSizeX/Y` as well as custom dimensions; return actual dimensions and verify them. The old setter reproduced 20000-by-15000 instead of requested 32000-by-20000 mils; the fixed setter returned the requested effective size. |
 | Missing annotations and inactive multipart pins in SVG | Native geometry includes labels/text frames/notes, and filters component children by CurrentPartID while retaining common part-zero primitives. Native SVG contained escaped frame/note text. LM358 part A rendered pins 1/2/3/4/8; part B rendered 4/5/6/7/8. XML and bounding-box regressions cover annotations and top-left sheet-symbol anchors. Font/layout fidelity remains approximate. |
-| Clean documents rewritten on save | Project-member save no longer forces Modified=true and only writes dirty members. A second native project save left every scratch SchDoc timestamp unchanged. Changed footprint fields persisted across reopen. The reported Wireless mapping error was not reproduced, so its root cause is not claimed fixed. |
+| Project-member save and unreliable dirty flags | The initial dirty-only change passed on one fixture but was superseded: AD26 can display an unsaved schematic while `IServerDocument.Modified=false`. Native project-scoped Standard save now persists target members and the definition without forcing Modified=true. It can rewrite clean members; unchanged component properties were verified after two saves. The reported Wireless mapping error was not reproduced, so its root cause is not claimed fixed. |
 | Newly created project not focused | `proj_add_sheet` accepts an explicit loaded `project_path`; missing targets cannot fall back to another project. Existing files/open documents are refused before creation. Native creation in the explicitly selected empty project succeeded while another project was focused; repeating the name failed without changing file bytes. |
 
-## Still under investigation
+## Native lifecycle follow-up
 
-- **Project close can block the native UI (P1, guarded):** final installed acceptance
-  passed through model updates, render, and saves, then `proj_close` on the
-  scratch Findings project stopped returning. The main window and monitor were
-  disabled; dialog diagnostics found no visible dialog, and the client timed out
-  after 80 seconds. The busy-handler marker was retained. No close request was
-  replayed, editor process terminated, or hardware changes discarded. Cleanup
-  and restoring hardware focus are not claimed completed for this attempt.
-  The editor was subsequently restarted by the user. The native bridge answered
-  again with matching source identity, and all 14 hardware file hashes matched.
-  Version `2026.10.11.closeguard1` refuses non-script project close with
-  `PROJECT_CLOSE_REQUIRES_UI` before saving or changing focus. Detach the bridge
-  and close design projects through Altium's Projects panel. Script-project
-  cleanup retains its existing focus and ownership checks. This prevents replay
-  of the known unsafe path; it does not resolve the underlying native hang or
-  provide automatic design-project close.
-- **Stale compiled multipart instances after deletion (P1):** force compile was
-  insufficient in the reported board session; reopening restored correct counts.
-  No safe root-cause fix has been demonstrated. Verify the saved/reopened netlist
-  before accepting multipart deletion or package changes. A replay test must
-  compare native instances, compiled pins, and ERC before and after reopen.
-- **Legacy completion versus actual engine return (P2):** request-specific
-  completion and shared ownership guards already exist, but a completion file
-  cannot by itself prove that DelphiScript has returned. The occasional rapid
-  handover failure still needs a reproducible native release signal. No arbitrary
-  delay or automatic edit replay was added.
-- Native PNG export limitations, screenshot resolution, and a helper started
-  with mismatched environment values are not evidence of electrical defects.
-  The workspace mismatch is now prevented; other observations retain their
-  original scope.
+Version `2026.10.11.lifecycle1` addresses the three open lifecycle findings and
+two save defects exposed by their native regression fixtures:
+
+- **Design-project close (P1):** the suite wrapper resolves the target, confirms
+  polling shutdown, then invokes `Dispatcher>CloseMCPProject` once. Unsupported transport text is rejected before stopping or publishing. The native
+  procedure verifies the focused document's project owner, closes that project,
+  and confirms removal before publishing the request-specific final marker.
+  Clean close and save/close/reopen of edited scratch schematics succeeded in
+  AD26. The original polling-loop path still refuses design-project close.
+  This avoids the observed execution context; Altium's internal hang mechanism
+  is not established. Empty projects or ambiguous/shared document ownership
+  remain explicit failures rather than falling back to another project.
+- **Deleted multipart ghosts (P1):** generic component deletion unregisters the
+  native object instead of only removing its container membership. The iterator
+  is destroyed first; the freed object is never reused. Transaction finalization
+  and compile-cache invalidation run even on failure. The old implementation
+  left 16 compiled pins and two ERC findings after removing one of two symbols.
+  The fix returned eight pins and one finding without reopen, with no reference
+  to the deleted designator. Save/close/reopen preserved those counts. Altium
+  documents that [unregistering frees the object](https://www.altium.com/documentation/altium-dxp-developer/isch-document-interface).
+  Native Undo/Redo was not part of this acceptance test.
+- **Premature engine handover (P2):** completion now also requires a bounded
+  `SendMessageTimeoutW(WM_NULL)` round trip to the enabled editor window, with
+  process/window identity checked before and after. Ownership remains intact
+  on timeout or identity change. Three native tests published completion before
+  a 1.2-second non-pumping tail; the barrier waited 1.187/1.203/1.203 seconds and
+  only retired ownership after return. This relies on this suite's completion
+  tails issuing no further message pumps or native commands, enforced by a
+  regression. It is not a general DelphiScript VM-status API. Microsoft's
+  [API contract](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendmessagetimeoutw)
+  defines the bounded message round trip; it does not establish Altium behavior.
+- **Forced compile saves unrelated projects (P1):** both explicit forced compile
+  and query-triggered forced compile now save only the resolved target project.
+  Failure to dispatch the definition save aborts compilation. Baseline testing
+  of the old workspace-wide save wrote one generated document UID into the
+  hardware project definition. The exact original bytes were restored; final
+  hardware hash checks include that definition.
+- **Unsaved edits missed by the SDK flag (P1):** native Standard save persists
+  target members before the project definition. A text-frame edit showing an
+  unsaved UI marker, despite a false SDK Modified flag, survived close/reopen.
+  This correctness requirement supersedes the earlier dirty-only optimization.
+
+## Remaining limits
+
+- `save=false` can open Altium's Save/Discard/Cancel dialog when its SDK dirty
+  flags miss an unsaved edit. The wrapper reports the blocker and retains
+  ownership; it neither discards edits nor repeats the close. Cancellation was
+  tested, followed by native completion and successful guarded handback.
+  `app_context.unsaved` and dirty counts inherit this SDK limitation and are not
+  proof that every editor buffer is saved.
+- Native Standard save can rewrite clean target members. Save operations are
+  project-scoped, but byte/timestamp stability is not promised. Synthetic free
+  documents retain the existing per-document save path.
+- Native PNG export limitations and screenshot resolution are unchanged. The
+  original Wireless file-mapping error remains unconfirmed. Compile-mask state
+  readback is tested; full hierarchy/BOM/PCB exclusion is not certified here.
 
 ## Disabled-window reporting
 
@@ -67,11 +94,21 @@ detachment. The suite wrapper now uses the coordinator's guarded stop, waits
 for its session-bound final shutdown marker, and propagates a failure. The tool
 only detaches its local keep-alive after that confirmation. It saves no
 documents, and a later coordinated call can restart the bridge. The final
-marker is the existing protocol's release evidence; the rapid handover concern
-above still requires a signal proving the script has physically returned.
+marker and the bounded editor-thread round trip are both required before
+another script can launch. Completion alone no longer retires ownership.
 
 ## Verification
 
+- Lifecycle follow-up: 205 suite tests and 175 targeted EDA tests passed; native
+  build/lint reported zero errors and warnings. Final deployment initialized
+  both installed wrappers (448 EDA / 37 legacy tools). Installed AD26 acceptance
+  passed eight consecutive read-only legacy/EDA handovers with matching native
+  source identity, refused a missing close target, and preserved source component
+  properties through repeated project saves. Separate native fixtures verified
+  clean close, persisted edited text through save/close/reopen, multipart pin/ERC
+  counts before and after reopen, and the three delayed-return barriers above.
+  Audio was restored as the active hardware sheet, final Detach confirmed engine
+  release, and all 14 hardware file hashes matched the original baseline.
 - Close-guard follow-up: 192 suite tests and 152 targeted EDA tests passed;
   native build/lint reported zero errors and warnings. Installed initialization
   passed for both wrappers (448 EDA / 37 legacy tools). Native AD26 acceptance
@@ -86,7 +123,8 @@ above still requires a signal proving the script has physically returned.
 - DelphiScript build/lint passed without suppressing rules.
 - Installed-directory initialization passed for both wrappers (448 EDA tools,
   37 legacy tools). A fresh installed EDA client verified source identity,
-  multipart stamp counts, annotation SVG output, and clean-member save behavior.
+  multipart stamp counts, annotation SVG output, and the initial dirty-only save
+  behavior, superseded by the lifecycle follow-up above.
 - Native tests used disposable projects/libraries. All 14 hardware `.PrjPcb`,
   `.SchDoc`, and `.PcbDoc` hashes were unchanged after recovery and acceptance.
   An empty sheet initially added to the focused hardware project during testing
