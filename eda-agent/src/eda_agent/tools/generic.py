@@ -665,21 +665,33 @@ def register_generic_tools(mcp):
                 currently-focused schematic.
 
         Returns:
-            Dict with ``{updated, failed, total}``. ``updated`` is the
-            count of components whose parameters were touched;
-            ``failed`` is the count of stamps that couldn't be applied
-            (designator not found, parameter not settable, etc).
+            Dict with ``{success, updated, failed, total, results}``.
+            Counts refer to requested stamps, so ``updated + failed = total``.
+            A stamp succeeds only when every matching symbol reads back all
+            requested fields. ``matched_instances`` / ``updated_instances``
+            count multipart symbols separately. ``results`` reports each stamp.
+            Footprint changes the PCB model link; it does not validate pads or
+            the existence of that footprint in a PCB library.
         """
         # Encode the list-of-dicts into the Pascal handler's expected
         # wire format: stamps separated by `~~`, fields within a stamp
         # separated by `;`, key=value pairs.
         if not stamps:
             return {"ok": False, "reason": "stamps list is empty"}
+        designators = set()
         encoded_stamps = []
         for stamp in stamps:
-            if "designator" not in stamp:
+            if not stamp.get("designator", "").strip():
                 return {"ok": False,
                         "reason": f"stamp missing 'designator': {stamp}"}
+            designator = payload_safe(stamp["designator"])
+            if designator in designators:
+                return {"ok": False, "reason": f"duplicate designator: {designator}"}
+            designators.add(designator)
+            if not any(value for key, value in stamp.items() if key != "designator"):
+                return {"ok": False, "reason": f"stamp has no non-empty fields: {designator}"}
+            if any(not key or any(c in key for c in ";=~") for key in stamp):
+                return {"ok": False, "reason": "parameter names cannot contain ;, = or ~"}
             # The designator was interpolated RAW here while every other
             # value was escaped, so the one field guaranteed to come
             # from the caller was the one that could reshape the
@@ -844,22 +856,33 @@ def register_generic_tools(mcp):
     @mcp.tool()
     async def proj_add_sheet(
         name: str = "NewSheet",
+        project_path: Optional[str] = None,
     ) -> dict[str, Any]:
-        """Create a new schematic sheet and add it to the focused project.
+        """Create a schematic sheet in an explicit or focused project.
 
         The sheet is created in the same directory as the project file.
 
         Args:
             name: Name for the new sheet (without .SchDoc extension).
                   Default "NewSheet".
+            project_path: Explicit loaded project, required when a newly
+                created empty project cannot become the focused project.
 
         Returns:
             Dictionary with the path of the newly created sheet
         """
+        import ntpath
+        if (name != ntpath.basename(name) or name in ("", ".", "..")
+                or any(c in name for c in '<>:"/\\|?*')
+                or any(ord(c) < 32 for c in name) or name.endswith((".", " "))):
+            return {"success": False, "error": "INVALID_SHEET_NAME"}
+        params = {"name": name}
+        if project_path:
+            params["project_path"] = project_path
         bridge = get_bridge()
         result = await bridge.send_command_async(
             "generic.add_sheet",
-            {"name": name},
+            params,
         )
         return result
 
@@ -1107,7 +1130,8 @@ def register_generic_tools(mcp):
         corresponding to the child sheet's ports.
 
         Args:
-            x1, y1, x2, y2: Sheet symbol box corners in mils
+            x1, y1, x2, y2: Opposite box corners in mils (+Y upward).
+                Normalized bounds become native top-left=(min X, max Y).
             sheet_file_name: Child SchDoc filename (e.g. "PSU.SchDoc")
             sheet_name: Display label (default: file name without extension)
 
@@ -1147,7 +1171,10 @@ def register_generic_tools(mcp):
             entry_name: Port name (must match a port in the child sheet)
             io_type: "input" | "output" | "bidirectional" | "unspecified"
             side: "left" | "right" | "top" | "bottom"
-            distance_from_top: Position along the chosen side in mils
+            distance_from_top: Mils downward from the native top-left anchor
+                on left/right edges; rightward from that anchor on top/bottom.
+                Must fit inside the selected edge. Response includes requested
+                and native absolute coordinates; success requires both to match.
 
         Returns:
             Dictionary confirming sheet entry placement
@@ -1164,6 +1191,22 @@ def register_generic_tools(mcp):
             },
         )
         return result
+
+    @mcp.tool()
+    async def sch_place_compile_mask(
+        x1: int, y1: int, x2: int, y2: int, enabled: bool = True,
+    ) -> dict[str, Any]:
+        """Place a rectangular compilation exclusion on the active schematic.
+
+        Bounds are mils. On AD26, enabled means Collapsed=false. Response reads
+        back bounds and state. Query/modify eCompileMask with Corner.X/Y,
+        Location.X/Y and Collapsed; Collapsed=true disables the exclusion.
+        Masking a parent sheet symbol can change the project's hierarchy.
+        """
+        return await get_bridge().send_command_async("generic.place_compile_mask", {
+            "x1": str(x1), "y1": str(y1), "x2": str(x2), "y2": str(y2),
+            "enabled": str(enabled).lower(),
+        })
 
     @mcp.tool()
     async def sch_place_bus_entry(
@@ -2107,17 +2150,11 @@ def register_generic_tools(mcp):
         y: Optional[int] = None,
         new_designator: str = "",
     ) -> dict[str, Any]:
-        """Copy a placed schematic part and share the master's UniqueId.
+        """Unavailable: returns REPLICATION_UNSUPPORTED before any mutation.
 
-        ECO groups multi-part packages (quad comparators, dual op-amps)
-        only when every unit has the same UniqueId. Writing UniqueId
-        after the copy is already on the sheet remints a new id if that
-        value is already present. This path stamps UniqueId on the
-        replica *before* AddSchObject, which is the share that sticks.
-
-        Finds the first instance whose designator matches, Replicates
-        it, optionally switches CurrentPartID, optionally moves it, and
-        keeps the master's UniqueId.
+        Native Replicate can alter the source's shared sub-objects and remint
+        package IDs. Until preservation is verified, use sch_place_components
+        to place library parts independently, then sch_set_component_part_id.
 
         Args:
             designator: Source instance to copy (e.g. "U8").
@@ -2128,8 +2165,7 @@ def register_generic_tools(mcp):
                 source designator (required for multi-part packing).
 
         Returns:
-            Dict with success, source/copy UniqueIds, part_id, and
-            ``shared`` (true when the copy kept the master's UniqueId).
+            Explicit error; source and object count remain unchanged.
         """
         bridge = get_bridge()
         params: dict[str, Any] = {"designator": designator}

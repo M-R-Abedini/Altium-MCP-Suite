@@ -1,5 +1,10 @@
 # Local changes
 
+## Added 2026-10-11
+
+- Native script `2026.10.11.schematic1`: verify placed footprint implementation and PCB entity links; count requested parameter stamps separately from multipart symbol instances; normalize sheet-symbol bounds and verify entry coordinates; expose compile masks; apply effective custom-sheet dimensions; render annotations and only the active symbol part. Disable unsafe replication before mutation. Save only dirty project members and support explicit project targeting for new sheets without overwriting existing files.
+- Bind both Python wrappers to one persisted workspace identity, reject conflicting startup configuration, and compare the native content-addressed script project with the configured source generation. Setup emits matching environment values for both clients. Native acceptance evidence and remaining investigations are in [display/audio review](docs/review/DISPLAY_AUDIO_2026-10-11.md).
+
 ## Added 2026-10-10
 
 - Native script `2026.10.10.lifecycle1`: distinguish generated EDA/legacy project names, record ownership and expected file hashes, and close verified old generations and completed sandboxes before publishing readiness. Script-project close loads and focuses a source editor, verifies its project owner, confirms removal and restores previous focus. The executing project is excluded; changed files, membership counts and any resident source editor block automatic closure. In AD26, `SetModified(True)` on a script editor read back as false; cleanup therefore preserves open source buffers regardless of that flag. Deploy the new `script_projects.py` registry with the wrappers. Source snapshots remain on disk; repeated validation reuses hashes keyed by file size and modification time.

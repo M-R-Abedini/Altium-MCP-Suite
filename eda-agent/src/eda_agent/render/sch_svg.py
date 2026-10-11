@@ -118,6 +118,7 @@ def render_sch_svg(geometry: dict[str, Any],
     pieces.append(_render_net_labels(geometry.get("net_labels") or [], opt))
     pieces.append(_render_ports(geometry.get("ports") or [], opt))
     pieces.append(_render_power_ports(geometry.get("power_ports") or [], opt))
+    pieces.append(_render_annotations(geometry.get("annotations") or [], opt))
     if opt.flip_y:
         pieces.append("</g>")  # close the Y-flip wrapper opened in the root
     pieces.append("</svg>")
@@ -206,9 +207,12 @@ def _bbox(geometry: dict[str, Any]) -> tuple[float, float, float, float]:
         sy = float(s.get("y", 0))
         sw = float(s.get("w", 0))
         sh = float(s.get("h", 0))
-        # Sheet symbol Location is the bottom-left corner in Altium.
+        # Native sheet-symbol Location is its top-left anchor (+Y up).
         xs.extend((sx, sx + sw))
-        ys.extend((sy, sy + sh))
+        ys.extend((sy - sh, sy))
+    for a in geometry.get("annotations") or []:
+        xs.extend((float(a.get("x", 0)), float(a.get("x2", a.get("x", 0)))))
+        ys.extend((float(a.get("y", 0)), float(a.get("y2", a.get("y", 0)))))
     if not xs:
         return 0.0, 0.0, 0.0, 0.0
     return min(xs), min(ys), max(xs), max(ys)
@@ -661,6 +665,23 @@ def _render_junctions(junctions: Iterable[dict[str, Any]],
         )
     out.append("</g>")
     return "".join(out)
+
+
+def _render_annotations(annotations: Iterable[dict[str, Any]],
+                        opt: SchRenderOptions) -> str:
+    out = ['<g class="annotations">']
+    for a in annotations:
+        x, y = float(a.get("x", 0)), float(a.get("y", 0))
+        if a.get("kind") == "frame":
+            x2, y2 = float(a.get("x2", x)), float(a.get("y2", y))
+            out.append(f'<rect x="{min(x, x2)}" y="{min(y, y2)}" '
+                       f'width="{abs(x2-x)}" height="{abs(y2-y)}" '
+                       'fill="none" stroke="#666"/>')
+            x, y = min(x, x2) + 10, max(y, y2) - opt.label_font_mils
+        for i, line in enumerate(str(a.get("text", "")).splitlines()):
+            out.append(_flippable_text(x, y - i * opt.label_font_mils * 1.2,
+                f'font-size="{opt.label_font_mils}" fill="#333"', line, opt))
+    return "".join(out) + "</g>"
 
 
 def _render_net_labels(labels: Iterable[dict[str, Any]],

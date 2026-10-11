@@ -396,7 +396,21 @@ def ensure_eda(bridge, execute):
             return execute(bridge, 'application.ping', {'command_pending': True}, timeout)
         except AltiumTimeoutError as error:
             raise TimeoutError(str(error)) from error
-    return _ensure(probe)
+    result = _ensure(probe)
+    # A version string can be unchanged during development. The generated
+    # project's content-addressed path identifies every compiled source file.
+    import os
+    expected = os.environ.get('ALTIUM_MCP_EDA_SCRIPT')
+    actual = _read_marker('bridge-ready.json').get('project_path')
+    if expected and actual and not isinstance(actual, str):
+        raise RuntimeError('Native script project identity is invalid; no design command was queued.')
+    if expected and actual and Path(actual).resolve() != Path(expected).resolve():
+        stop_eda()
+        result = _ensure(probe)
+        actual = _read_marker('bridge-ready.json').get('project_path')
+        if not isinstance(actual, str) or not actual or Path(actual).resolve() != Path(expected).resolve():
+            raise RuntimeError('Compiled script project differs from the configured sources; no design command was queued.')
+    return result
 
 def start_eda():
     return _ensure(_file_ping)

@@ -75,6 +75,7 @@ Begin
     Else If N = 'junction'        Then Result := eJunction
     Else If N = 'image'           Then Result := eImage
     Else If N = 'textframe'       Then Result := eTextFrame
+    Else If N = 'compilemask'     Then Result := eCompileMask
     Else If N = 'note'            Then Result := eNote;
 End;
 
@@ -414,6 +415,7 @@ End;
 Function GetSchProperty(Obj : ISch_GraphicalObject; PropName : String) : String;
 Var
     TF : ISch_TextFrame;
+    Mask : ISch_CompileMask;
     R : ISch_Rectangle;
     L : ISch_Line;
     Comp : ISch_Component;
@@ -424,6 +426,12 @@ Var
 Begin
     Result := '';
     Try
+        If (PropName = 'Collapsed') And (Obj.ObjectId = eCompileMask) Then
+        Begin
+            Mask := Obj;
+            Result := BoolToJsonStr(Mask.Collapsed);
+            Exit;
+        End;
         // Identity
         If PropName = 'ObjectId'    Then Result := IntToStr(Obj.ObjectId)
 
@@ -441,7 +449,7 @@ Begin
         Else If (PropName = 'Corner.X') Or (PropName = 'Corner.Y') Then
         Begin
             Have := False;
-            If (Obj.ObjectId = eRectangle) Or (Obj.ObjectId = eRoundRectangle) Then
+            If (Obj.ObjectId = eRectangle) Or (Obj.ObjectId = eRoundRectangle) Or (Obj.ObjectId = eCompileMask) Then
             Begin
                 R := Obj;
                 Crn := R.Corner;
@@ -497,6 +505,10 @@ Begin
         Else If PropName = 'OwnerPartDisplayMode' Then Result := IntToStr(Obj.OwnerPartDisplayMode)
         Else If PropName = 'ComponentDescription' Then Result := Obj.ComponentDescription
         Else If PropName = 'UniqueId'    Then Result := Obj.UniqueId
+        Else If (PropName = 'CurrentFootprintModelName') And (Obj.ObjectId = eSchComponent) Then
+        Begin Comp := Obj; Result := GetPlacedFootprintName(Comp); End
+        Else If (PropName = 'Models') And (Obj.ObjectId = eSchComponent) Then
+        Begin Comp := Obj; Result := BuildImplementationsJson(Comp); End
         Else If PropName = 'CurrentPartID' Then
         Begin
             Comp := Obj;
@@ -689,6 +701,7 @@ Var
     Loc : TLocation;
     Crn : TLocation;
     TF : ISch_TextFrame;
+    Mask : ISch_CompileMask;
     R : ISch_Rectangle;
     L : ISch_Line;
     Comp : ISch_Component;
@@ -714,6 +727,14 @@ Begin
     Matched := True;
     WroteOK := True;
     Try
+        If (PropName = 'Collapsed') And (Obj.ObjectId = eCompileMask) Then
+        Begin
+            Mask := Obj;
+            Mask.Collapsed := LowerCase(Value) = 'true';
+            If Mask.Collapsed = (LowerCase(Value) = 'true') Then Result := 1
+            Else Result := -1;
+            Exit;
+        End;
         // Coordinates (expected in mils). `Obj.Location` returns a copy of
         // the TLocation record via the GetState_Location reader; writing
         // directly to `.X` / `.Y` on that copy is silently discarded. Read
@@ -757,7 +778,7 @@ Begin
         // local before touching Corner. See GetSchProperty for the read side.
         Else If (PropName = 'Corner.X') Or (PropName = 'Corner.Y') Then
         Begin
-            If (Obj.ObjectId = eRectangle) Or (Obj.ObjectId = eRoundRectangle) Then
+            If (Obj.ObjectId = eRectangle) Or (Obj.ObjectId = eRoundRectangle) Or (Obj.ObjectId = eCompileMask) Then
             Begin
                 R := Obj;
                 Crn := R.Corner;
@@ -2806,7 +2827,8 @@ End;
 
 Function Gen_AddSheet(Params : String; RequestId : String) : String;
 Var
-    SheetName : String;
+    SheetName, ProjectPath : String;
+    J : Integer;
     Workspace : IWorkspace;
     Project : IProject;
     NewDocPath : String;
@@ -2815,6 +2837,13 @@ Var
 Begin
     SheetName := ExtractJsonValue(Params, 'name');
     If SheetName = '' Then SheetName := 'NewSheet';
+    ProjectPath := ExtractJsonValue(Params, 'project_path');
+    If (Pos('\', SheetName) > 0) Or (Pos('/', SheetName) > 0) Or
+       (Pos(':', SheetName) > 0) Or (SheetName = '..') Then
+    Begin
+        Result := BuildErrorResponse(RequestId, 'INVALID_SHEET_NAME', 'Use a plain sheet name');
+        Exit;
+    End;
 
     Workspace := GetWorkspace;
     If Workspace = Nil Then
@@ -2823,10 +2852,11 @@ Begin
         Exit;
     End;
 
-    Project := Workspace.DM_FocusedProject;
+    If ProjectPath <> '' Then Project := FindProjectByPath(Workspace, ProjectPath)
+    Else Project := Workspace.DM_FocusedProject;
     If Project = Nil Then
     Begin
-        Result := BuildErrorResponse(RequestId, 'NO_PROJECT', 'No focused project');
+        Result := BuildErrorResponse(RequestId, 'NO_PROJECT', 'Target project is not loaded');
         Exit;
     End;
 
@@ -2836,6 +2866,13 @@ Begin
     While (Length(NewDocPath) > 0) And (Copy(NewDocPath, Length(NewDocPath), 1) <> '\') Do
         NewDocPath := Copy(NewDocPath, 1, Length(NewDocPath) - 1);
     NewDocPath := NewDocPath + SheetName + '.SchDoc';
+    If (Project.DM_ProjectFullPath = '') Or FileExists(NewDocPath) Or
+       (Client.GetDocumentByPath(NewDocPath) <> Nil) Then
+    Begin
+        Result := BuildErrorResponse(RequestId, 'SHEET_EXISTS_OR_PROJECT_UNSAVED',
+            'No sheet was created or overwritten. Use a saved project and a new sheet name.');
+        Exit;
+    End;
 
     { Create the blank schematic via Client.OpenNewDocument, mirroring the
       working App_CreateDocument path. The previous
@@ -2879,11 +2916,12 @@ Begin
     Added := False;
     Try
         Project.DM_AddSourceDocument(NewDocPath);
-        Added := True;
+        For J := 0 To Project.DM_LogicalDocumentCount - 1 Do
+            If SameText(Project.DM_LogicalDocuments(J).DM_FullPath, NewDocPath) Then Added := True;
     Except Added := False; End;
 
     Result := BuildSuccessResponse(RequestId,
-        '{"success":true,"path":"' + EscapeJsonString(NewDocPath) + '"' +
+        '{"success":' + BoolToJsonStr(Saved And Added) + ',"path":"' + EscapeJsonString(NewDocPath) + '"' +
         ',"saved":' + BoolToJsonStr(Saved) +
         ',"added_to_project":' + BoolToJsonStr(Added) + '}');
 End;
@@ -3635,8 +3673,8 @@ Begin
 
     { ISch_SheetSymbol has no Corner property (unlike ISch_Rectangle) -- using
       it raises "Undeclared identifier: Corner". Size is set via XSize/YSize
-      from the bottom-left Location (Altium SDK: SetState_XSize/YSize). }
-    Sym.Location := Point(MilsToCoord(X1), MilsToCoord(Y1));
+      from the native top-left Location (Altium SDK: SetState_XSize/YSize). }
+    Sym.Location := Point(MilsToCoord(X1), MilsToCoord(Y2));
     Sym.XSize := MilsToCoord(X2 - X1);
     Sym.YSize := MilsToCoord(Y2 - Y1);
     If NameStr = '' Then NameStr := ChangeFileExt(FileNameStr, '');
@@ -3680,7 +3718,7 @@ Var
     Sym : ISch_SheetSymbol;
     Entry : ISch_SheetEntry;
     SheetNameStr, EntryName, IOStr, SideStr, ThisName : String;
-    DistFromTop, WantSide, GotSide, GotDist, GotX, GotY : Integer;
+    DistFromTop, WantSide, GotSide, GotDist, GotX, GotY, WantX, WantY, EdgeLength : Integer;
     Found, Placed : Boolean;
 Begin
     SheetNameStr := ExtractJsonValue(Params, 'sheet_name');
@@ -3688,6 +3726,19 @@ Begin
     IOStr := LowerCase(ExtractJsonValue(Params, 'io_type'));
     SideStr := LowerCase(ExtractJsonValue(Params, 'side'));
     DistFromTop := StrToIntDef(ExtractJsonValue(Params, 'distance_from_top'), 100);
+    If SideStr = '' Then SideStr := 'left';
+    If (SideStr <> 'left') And (SideStr <> 'right') And
+       (SideStr <> 'top') And (SideStr <> 'bottom') Then
+    Begin
+        Result := BuildErrorResponse(RequestId, 'INVALID_SIDE', SideStr);
+        Exit;
+    End;
+    If (DistFromTop < 0) Or ((IOStr <> 'input') And (IOStr <> 'output') And
+       (IOStr <> 'bidirectional') And (IOStr <> 'unspecified') And (IOStr <> '')) Then
+    Begin
+        Result := BuildErrorResponse(RequestId, 'INVALID_ENTRY', 'Invalid distance or io_type');
+        Exit;
+    End;
 
     If (SheetNameStr = '') Or (EntryName = '') Then
     Begin
@@ -3740,6 +3791,27 @@ Begin
         Exit;
     End;
 
+    { Sheet-symbol Location is its TOP-left anchor in the native API.
+      The distance is downward on vertical edges, rightward on horizontal ones. }
+    WantX := CoordToMils(Sym.Location.X);
+    WantY := CoordToMils(Sym.Location.Y);
+    If (SideStr = 'left') Or (SideStr = 'right') Then
+    Begin
+        EdgeLength := CoordToMils(Sym.YSize);
+        WantY := WantY - DistFromTop;
+        If SideStr = 'right' Then WantX := WantX + CoordToMils(Sym.XSize);
+    End
+    Else
+    Begin
+        EdgeLength := CoordToMils(Sym.XSize);
+        WantX := WantX + DistFromTop;
+        If SideStr = 'bottom' Then WantY := WantY - CoordToMils(Sym.YSize);
+    End;
+    If DistFromTop > EdgeLength Then
+    Begin
+        Result := BuildErrorResponse(RequestId, 'INVALID_DISTANCE', 'Distance exceeds the symbol edge; nothing placed');
+        Exit;
+    End;
     Entry := SchServer.SchObjectFactory(eSheetEntry, eCreate_Default);
     If Entry = Nil Then
     Begin
@@ -3784,6 +3856,7 @@ Begin
     Try Entry.DistanceFromTop := MilsToCoord(DistFromTop); Except End;
 
     SchRegisterObject(Sym, Entry);
+    Entry.Location := Point(MilsToCoord(WantX), MilsToCoord(WantY));
     SchServer.ProcessControl.PostProcess(SchDoc, 'Edit');
     SchDoc.GraphicallyInvalidate;
 
@@ -3801,17 +3874,20 @@ Begin
         GotY := CoordToMils(Entry.Location.Y);
     Except End;
 
-    Placed := (GotSide = WantSide) And (GotDist = DistFromTop);
+    Placed := (GotSide = WantSide) And (GotDist = DistFromTop)
+        And (GotX = WantX) And (GotY = WantY);
 
     Result := BuildSuccessResponse(RequestId,
         JsonObj(
             JsonBool('placed', True) + ',' +
+            JsonBool('success', Placed) + ',' +
             JsonBool('positioned_as_asked', Placed) + ',' +
             JsonStr('sheet_name', SheetNameStr) + ',' +
             JsonStr('entry_name', EntryName) + ',' +
             JsonStr('io_type', IOStr) + ',' +
             JsonStr('requested_side', SideStr) + ',' +
             JsonInt('requested_distance_from_top', DistFromTop) + ',' +
+            JsonInt('requested_x', WantX) + ',' + JsonInt('requested_y', WantY) + ',' +
             JsonInt('actual_side', GotSide) + ',' +
             JsonInt('actual_distance_from_top', GotDist) + ',' +
             JsonInt('x', GotX) + ',' +
@@ -3824,7 +3900,7 @@ Begin
 End;
 
 {..............................................................................}
-{ Place a bus entry (45° stub) between a bus line and a wire.                 }
+{ Place a bus entry (45Ã‚Â° stub) between a bus line and a wire.                 }
 { ISch_BusEntry inherits ISch_Line, so it accepts Location + Corner.          }
 { Params: x1,y1,x2,y2 in mils                                                 }
 {..............................................................................}
@@ -3878,7 +3954,8 @@ Function Gen_SetSheetSize(Params : String; RequestId : String) : String;
 Var
     SchDoc : ISch_Document;
     StyleStr, OrientStr : String;
-    CustomW, CustomH : Integer;
+    CustomW, CustomH, ActualW, ActualH : Integer;
+    Verified : Boolean;
 Begin
     StyleStr := UpperCase(ExtractJsonValue(Params, 'style'));
     CustomW := StrToIntDef(ExtractJsonValue(Params, 'custom_width'), 0);
@@ -3898,6 +3975,18 @@ Begin
         Exit;
     End;
 
+    If (OrientStr <> '') And (OrientStr <> 'landscape') And (OrientStr <> 'portrait') Then
+    Begin Result := BuildErrorResponse(RequestId, 'INVALID_ORIENTATION', OrientStr); Exit; End;
+    If (StyleStr <> '') And (StyleStr <> 'CUSTOM') And
+       (StyleStr <> 'A') And (StyleStr <> 'B') And (StyleStr <> 'C') And
+       (StyleStr <> 'D') And (StyleStr <> 'E') And (StyleStr <> 'A0') And
+       (StyleStr <> 'A1') And (StyleStr <> 'A2') And (StyleStr <> 'A3') And
+       (StyleStr <> 'A4') And (StyleStr <> 'LETTER') And (StyleStr <> 'LEGAL') And
+       (StyleStr <> 'TABLOID') Then
+    Begin Result := BuildErrorResponse(RequestId, 'INVALID_STYLE', StyleStr); Exit; End;
+    If (StyleStr = 'CUSTOM') And ((CustomW <= 0) Or (CustomH <= 0) Or
+       (CustomW > 100000) Or (CustomH > 100000)) Then
+    Begin Result := BuildErrorResponse(RequestId, 'INVALID_SIZE', 'Custom dimensions must be 1..100000 mils'); Exit; End;
     SchServer.ProcessControl.PreProcess(SchDoc, '');
     Try
         If OrientStr = 'landscape' Then
@@ -3905,16 +3994,8 @@ Begin
         Else If OrientStr = 'portrait' Then
             Try SchDoc.WorkspaceOrientation := ePortrait; Except End;
 
-        If StyleStr = '' Then
-        Begin
-            SchServer.ProcessControl.PostProcess(SchDoc, 'Edit');
-            SchDoc.GraphicallyInvalidate;
-            Result := BuildSuccessResponse(RequestId,
-                '{"success":true,"orientation":"' + EscapeJsonString(OrientStr) + '"}');
-            Exit;
-        End;
-
-        If StyleStr = 'A' Then SchDoc.SheetStyle := eSheetA
+        If StyleStr = '' Then Begin End
+        Else If StyleStr = 'A' Then SchDoc.SheetStyle := eSheetA
         Else If StyleStr = 'B' Then SchDoc.SheetStyle := eSheetB
         Else If StyleStr = 'C' Then SchDoc.SheetStyle := eSheetC
         Else If StyleStr = 'D' Then SchDoc.SheetStyle := eSheetD
@@ -3934,39 +4015,30 @@ Begin
             SchDoc.UseCustomSheet := True;
             If CustomW > 0 Then SchDoc.CustomX := MilsToCoord(CustomW);
             If CustomH > 0 Then SchDoc.CustomY := MilsToCoord(CustomH);
-        End
-        Else
-        Begin
-            SchServer.ProcessControl.PostProcess(SchDoc, 'Edit');
-            Result := BuildErrorResponse(RequestId, 'INVALID_STYLE',
-                'Unknown sheet style: ' + StyleStr);
-            Exit;
+            { AD26 keeps effective dimensions independently of CustomX/Y. }
+            SchDoc.SheetSizeX := MilsToCoord(CustomW);
+            SchDoc.SheetSizeY := MilsToCoord(CustomH);
         End;
-        If StyleStr <> 'CUSTOM' Then SchDoc.UseCustomSheet := False;
+        If (StyleStr <> '') And (StyleStr <> 'CUSTOM') Then SchDoc.UseCustomSheet := False;
     Finally
         SchServer.ProcessControl.PostProcess(SchDoc, 'Edit');
     End;
     SchDoc.GraphicallyInvalidate;
 
-    Result := BuildSuccessResponse(RequestId,
-        '{"success":true,"style":"' + EscapeJsonString(StyleStr) + '"}');
+    ActualW := CoordToMils(SchDoc.SheetSizeX);
+    ActualH := CoordToMils(SchDoc.SheetSizeY);
+    Verified := (ActualW > 0) And (ActualH > 0);
+    If StyleStr = 'CUSTOM' Then Verified := Verified And (ActualW = CustomW) And (ActualH = CustomH);
+    If OrientStr = 'landscape' Then Verified := Verified And (SchDoc.WorkspaceOrientation = eLandscape);
+    If OrientStr = 'portrait' Then Verified := Verified And (SchDoc.WorkspaceOrientation = ePortrait);
+    Result := BuildSuccessResponse(RequestId, JsonObj(JsonBool('success', Verified) + ',' +
+        JsonStr('style', StyleStr) + ',' + JsonInt('width', ActualW) + ',' + JsonInt('height', ActualH) + ',' +
+        JsonBool('use_custom_sheet', SchDoc.UseCustomSheet) + ',' +
+        JsonStr('note', 'Dimensions are native SheetSizeX/Y readback in mils; reopen the sheet if its UI has not refreshed.')));
 End;
 
 {..............................................................................}
-{ Place a schematic component instance from a library onto the active sheet.  }
-{ Uses ISch_Document.PlaceSchComponent, the verified direct-placement API.   }
-{ Params: library_path (.SchLib full path), lib_reference (component name),   }
-{         x, y (mils), designator (optional), rotation (0|90|180|270),        }
-{         footprint (optional override)                                        }
-{..............................................................................}
 
-{ Validate lib_path + lib_reference resolve via CreateLibCompInfoReader     }
-{ BEFORE calling PlaceSchComponent. PlaceSchComponent pops a modal Error    }
-{ dialog when its lookup fails, Altium shows the popup at the COM layer    }
-{ before our Try/Except can swallow it, which freezes the polling loop.    }
-{ Pre-validating off-disk avoids that path entirely.                         }
-{ Returns ''  if found, otherwise a comma-separated sample of names that    }
-{ ARE in the lib so the caller can see what's available.                    }
 Function ResolveLibRef(LibPath, LibRef : String; Var Available : String) : Boolean;
 Var
     Reader : ILibCompInfoReader;
@@ -4033,7 +4105,7 @@ End;
 
 Function Gen_PlaceSchComponentFromLibrary(Params : String; RequestId : String) : String;
 Var
-    LibPath, LibRef, DesigStr, FootprintStr, AvailHint, SheetPath : String;
+    LibPath, LibRef, DesigStr, FootprintStr, AvailHint, SheetPath, FootprintDiag : String;
     X, Y, Rotation, OrientationVal : Integer;
     SchDoc : ISch_Document;
     Comp : ISch_Component;
@@ -4106,7 +4178,7 @@ Begin
     {   3. comp.MoveToXY(MilsToCoord(X), MilsToCoord(Y)), proper          }
     {      whole-component positioning. Moves designator / comment / pins }
     {      together.                                                        }
-    {   4. comp.SetState_Orientation(N), 0/1/2/3 for 0°/90°/180°/270°.    }
+    {   4. comp.SetState_Orientation(N), 0/1/2/3 for 0Ã‚Â°/90Ã‚Â°/180Ã‚Â°/270Ã‚Â°.    }
     {                                                                        }
     { This replaces the broken PlaceSchComponent + Comp.Location :=         }
     { Point(...) approach which 16-bit-truncates coords and pops modal      }
@@ -4128,6 +4200,12 @@ Begin
         Exit;
     End;
 
+    If (FootprintStr <> '') And Not SetPlacedFootprint(Comp, FootprintStr, FootprintDiag) Then
+    Begin
+        SchServer.ProcessControl.PostProcess(SchDoc, 'Edit');
+        Result := BuildErrorResponse(RequestId, 'FOOTPRINT_OVERRIDE_FAILED', FootprintDiag + '; component was not placed');
+        Exit;
+    End;
     Try SchDoc.AddSchObject(Comp); Except End;
     Try Comp.MoveToXY(MilsToCoord(X), MilsToCoord(Y)); Except End;
 
@@ -4141,14 +4219,6 @@ Begin
     { Override designator if caller supplied one. }
     If DesigStr <> '' Then
         Try Comp.Designator.Text := DesigStr; Except End;
-
-    { Footprint override at place time is intentionally skipped:           }
-    { Comp.CurrentFootprintModelName is a read-only getter in DelphiScript  }
-    { and assigning to it raises Undeclared identifier which Try/Except     }
-    { cannot suppress (memory: delphiscript_api_quirks.md). The symbol's    }
-    { own linked footprint from the library is used. To override at run    }
-    { time, walk Comp.Implementations and edit ISch_Implementation.ModelName }
-    { in a dedicated handler.                                                }
 
     SchRegisterObject(SchDoc, Comp);
     SchServer.ProcessControl.PostProcess(SchDoc, 'Edit');
@@ -4329,7 +4399,9 @@ Var
     X1, Y1, X2, Y2, TmpI : Integer;
     SchDoc : ISch_Document;
     Mask : ISch_CompileMask;
+    Enabled : Boolean;
 Begin
+    Enabled := LowerCase(ExtractJsonValue(Params, 'enabled')) <> 'false';
     X1 := StrToIntDef(ExtractJsonValue(Params, 'x1'), 0);
     Y1 := StrToIntDef(ExtractJsonValue(Params, 'y1'), 0);
     X2 := StrToIntDef(ExtractJsonValue(Params, 'x2'), 0);
@@ -4357,13 +4429,15 @@ Begin
     SchServer.ProcessControl.PreProcess(SchDoc, '');
     SchDoc.RegisterSchObjectInContainer(Mask);
     SchRegisterObject(SchDoc, Mask);
+    Mask.Collapsed := Not Enabled;
     SchServer.ProcessControl.PostProcess(SchDoc, 'Edit');
     SchDoc.GraphicallyInvalidate;
 
     Result := BuildSuccessResponse(RequestId,
-        '{"placed":true,'
-        + '"x1":' + IntToStr(X1) + ',"y1":' + IntToStr(Y1) + ','
-        + '"x2":' + IntToStr(X2) + ',"y2":' + IntToStr(Y2) + '}');
+        '{"placed":true,"success":' + BoolToJsonStr(Mask.Collapsed = Not Enabled)
+        + ',"collapsed":' + BoolToJsonStr(Mask.Collapsed) + ',"enabled":' + BoolToJsonStr(Not Mask.Collapsed) + ','
+        + '"x1":' + IntToStr(CoordToMils(Mask.Location.X)) + ',"y1":' + IntToStr(CoordToMils(Mask.Location.Y)) + ','
+        + '"x2":' + IntToStr(CoordToMils(Mask.Corner.X)) + ',"y2":' + IntToStr(CoordToMils(Mask.Corner.Y)) + '}');
 End;
 
 {..............................................................................}
@@ -6174,141 +6248,16 @@ End;
 {..............................................................................}
 
 Function Gen_ReplicateSchComponent(Params : String; RequestId : String) : String;
-Var
-    AmbigTotal : Integer;
-    Designator, NewDesig, MasterId, CopyId : String;
-    IdAfterReplicate, IdAfterSetPreAdd, IdAfterAdd, Shared : String;
-    PartId, X, Y : Integer;
-    HaveXY : Boolean;
-    SchDoc : ISch_Document;
-    Comp, NewComp : ISch_Component;
-    NewObj : ISch_GraphicalObject;
-    Found : Boolean;
-    Iterator : ISch_Iterator;
-    Obj : ISch_GraphicalObject;
 Begin
-    Designator := ExtractJsonValue(Params, 'designator');
-    NewDesig := ExtractJsonValue(Params, 'new_designator');
-    PartId := StrToIntDef(ExtractJsonValue(Params, 'part_id'), 0);
-    HaveXY := (ExtractJsonValue(Params, 'x') <> '') And (ExtractJsonValue(Params, 'y') <> '');
-    X := StrToIntDef(ExtractJsonValue(Params, 'x'), 0);
-    Y := StrToIntDef(ExtractJsonValue(Params, 'y'), 0);
-
-    If Designator = '' Then
-    Begin
-        Result := BuildErrorResponse(RequestId, 'MISSING_PARAM', 'designator required');
-        Exit;
-    End;
-
-    SchDoc := SchServer.GetCurrentSchDocument;
-    If SchDoc = Nil Then
-    Begin
-        Result := BuildErrorResponse(RequestId, 'NO_SCHEMATIC', 'No schematic document is active');
-        Exit;
-    End;
-    { A multi-part device gives every sub-part the same designator, so a
-      first-match here wrote whichever symbol the iterator reached and
-      called it success. Refuse instead, and hand back the candidates. }
-    AmbigTotal := SchComponentCount(SchDoc, Designator);
-    If AmbigTotal > 1 Then
-    Begin
-        Result := AmbiguousDesignator(SchDoc, Designator, AmbigTotal, RequestId);
-        Exit;
-    End;
-
-
-    Found := False;
-    MasterId := '';
-    Iterator := SchDoc.SchIterator_Create;
-    Iterator.AddFilter_ObjectSet(MkSet(eSchComponent));
-    Obj := Iterator.FirstSchObject;
-    While (Obj <> Nil) And Not Found Do
-    Begin
-        Comp := Obj;
-        If Comp.Designator.Text = Designator Then
-        Begin
-            Found := True;
-            Try MasterId := Comp.UniqueId; Except MasterId := ''; End;
-        End
-        Else
-            Obj := Iterator.NextSchObject;
-    End;
-    SchDoc.SchIterator_Destroy(Iterator);
-
-    If Not Found Then
-    Begin
-        Result := BuildErrorResponse(RequestId, 'NOT_FOUND', 'Component not found: ' + Designator);
-        Exit;
-    End;
-
-    SchServer.ProcessControl.PreProcess(SchDoc, 'Replicate component');
-    NewObj := Nil;
-    Try NewObj := Comp.Replicate; Except NewObj := Nil; End;
-    If NewObj = Nil Then
-    Begin
-        SchServer.ProcessControl.PostProcess(SchDoc, 'Replicate component');
-        Result := BuildErrorResponse(RequestId, 'REPLICATE_FAILED',
-            'ISch_Component.Replicate returned nil for ' + Designator);
-        Exit;
-    End;
-    NewComp := NewObj;
-    Try IdAfterReplicate := NewComp.UniqueId; Except IdAfterReplicate := ''; End;
-    If MasterId <> '' Then
-    Begin
-        Try NewComp.SetState_UniqueId(MasterId); Except End;
-        Try NewComp.UniqueId := MasterId; Except End;
-    End;
-    Try IdAfterSetPreAdd := NewComp.UniqueId; Except IdAfterSetPreAdd := ''; End;
-    If PartId >= 1 Then
-    Begin
-        Try NewComp.SetState_CurrentPartID(PartId); Except End;
-        Try NewComp.CurrentPartID := PartId; Except End;
-    End;
-    If NewDesig <> '' Then
-        Try NewComp.Designator.Text := NewDesig; Except End;
-    If HaveXY Then
-        Try NewComp.MoveToXY(MilsToCoord(X), MilsToCoord(Y)); Except End;
-    { AddSchObject remints UniqueId when that id is already on the sheet
-      (live 2026-08-26: XVRAPPYA -> ASFAVKKE even after SetState_UniqueId
-      pre-add). SCHM_PrimitiveRegistration does the same. Attach via
-      RegisterSchObjectInContainer, then re-stamp UniqueId while still
-      inside this PreProcess. Do not send SCHM_PrimitiveRegistration. }
-    Try SchDoc.AddSchObject(NewComp); Except End;
-    Try SchDoc.RegisterSchObjectInContainer(NewComp); Except End;
-    Try IdAfterAdd := NewComp.UniqueId; Except IdAfterAdd := ''; End;
-    If (MasterId <> '') And (IdAfterAdd <> MasterId) Then
-    Begin
-        Try NewComp.SetState_UniqueId(MasterId); Except End;
-        Try NewComp.UniqueId := MasterId; Except End;
-    End;
-    Try CopyId := NewComp.UniqueId; Except CopyId := ''; End;
-    SchServer.ProcessControl.PostProcess(SchDoc, 'Replicate component');
-    SchDoc.GraphicallyInvalidate;
-
-    If CopyId = MasterId Then Shared := 'true' Else Shared := 'false';
-
-    { success reflects whether the copy KEPT the master's id, which is the
-      thing this handler exists to achieve. Replicate plus AddSchObject
-      mints a new one, so reporting true regardless would hide exactly
-      the failure the staged read backs were added to expose. }
-    Result := BuildSuccessResponse(RequestId,
-        '{"success":' + BoolToJsonStr(Shared = MasterId)
-        + ',"source_designator":"' + EscapeJsonString(Designator)
-        + '","new_designator":"' + EscapeJsonString(NewDesig)
-        + '","part_id":' + IntToStr(PartId)
-        + ',"source_unique_id":"' + EscapeJsonString(MasterId)
-        + '","copy_unique_id":"' + EscapeJsonString(CopyId)
-        + '","unique_id_after_replicate":"' + EscapeJsonString(IdAfterReplicate)
-        + '","unique_id_after_set_pre_add":"' + EscapeJsonString(IdAfterSetPreAdd)
-        + '","unique_id_after_add":"' + EscapeJsonString(IdAfterAdd)
-        + '","shared":' + Shared + '}');
+    { Native replication can alias the source's sub-objects before insertion.
+      Refuse before mutation until source preservation and package identity
+      can be verified. Repeating the request cannot create extra symbols. }
+    Result := BuildErrorResponse(RequestId, 'REPLICATION_UNSUPPORTED',
+        'No objects changed. Native replication cannot reliably preserve the source '
+        + 'and package identity. Place library parts independently, select part_id '
+        + 'and verify their package metadata.');
 End;
 
-{..............................................................................}
-{ Gen_PlaceProbe - Place an ISch_Probe marker for SPICE / simulation            }
-{ measurement nodes. Probe sits at a wire and names the node to measure.       }
-{ Params: x, y, net_name, probe_method (all_nets | probed_nets_only, default    }
-{         probed_nets_only)                                                    }
 {..............................................................................}
 
 Function Gen_PlaceProbe(Params : String; RequestId : String) : String;
@@ -6558,6 +6507,35 @@ Begin
     End;
 End;
 
+{ One field, verified through the native object after the write. }
+Function ApplyPlacedField(Comp : ISch_Component; Key, Val : String;
+    Var Created : Boolean; Var Diagnostic : String) : Boolean;
+Begin
+    Result := False;
+    Created := False;
+    Diagnostic := '';
+    Try
+        If (UpperCase(Key) = 'VALUE') Or (UpperCase(Key) = 'COMMENT') Then
+        Begin
+            SchBeginModify(Comp.Comment);
+            Try Comp.Comment.Text := Val;
+            Finally SchEndModify(Comp.Comment); End;
+            Result := Comp.Comment.Text = Val;
+        End
+        Else If UpperCase(Key) = 'FOOTPRINT' Then
+            Result := SetPlacedFootprint(Comp, Val, Diagnostic)
+        Else
+        Begin
+            Created := SetCompParamText(Comp, Key, Val);
+            Result := GetCompParamText(Comp, Key) = Val;
+        End;
+    Except
+        Diagnostic := 'FIELD_WRITE_FAILED';
+    End;
+    If (Not Result) And (Diagnostic = '') Then
+        Diagnostic := 'FIELD_READBACK_MISMATCH';
+End;
+
 {..............................................................................}
 { NextJsonObjectField - Iterate top-level "key":"value" pairs out of a JSON      }
 { object body (the substring BETWEEN the outer braces, NOT including them).     }
@@ -6692,13 +6670,13 @@ End;
 
 Function Gen_SetSchComponentParameters(Params : String; RequestId : String) : String;
 Var
-    DesigStr, SheetPath, SubObj, Key, Val : String;
+    DesigStr, SheetPath, SubObj, Key, Val, Diagnostic, Errors : String;
     SchDoc : ISch_Document;
     Iter : ISch_Iterator;
     Obj : ISch_GraphicalObject;
     Comp, TargetComp : ISch_Component;
-    Found : Boolean;
-    P, Applied, Created : Integer;
+    Found, FieldCreated : Boolean;
+    P, Applied, Created, Failed : Integer;
     SrvDoc : IServerDocument;
 Begin
     DesigStr := ExtractJsonValue(Params, 'designator');
@@ -6778,35 +6756,31 @@ Begin
         Exit;
     End;
 
+    If SchComponentCount(SchDoc, DesigStr) > 1 Then
+    Begin
+        Result := AmbiguousDesignator(SchDoc, DesigStr, SchComponentCount(SchDoc, DesigStr), RequestId);
+        Exit;
+    End;
     SchServer.ProcessControl.PreProcess(SchDoc, '');
     Applied := 0;
     Created := 0;
+    Failed := 0;
+    Errors := '';
     P := 1;
     Try
         While NextJsonObjectField(SubObj, P, Key, Val) Do
         Begin
             If Val = '' Then Continue;  { skip empty values }
-            If Key = 'Value' Then
+            If ApplyPlacedField(TargetComp, Key, Val, FieldCreated, Diagnostic) Then
             Begin
-                { Convention: Value -> Comment.Text, NOT a Parameter. }
-                SchBeginModify(TargetComp.Comment);
-                Try TargetComp.Comment.Text := Val; Except End;
-                SchEndModify(TargetComp.Comment);
                 Inc(Applied);
-            End
-            Else If Key = 'Footprint' Then
-            Begin
-                { CurrentFootprintModelName is read-only in DelphiScript      }
-                { (memory: delphiscript_api_quirks.md). Skip silently rather   }
-                { than crash the script; footprint stays whatever the library }
-                { symbol carried.                                              }
-                Inc(Applied);
+                If FieldCreated Then Inc(Created);
             End
             Else
             Begin
-                If SetCompParamText(TargetComp, Key, Val) Then
-                    Inc(Created);
-                Inc(Applied);
+                Inc(Failed);
+                If Errors <> '' Then Errors := Errors + '; ';
+                Errors := Errors + Key + ': ' + Diagnostic;
             End;
         End;
     Finally
@@ -6821,9 +6795,12 @@ Begin
     Except End;
 
     Result := BuildSuccessResponse(RequestId,
-        '{"designator":"' + EscapeJsonString(DesigStr) + '",'
+        '{"success":' + BoolToJsonStr(Failed = 0) + ',"partial":'
+        + BoolToJsonStr((Failed > 0) And (Applied > 0)) + ',"designator":"' + EscapeJsonString(DesigStr) + '",'
         + '"applied":' + IntToStr(Applied) + ','
-        + '"created":' + IntToStr(Created) + '}');
+        + '"created":' + IntToStr(Created) + ','
+        + '"failed":' + IntToStr(Failed) + ','
+        + '"errors":"' + EscapeJsonString(Errors) + '"}');
 End;
 
 {..............................................................................}
@@ -7451,7 +7428,7 @@ Function Gen_PlaceSchComponentsFromLibrary(Params : String; RequestId : String) 
 Var
     PlaceStr, Op, Remaining, FailedRefdes, ResponseBody : String;
     OpCount, Placed, Failed, Rotation, OrientationVal : Integer;
-    LibPath, LibRef, Desig, Footprint, AvailHint : String;
+    LibPath, LibRef, Desig, Footprint, AvailHint, FootprintDiag : String;
     X, Y : Integer;
     SchDoc : ISch_Document;
     Comp : ISch_Component;
@@ -7535,6 +7512,13 @@ Begin
                 Continue;
             End;
 
+            If (Footprint <> '') And Not SetPlacedFootprint(Comp, Footprint, FootprintDiag) Then
+            Begin
+                Inc(Failed);
+                If FailedRefdes <> '' Then FailedRefdes := FailedRefdes + ',';
+                FailedRefdes := FailedRefdes + Desig + ': ' + FootprintDiag;
+                Continue;
+            End;
             Try SchDoc.AddSchObject(Comp); Except End;
             Try Comp.MoveToXY(MilsToCoord(X), MilsToCoord(Y)); Except End;
 
@@ -7546,10 +7530,6 @@ Begin
 
             If Desig <> '' Then
                 Try Comp.Designator.Text := Desig; Except End;
-            { Footprint override skipped: CurrentFootprintModelName is        }
-            { read-only in DelphiScript (memory: delphiscript_api_quirks.md). }
-            { Library symbol's own footprint is used.                          }
-
             SchRegisterObject(SchDoc, Comp);
             Inc(Placed);
         End;
@@ -7873,14 +7853,15 @@ End;
 Function Gen_SetSchComponentsParameters(Params : String; RequestId : String) : String;
 Var
     StampsStr, SheetPath, Op, Remaining : String;
-    OpCount, Updated, Failed, OpIdx : Integer;
+    OpCount, Updated, Failed, OpIdx, UpdatedInstances, MatchedInstances, I, N, Good : Integer;
     SchDoc : ISch_Document;
     Iter : ISch_Iterator;
     Obj : ISch_GraphicalObject;
     Comp : ISch_Component;
     DesigList : TStringList;
-    OpsList : TStringList;
-    OpStr, FieldStr, Key, Val : String;
+    OpsList, FoundList, GoodList, ErrorList : TStringList;
+    OpStr, FieldStr, Key, Val, Diagnostic, ResultsJson : String;
+    InstanceOk, FieldCreated, HasFields : Boolean;
     P, EqPos, SemiPos : Integer;
     SrvDoc : IServerDocument;
 Begin
@@ -7895,9 +7876,15 @@ Begin
 
     SchDoc := Nil;
     If SheetPath <> '' Then
+    Begin
         Try SchDoc := SchServer.GetSchDocumentByPath(SheetPath); Except End;
-    If SchDoc = Nil Then
-        SchDoc := SchServer.GetCurrentSchDocument;
+        If SchDoc = Nil Then
+        Begin
+            Result := BuildErrorResponse(RequestId, 'SHEET_NOT_LOADED', SheetPath);
+            Exit;
+        End;
+    End
+    Else SchDoc := SchServer.GetCurrentSchDocument;
     If SchDoc = Nil Then
     Begin
         Result := BuildErrorResponse(RequestId, 'NO_SCHEMATIC',
@@ -7905,9 +7892,18 @@ Begin
         Exit;
     End;
 
-    { Build parallel arrays: designator -> raw op string.                     }
+    If SchDoc.ObjectId <> eSheet Then
+    Begin
+        Result := BuildErrorResponse(RequestId, 'WRONG_DOC_KIND', 'Target must be a schematic sheet');
+        Exit;
+    End;
+
+    { Validate the whole batch before any symbol is changed. }
     DesigList := TStringList.Create;
     OpsList := TStringList.Create;
+    FoundList := TStringList.Create;
+    GoodList := TStringList.Create;
+    ErrorList := TStringList.Create;
     Try
         Remaining := StampsStr;
         OpCount := 0;
@@ -7917,15 +7913,42 @@ Begin
             If Op = '' Then Break;
             OpCount := OpCount + 1;
             FieldStr := GetBatchField(Op, 'designator');
+            If (FieldStr = '') Or (DesigList.IndexOf(FieldStr) >= 0) Then
+            Begin
+                Result := BuildErrorResponse(RequestId, 'INVALID_STAMPS', 'Distinct non-empty designators required; no fields changed');
+                Exit;
+            End;
+            HasFields := False;
+            OpStr := Op;
+            While OpStr <> '' Do
+            Begin
+                SemiPos := Pos(';', OpStr);
+                If SemiPos = 0 Then SemiPos := Length(OpStr) + 1;
+                Key := Copy(OpStr, 1, SemiPos - 1);
+                OpStr := Copy(OpStr, SemiPos + 1, Length(OpStr));
+                EqPos := Pos('=', Key);
+                If (EqPos > 1) And (EqPos < Length(Key)) And
+                   (Copy(Key, 1, EqPos - 1) <> 'designator') Then HasFields := True;
+            End;
+            If Not HasFields Then
+            Begin
+                Result := BuildErrorResponse(RequestId, 'INVALID_STAMPS', 'Each stamp requires a non-empty field; no fields changed');
+                Exit;
+            End;
             If FieldStr <> '' Then
             Begin
                 DesigList.Add(FieldStr);
                 OpsList.Add(Op);
+                FoundList.Add('0');
+                GoodList.Add('0');
+                ErrorList.Add(' ');
             End;
         End;
 
         Updated := 0;
         Failed := 0;
+        UpdatedInstances := 0;
+        MatchedInstances := 0;
 
         SchServer.ProcessControl.PreProcess(SchDoc, '');
         Try
@@ -7939,6 +7962,9 @@ Begin
                     OpIdx := DesigList.IndexOf(Comp.Designator.Text);
                     If OpIdx >= 0 Then
                     Begin
+                        FoundList[OpIdx] := IntToStr(StrToIntDef(FoundList[OpIdx], 0) + 1);
+                        Inc(MatchedInstances);
+                        InstanceOk := True;
                         OpStr := OpsList[OpIdx];
                         { Iterate semicolon-separated key=value fields.       }
                         P := 1;
@@ -7961,22 +7987,19 @@ Begin
                                 If (Key <> '') And (Key <> 'designator') And
                                    (Val <> '') Then
                                 Begin
-                                    If Key = 'Value' Then
+                                    If Not ApplyPlacedField(Comp, Key, Val, FieldCreated, Diagnostic) Then
                                     Begin
-                                        SchBeginModify(Comp.Comment);
-                                        Try Comp.Comment.Text := Val; Except End;
-                                        SchEndModify(Comp.Comment);
-                                    End
-                                    Else If Key = 'Footprint' Then
-                                    Begin
-                                        { read-only, skip silently            }
-                                    End
-                                    Else
-                                        SetCompParamText(Comp, Key, Val);
+                                        InstanceOk := False;
+                                        ErrorList[OpIdx] := Key + ': ' + Diagnostic;
+                                    End;
                                 End;
                             End;
                         End;
-                        Inc(Updated);
+                        If InstanceOk Then
+                        Begin
+                            GoodList[OpIdx] := IntToStr(StrToIntDef(GoodList[OpIdx], 0) + 1);
+                            Inc(UpdatedInstances);
+                        End;
                     End;
                     Obj := Iter.NextSchObject;
                 End;
@@ -7988,21 +8011,44 @@ Begin
             SchDoc.GraphicallyInvalidate;
         End;
 
+        ResultsJson := '[';
+        For I := 0 To DesigList.Count - 1 Do
+        Begin
+            N := StrToIntDef(FoundList[I], 0);
+            Good := StrToIntDef(GoodList[I], 0);
+            InstanceOk := (N > 0) And (Good = N);
+            If InstanceOk Then Inc(Updated);
+            If N = 0 Then ErrorList[I] := 'COMPONENT_NOT_FOUND';
+            If I > 0 Then ResultsJson := ResultsJson + ',';
+            ResultsJson := ResultsJson + JsonObj(JsonStr('designator', DesigList[I]) + ',' +
+                JsonBool('success', InstanceOk) + ',' + JsonInt('matched_instances', N) + ',' +
+                JsonInt('updated_instances', Good) + ',' + JsonInt('failed_instances', N - Good) + ',' +
+                JsonStr('error', Trim(ErrorList[I])));
+        End;
+        ResultsJson := ResultsJson + ']';
         Failed := OpCount - Updated;
     Finally
         DesigList.Free;
         OpsList.Free;
+        FoundList.Free;
+        GoodList.Free;
+        ErrorList.Free;
     End;
 
     Try
         SrvDoc := Client.GetDocumentByPath(SchDoc.DocumentName);
-        If SrvDoc <> Nil Then SrvDoc.SetModified(True);
+        If (SrvDoc <> Nil) And (MatchedInstances > 0) Then SrvDoc.SetModified(True);
     Except End;
 
     Result := BuildSuccessResponse(RequestId,
-        '{"updated":' + IntToStr(Updated) +
+        '{"success":' + BoolToJsonStr(Failed = 0) + ',"partial":'
+        + BoolToJsonStr((Failed > 0) And (MatchedInstances > 0)) + ',"updated":' + IntToStr(Updated) +
         ',"failed":' + IntToStr(Failed) +
-        ',"total":' + IntToStr(OpCount) + '}');
+        ',"total":' + IntToStr(OpCount) +
+        ',"matched_instances":' + IntToStr(MatchedInstances) +
+        ',"updated_instances":' + IntToStr(UpdatedInstances) +
+        ',"failed_instances":' + IntToStr(MatchedInstances - UpdatedInstances) +
+        ',"results":' + ResultsJson + '}');
 End;
 
 {..............................................................................}
@@ -8526,6 +8572,8 @@ Var
     Pin : ISch_Pin;
     Wire : ISch_Wire;
     NetLbl : ISch_NetLabel;
+    LabelObj : ISch_Label;
+    TextFrame : ISch_TextFrame;
     Port : ISch_Port;
     Power : ISch_PowerObject;
     Junct : ISch_Junction;
@@ -8542,7 +8590,8 @@ Var
     SheetEntry : ISch_SheetEntry;
     Bus : ISch_Bus;
     CompsJson, PinsJson, WiresJson, LabelsJson, PortsJson, PowerJson, JunctsJson : String;
-    SheetSymsJson, BusesJson, EntriesJson : String;
+    SheetSymsJson, BusesJson, EntriesJson, AnnotationsJson, AnnotationText, AnnotationKind : String;
+    NumAnnotations : Integer;
     NumComps, NumWires, NumLabels, NumPorts, NumPower, NumJuncts, NumPins : Integer;
     NumSheetSyms, NumBuses, NumEntries : Integer;
     PrimJson, PrimPart, CompHeader, ParamsJson : String;
@@ -8629,10 +8678,11 @@ Begin
     JunctsJson := '[';     NumJuncts := 0;
     SheetSymsJson := '['; NumSheetSyms := 0;
     BusesJson := '[';     NumBuses := 0;
+    AnnotationsJson := '['; NumAnnotations := 0;
 
     Iter := SchDoc.SchIterator_Create;
     Iter.AddFilter_ObjectSet(MkSet(eSchComponent, eWire, eNetLabel,
-        ePort, ePowerObject, eJunction, eSheetSymbol, eBus));
+        ePort, ePowerObject, eJunction, eSheetSymbol, eBus, eLabel, eTextFrame, eNote));
     Try
         Obj := Iter.FirstSchObject;
         While Obj <> Nil Do
@@ -8712,6 +8762,11 @@ Begin
                     Prim := PrimIter.FirstSchObject;
                     While Prim <> Nil Do
                     Begin
+                        If (Prim.OwnerPartId > 0) And (Prim.OwnerPartId <> Comp.CurrentPartID) Then
+                        Begin
+                            Prim := PrimIter.NextSchObject;
+                            Continue;
+                        End;
                         PrimPart := '';
                         If Prim.ObjectId = eRectangle Then
                         Begin
@@ -8906,6 +8961,11 @@ Begin
                     Pin := PinIter.FirstSchObject;
                     While Pin <> Nil Do
                     Begin
+                        If (Pin.OwnerPartId > 0) And (Pin.OwnerPartId <> Comp.CurrentPartID) Then
+                        Begin
+                            Pin := PinIter.NextSchObject;
+                            Continue;
+                        End;
                         Loc := Pin.Location;
                         { Electrical type as a string so the renderer can map }
                         { straight to a glyph (input arrow / OC bubble / ...). }
@@ -8927,6 +8987,27 @@ Begin
                 Finally
                     Comp.SchIterator_Destroy(PinIter);
                 End;
+            End
+            Else If (Obj.ObjectId = eLabel) Or (Obj.ObjectId = eTextFrame) Or (Obj.ObjectId = eNote) Then
+            Begin
+                AnnotationKind := 'label';
+                Loc := Obj.Location;
+                Vert := Loc;
+                If Obj.ObjectId = eLabel Then
+                Begin LabelObj := Obj; AnnotationText := LabelObj.Text; End
+                Else
+                Begin
+                    TextFrame := Obj;
+                    AnnotationText := TextFrame.Text;
+                    Vert := TextFrame.Corner;
+                    AnnotationKind := 'frame';
+                End;
+                If NumAnnotations > 0 Then AnnotationsJson := AnnotationsJson + ',';
+                AnnotationsJson := AnnotationsJson + JsonObj(JsonStr('kind', AnnotationKind) + ',' +
+                    JsonStr('text', AnnotationText) + ',' + JsonInt('x', CoordToMils(Loc.X)) + ',' +
+                    JsonInt('y', CoordToMils(Loc.Y)) + ',' + JsonInt('x2', CoordToMils(Vert.X)) + ',' +
+                    JsonInt('y2', CoordToMils(Vert.Y)));
+                Inc(NumAnnotations);
             End
             Else If Obj.ObjectId = eWire Then
             Begin
@@ -9087,6 +9168,7 @@ Begin
     JunctsJson   := JunctsJson   + ']';
     SheetSymsJson := SheetSymsJson + ']';
     BusesJson    := BusesJson    + ']';
+    AnnotationsJson := AnnotationsJson + ']';
 
     RespJson :=
         '{"doc":"' + EscapeJsonString(SchDoc.DocumentName) + '"' +
@@ -9098,8 +9180,10 @@ Begin
         ',"power_ports":' + IntToStr(NumPower) +
         ',"junctions":' + IntToStr(NumJuncts) +
         ',"sheet_symbols":' + IntToStr(NumSheetSyms) +
-        ',"buses":' + IntToStr(NumBuses) + '}' +
+        ',"buses":' + IntToStr(NumBuses) +
+        ',"annotations":' + IntToStr(NumAnnotations) + '}' +
         ',"components":' + CompsJson +
+        ',"annotations":' + AnnotationsJson +
         ',"pins":' + PinsJson +
         ',"wires":' + WiresJson +
         ',"net_labels":' + LabelsJson +
