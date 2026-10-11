@@ -2,6 +2,7 @@
 
 ## Added 2026-10-11
 
+- Native script `2026.10.11.closeguard1`: refuse design-project close inside the polling handler before saving or changing focus, following an AD26 hang. Use Detach and native Close Project until an automatic close path is validated. Disabled-window diagnostics expose undetected blockers, and the dialog driver no longer reports completion while the main window remains disabled. Detach propagates shutdown failure and only reports success after the coordinator confirms its final session-bound shutdown marker.
 - Native script `2026.10.11.schematic1`: verify placed footprint implementation and PCB entity links; count requested parameter stamps separately from multipart symbol instances; normalize sheet-symbol bounds and verify entry coordinates; expose compile masks; apply effective custom-sheet dimensions; render annotations and only the active symbol part. Disable unsafe replication before mutation. Save only dirty project members and support explicit project targeting for new sheets without overwriting existing files.
 - Bind both Python wrappers to one persisted workspace identity, reject conflicting startup configuration, and compare the native content-addressed script project with the configured source generation. Setup emits matching environment values for both clients. Native acceptance evidence and remaining investigations are in [display/audio review](docs/review/DISPLAY_AUDIO_2026-10-11.md).
 

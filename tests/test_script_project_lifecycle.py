@@ -122,6 +122,17 @@ def test_native_cleanup_excludes_current_and_requires_verified_focus():
     assert 'source modified:' not in blocker  # script-editor Modified=False is unreliable
 
 
+def test_design_project_close_guard_precedes_every_side_effect():
+    text = (suite_config.ROOT / 'eda-agent/scripts/altium/Project.pas').read_text()
+    close = text.split('Function Proj_Close(', 1)[1].split('Procedure CleanupManagedScriptProjects(', 1)[0]
+    guard = close.index("If UpperCase(ExtractFileExt(ProjectPath)) <> '.PRJSCR'")
+    refusal = close.index("'PROJECT_CLOSE_REQUIRES_UI'")
+    assert guard < refusal < close.index('SaveProjectMembers(Project)')
+    assert refusal < close.index('Project.DM_SetAsCurrentProject')
+    assert refusal < close.index("RunProcess('WorkspaceManager:CloseObject')")
+    assert 'Exit;' in close[refusal:close.index('SaveProjectMembers(Project)')]
+
+
 def test_native_cleanup_finishes_before_readiness():
     text = (suite_config.ROOT / 'eda-agent/scripts/altium/Dispatcher.pas').read_text()
     startup = text.split('Procedure StartMCPServer', 1)[1]

@@ -216,9 +216,9 @@ def report(pid: int) -> dict:
     """Everything on screen for one process, and whether it is blocked.
 
     ``blocked`` comes from the main window being DISABLED, which is what
-    Windows does while a modal is up. It is the reliable answer to "why
-    has the bridge gone quiet", a question that otherwise looks the same
-    whether Altium is showing a dialog, busy, or dead.
+    Windows often does while a modal is up. It proves that the main window
+    is disabled, not why. A hidden dialog or a running handler can remain
+    undetected; do not infer that the engine is available from an empty list.
     """
     if not win.available():
         return {"ok": False,
@@ -227,14 +227,16 @@ def report(pid: int) -> dict:
 
     found = [describe_dialog(w) for w in win.dialogs(pid)]
     blocked = win.is_blocked(pid)
+    blocked_without_visible_dialog = blocked and not found
     kinds = [d["kind"] for d in found]
     return {
         "ok": True,
         "pid": pid,
         "blocked": blocked,
+        "blocked_without_visible_dialog": blocked_without_visible_dialog,
         "dialog_count": len(found),
         "dialogs": found,
-        "needs_a_human": any(d["needs_a_human"] for d in found),
+        "needs_a_human": blocked_without_visible_dialog or any(d["needs_a_human"] for d in found),
         "summary": _summarise(found, blocked),
         "kinds": kinds,
     }
@@ -243,9 +245,10 @@ def report(pid: int) -> dict:
 def _summarise(found: list, blocked: bool) -> str:
     """One sentence a caller can act on without parsing the rest."""
     if not found:
-        return ("no dialog is open; a blocked main window here would mean "
-                "something else is holding it"
-                if blocked else "no dialog is open")
+        return ("Altium's main window is disabled, but no visible dialog was detected. "
+                "A hidden modal or a running handler may be blocking it; inspect Altium "
+                "before issuing another command."
+                if blocked else "no visible dialog was detected")
     parts = []
     for dialog in found:
         text = dialog["message"] or dialog.get("ocr_text") or []
@@ -253,5 +256,5 @@ def _summarise(found: list, blocked: bool) -> str:
         parts.append(f"{dialog['kind']}: {dialog['title']!r} says "
                      f"{said!r}, offering "
                      f"{[b['caption'] for b in dialog['buttons']]}")
-    head = "Altium is BLOCKED by a modal. " if blocked else ""
+    head = "Altium's main window is disabled. " if blocked else ""
     return head + "; ".join(parts)

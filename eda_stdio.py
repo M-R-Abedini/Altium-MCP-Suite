@@ -23,7 +23,7 @@ configure_cli(sys.argv[1:])
 sys.path.insert(0, str(Path(__file__).resolve().parent / 'eda-agent' / 'src'))
 from suite_config import configure_environment
 configure_environment()
-from bridge_coordination import engine_lock, background_engine_lock, ensure_eda
+from bridge_coordination import engine_lock, background_engine_lock, ensure_eda, stop_eda
 from eda_agent.bridge.altium_bridge import AltiumBridge
 
 original = AltiumBridge._execute_command
@@ -40,11 +40,15 @@ def coordinated(self, command, params, timeout):
             # it cannot hold the shared lock for five seconds ahead of a user.
             return original(self, command, params, min(timeout, 1.0))
     with engine_lock():
-        if command != 'application.stop_server':
-            health = ensure_eda(self, original)
-            if command == 'application.ping' and not params:
-                # The foreground preflight already answered this exact query.
-                return health
+        if command == 'application.stop_server':
+            # A stop response is written before DelphiScript returns. Wait
+            # for session-bound final shutdown evidence, without relaunching.
+            stop_eda()
+            return {'success': True, 'engine_release_confirmed': True}
+        health = ensure_eda(self, original)
+        if command == 'application.ping' and not params:
+            # The foreground preflight already answered this exact query.
+            return health
         return original(self, command, params, timeout)
 
 AltiumBridge._execute_command = coordinated

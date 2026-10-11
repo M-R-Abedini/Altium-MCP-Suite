@@ -334,6 +334,12 @@ def drive(pid: int, intent: str = "proceed", allow_commit: bool = False,
 
         open_dialogs = snapshot["dialogs"]
         if not open_dialogs:
+            if snapshot["blocked"]:
+                # A disabled window is not completion. Its blocker may be
+                # invisible to enumeration; never guess a button or relaunch.
+                needs_human = True
+                finished = snapshot["summary"]
+                break
             # An empty screen means two different things and they must
             # not be conflated. BEFORE anything has been pressed it
             # usually means the operation has not put its dialog up yet:
@@ -342,7 +348,7 @@ def drive(pid: int, intent: str = "proceed", allow_commit: bool = False,
             # "nothing to do" while the work is still starting. AFTER a
             # press it genuinely means the sequence finished.
             if steps or time.monotonic() >= first_deadline:
-                finished = ("no dialog is open" if steps else
+                finished = ("no visible dialog was detected" if steps else
                             f"no dialog appeared within {wait_first:g}s")
                 break
             time.sleep(settle)

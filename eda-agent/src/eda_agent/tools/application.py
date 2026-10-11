@@ -576,36 +576,32 @@ def register_application_tools(mcp):
 
     @mcp.tool()
     async def app_detach() -> dict[str, Any]:
-        """Stop the Altium MCP polling loop. CALL THIS WHEN YOU'RE FINISHED.
+        """Release the Altium engine and stop this client's keep-alive.
 
-        While the eda-agent MCP server is connected, a keep-alive thread pings
-        Altium every 30 s, which keeps Altium's scripting engine held by the
-        polling loop, Altium's own script-backed UI commands (some ribbon
-        buttons, Parameter Manager actions, etc.) may be unresponsive until the
-        loop is released.
-
-        Call this tool once you've finished your Altium work for the session.
-        It flushes every dirty document via save_all, then sends
-        application.stop_server so the DelphiScript loop exits cleanly
-        within ~500 ms and stops the Python keep-alive. Altium becomes
-        immediately fully responsive.
-
-        NOTE: After detach, the Altium script has fully stopped. To run more
-        MCP tools later in the same Altium session the user must re-launch
-        StartMCPServer via File -> Run Script. Don't detach until you're
-        confident you're done.
+        The suite wrapper confirms session-bound native shutdown before
+        returning success. A stop response alone does not prove that the
+        script returned; a blocked handler or missing confirmation is a
+        failure. No documents are saved. Save an explicit project first
+        if required. The coordinated wrapper can restart on the next call.
 
         Returns:
-            Dictionary confirming detachment
+            success and engine_release_confirmed; a failure leaves local
+            attachment unchanged and reports why release was not confirmed.
         """
         bridge = get_bridge()
         try:
-            await bridge.send_command_async("application.stop_server", timeout=60.0)
-        except Exception:
-            pass  # Server may already be stopped
+            result = await bridge.send_command_async("application.stop_server", timeout=60.0)
+        except Exception as error:
+            return {"success": False, "engine_release_confirmed": False,
+                    "reason": str(error)}
+        if not isinstance(result, dict) or result.get("engine_release_confirmed") is not True:
+            return {"success": False, "engine_release_confirmed": False,
+                    "reason": "Native shutdown was not confirmed; use the suite's coordinated wrapper"}
         bridge.detach()
         return {
+            "success": True,
             "attached": False,
+            "engine_release_confirmed": True,
             "message": "Detached from Altium Designer and stopped MCP server",
         }
 

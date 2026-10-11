@@ -272,7 +272,7 @@ def _guard_editor():
     state = _editor_state()
     if state['blocked']:
         log_event('modal_blocked', pid=state['pid'])
-        raise RuntimeError('Altium is blocked by a modal dialog. Close or complete it, then retry; no second script was launched.')
+        raise RuntimeError('Altium main window is disabled. Inspect Altium for a hidden dialog or running operation before retrying; no second script was launched.')
     _guard_legacy(state)
     return state
 
