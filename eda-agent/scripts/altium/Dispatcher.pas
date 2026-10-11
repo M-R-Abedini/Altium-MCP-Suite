@@ -349,6 +349,7 @@ Var
     SessionId      : String;
 Begin
     If Running Then Exit;
+    ExternalCloseOnce := False;
 
     InitDefaultConfig(0);
     EnsureWorkspaceDir(0);
@@ -552,6 +553,35 @@ Begin
         WriteFileContent(WorkspaceDir + 'bridge-stopped.json',
             '{"script_version":"' + SCRIPT_VERSION + '","session_id":"' + SessionId +
             '","reason":"' + StopReason + '"}');
+End;
+
+{..............................................................................}
+{ A single close after the coordinator has released the polling engine. }
+Procedure CloseMCPProject;
+Var
+    Inbox, Content, RequestId, Reply, Params : String;
+Begin
+    If Running Then Exit;
+    InitDefaultConfig(0);
+    EnsureWorkspaceDir(0);
+    Inbox := WorkspaceDir + 'project-close-request.json';
+    If Not FileExists(Inbox) Then Exit;
+    Content := ReadFileContent(Inbox);
+    RequestId := ExtractJsonValue(Content, 'id');
+    If Not IsValidRequestId(RequestId) Then Exit;
+    DeleteFile(Inbox);
+    Params := ExtractJsonValue(Content, 'params');
+    ExternalCloseOnce := True;
+    Try
+        Reply := Proj_Close(Params, RequestId);
+    Except
+        Reply := BuildErrorResponse(RequestId, 'CLOSE_FAILED', 'Native one-shot close failed');
+    End;
+    ExternalCloseOnce := False;
+    WriteFileContent(WorkspaceDir + 'close-response_' + RequestId + '.json', Reply);
+    { No ProcessMessages or native commands after this final marker. }
+    WriteFileContent(WorkspaceDir + 'close-completed_' + RequestId + '.json',
+        '{"request_id":"' + RequestId + '"}');
 End;
 
 {..............................................................................}

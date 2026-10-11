@@ -23,7 +23,7 @@ configure_cli(sys.argv[1:])
 sys.path.insert(0, str(Path(__file__).resolve().parent / 'eda-agent' / 'src'))
 from suite_config import configure_environment
 configure_environment()
-from bridge_coordination import engine_lock, background_engine_lock, ensure_eda, stop_eda
+from bridge_coordination import engine_lock, background_engine_lock, ensure_eda, stop_eda, close_project_once
 from eda_agent.bridge.altium_bridge import AltiumBridge
 
 original = AltiumBridge._execute_command
@@ -46,6 +46,12 @@ def coordinated(self, command, params, timeout):
             stop_eda()
             return {'success': True, 'engine_release_confirmed': True}
         health = ensure_eda(self, original)
+        if command == 'project.close':
+            target = dict(params)
+            if not target.get('project_path'):
+                target['project_path'] = original(self, 'project.get_focused', {}, timeout)['project_path']
+            if not target['project_path'].lower().endswith('.prjscr'):
+                return close_project_once(target, timeout)
         if command == 'application.ping' and not params:
             # The foreground preflight already answered this exact query.
             return health

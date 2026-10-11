@@ -71,7 +71,26 @@ class WrapperTests(unittest.TestCase):
         return {'threading':threading,'engine_lock':contextlib.nullcontext,
                 'background_engine_lock':lambda:contextlib.nullcontext(True),
                 'stop_eda':MagicMock(),
+                'close_project_once':MagicMock(return_value={'closed':True}),
                 'ensure_eda':MagicMock(),'original':MagicMock(return_value={'ok':True})}
+    def test_design_close_uses_released_one_shot_instead_of_polling(self):
+        n=self.namespace();fn=load_function(ROOT/'eda_stdio.py','coordinated',n)
+        params={'project_path':'scratch.PrjPcb','save':False}
+        result=fn(object(),'project.close',params,10)
+        self.assertTrue(result['closed'])
+        n['original'].assert_not_called()
+        n['close_project_once'].assert_called_once_with(params,10)
+    def test_close_resolves_default_target_before_releasing_engine(self):
+        n=self.namespace();n['original'].return_value={'project_path':'scratch.PrjPcb'}
+        fn=load_function(ROOT/'eda_stdio.py','coordinated',n)
+        fn(object(),'project.close',{'save':True},10)
+        self.assertEqual(n['original'].call_args.args[1],'project.get_focused')
+        n['close_project_once'].assert_called_once_with({'project_path':'scratch.PrjPcb','save':True},10)
+    def test_script_cleanup_keeps_native_ownership_checks(self):
+        n=self.namespace();fn=load_function(ROOT/'eda_stdio.py','coordinated',n)
+        fn(object(),'project.close',{'project_path':'old.PrjScr'},10)
+        n['original'].assert_called_once()
+        n['close_project_once'].assert_not_called()
     def test_user_command_is_dispatched_once_after_health_check(self):
         n=self.namespace();fn=load_function(ROOT/'eda_stdio.py','coordinated',n)
         fn(object(),'generic.modify_objects',{},10)

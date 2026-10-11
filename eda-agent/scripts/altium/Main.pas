@@ -14,7 +14,7 @@ Const
     // returns, mismatch means Altium is running a stale compiled script
     // (DelphiScript caches compiled units until the script project is
     // reopened or Altium is restarted).
-    SCRIPT_VERSION = '2026.10.11.closeguard1';
+    SCRIPT_VERSION = '2026.10.11.lifecycle1';
     SUITE_SCRIPT_PROJECT = '__ALTIUM_MCP_SCRIPT_PROJECT__';
     SUITE_SCRIPT_CATALOG = '__ALTIUM_MCP_SCRIPT_CATALOG__';
 
@@ -64,6 +64,7 @@ Var
     WorkspaceDir : String;
     Running : Boolean;
     StopReason : String;
+    ExternalCloseOnce : Boolean;
 
     { Polling tunables, defaults below, overridden by mcp_config.json at      }
     { startup via LoadMCPConfig. Single source of truth: the config file.     }
@@ -636,11 +637,13 @@ Var
 Begin
     ProjectDefinitionSaveDispatched := False;
     If Project = Nil Then Exit;
-    For J := 0 To Project.DM_LogicalDocumentCount - 1 Do
-        SaveOneDocByDocRef(Project.DM_LogicalDocuments(J));
     { Synthetic free-document projects have no definition to save. }
-    If Project.DM_ProjectFullPath = '' Then Exit;
-    If Not FileExists(Project.DM_ProjectFullPath) Then Exit;
+    If (Project.DM_ProjectFullPath = '') Or (Not FileExists(Project.DM_ProjectFullPath)) Then
+    Begin
+        For J := 0 To Project.DM_LogicalDocumentCount - 1 Do
+            SaveOneDocByDocRef(Project.DM_LogicalDocuments(J));
+        Exit;
+    End;
     { A project definition is not an IServerDocument. Save it through the
       project-scoped native process, including variant and library metadata. }
     Workspace := GetWorkspace;
@@ -653,6 +656,13 @@ Begin
           it unless the native focused project is the requested one. }
         If Focused = Nil Then Exit;
         If UpperCase(Focused.DM_ProjectFullPath) <> UpperCase(Project.DM_ProjectFullPath) Then Exit;
+        { AD26's editor can have unsaved edits while ServerDoc.Modified is
+          false. Use the native standard-save process for target members;
+          do not manufacture changes or rely on that SDK flag to skip them. }
+        ResetParameters;
+        AddStringParameter('ObjectKind', 'ProjectDocuments');
+        AddStringParameter('SaveMode', 'Standard');
+        RunProcess('WorkspaceManager:SaveObject');
         ResetParameters;
         AddStringParameter('ObjectKind', 'FocusedProject');
         AddStringParameter('SaveMode', 'Standard');
