@@ -346,7 +346,7 @@ def test_the_full_live_sequence_is_driven_without_a_plan(screen):
                            "Close"]
     assert out["committed"] is True
     assert out["ok"] is True
-    assert out["finished"] == "no dialog is open"
+    assert out["finished"] == "no visible dialog was detected"
 
 
 def test_it_waits_for_the_first_dialog_instead_of_declaring_victory(screen):
@@ -361,13 +361,13 @@ def test_it_waits_for_the_first_dialog_instead_of_declaring_victory(screen):
     out = dd.drive(1, dry_run=False, wait_first=5.0, settle=0)
 
     assert scr.clicked == ["OK"], "it must not give up before the dialog"
-    assert out["finished"] == "no dialog is open"
+    assert out["finished"] == "no visible dialog was detected"
 
 
 def test_an_empty_screen_after_a_press_ends_the_run(screen):
     scr = screen([[NOTHING_TO_DO], []])
     out = dd.drive(1, dry_run=False, wait_first=60.0, settle=0)
-    assert out["finished"] == "no dialog is open"
+    assert out["finished"] == "no visible dialog was detected"
     assert scr.clicked == ["OK"]
 
 
@@ -375,6 +375,29 @@ def test_nothing_appearing_at_all_is_reported_as_such(screen):
     screen([[]])
     out = dd.drive(1, dry_run=False, wait_first=0.2, settle=0)
     assert "no dialog appeared" in out["finished"]
+
+
+@pytest.mark.parametrize("after_press", [False, True])
+def test_disabled_window_without_detected_dialog_is_not_completion(screen, monkeypatch, after_press):
+    scr = screen([[NOTHING_TO_DO]] if after_press else [[]])
+    read = scr.report
+    calls = 0
+
+    def report(pid):
+        nonlocal calls
+        calls += 1
+        if after_press and calls == 1:
+            return read(pid)
+        return {"ok": True, "blocked": True, "dialogs": [],
+                "summary": "Disabled; no visible dialog detected"}
+
+    monkeypatch.setattr(dd.report, "report", report)
+    out = dd.drive(1, dry_run=False, wait_first=0, settle=0)
+
+    assert out["ok"] is False
+    assert out["stopped_for_a_human"] is True
+    assert out["finished"] == "Disabled; no visible dialog detected"
+    assert scr.clicked == (["OK"] if after_press else [])
 
 
 def test_an_error_stops_the_run_and_flags_a_human(screen):

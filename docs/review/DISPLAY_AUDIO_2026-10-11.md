@@ -22,13 +22,21 @@ isolated native test projects. The hardware project was not a mutation target.
 
 ## Still under investigation
 
-- **Project close can block the native UI (P1):** final installed acceptance
+- **Project close can block the native UI (P1, guarded):** final installed acceptance
   passed through model updates, render, and saves, then `proj_close` on the
   scratch Findings project stopped returning. The main window and monitor were
   disabled; dialog diagnostics found no visible dialog, and the client timed out
   after 80 seconds. The busy-handler marker was retained. No close request was
   replayed, editor process terminated, or hardware changes discarded. Cleanup
   and restoring hardware focus are not claimed completed for this attempt.
+  The editor was subsequently restarted by the user. The native bridge answered
+  again with matching source identity, and all 14 hardware file hashes matched.
+  Version `2026.10.11.closeguard1` refuses non-script project close with
+  `PROJECT_CLOSE_REQUIRES_UI` before saving or changing focus. Detach the bridge
+  and close design projects through Altium's Projects panel. Script-project
+  cleanup retains its existing focus and ownership checks. This prevents replay
+  of the known unsafe path; it does not resolve the underlying native hang or
+  provide automatic design-project close.
 - **Stale compiled multipart instances after deletion (P1):** force compile was
   insufficient in the reported board session; reopening restored correct counts.
   No safe root-cause fix has been demonstrated. Verify the saved/reopened netlist
@@ -44,8 +52,35 @@ isolated native test projects. The hardware project was not a mutation target.
   The workspace mismatch is now prevented; other observations retain their
   original scope.
 
+## Disabled-window reporting
+
+A disabled main window with no detected dialog is now reported as
+`blocked_without_visible_dialog=true` and `needs_a_human=true`. Enumeration
+cannot rule out a hidden modal or a running handler. The dialog driver returns
+failure in that state, including after pressing a preceding dialog's button;
+an empty list is not proof of completion. It sends no additional input and
+does not authorize a second script launch. A visible modal is still classified
+by its actual message and buttons.
+
+`app_detach` previously swallowed stop failures and reported successful
+detachment. The suite wrapper now uses the coordinator's guarded stop, waits
+for its session-bound final shutdown marker, and propagates a failure. The tool
+only detaches its local keep-alive after that confirmation. It saves no
+documents, and a later coordinated call can restart the bridge. The final
+marker is the existing protocol's release evidence; the rapid handover concern
+above still requires a signal proving the script has physically returned.
+
 ## Verification
 
+- Close-guard follow-up: 192 suite tests and 152 targeted EDA tests passed;
+  native build/lint reported zero errors and warnings. Installed initialization
+  passed for both wrappers (448 EDA / 37 legacy tools). Native AD26 acceptance
+  verified refusal with both `save=false` and `save=true`, unchanged active
+  document, project membership, scratch file bytes and timestamps, successful
+  Detach, and automatic restart into a new matching native session. A final
+  Detach passed; all 14 hardware file hashes remained unchanged. Tests for a
+  disabled window with no detectable dialog and failed shutdown are injected
+  regressions; no hidden modal or hung handler was deliberately recreated.
 - 190 suite Python tests and 111 targeted EDA tests passed locally. Newly added
   checks run in GitHub CI; native behavior cannot be reproduced by a Python fake.
 - DelphiScript build/lint passed without suppressing rules.

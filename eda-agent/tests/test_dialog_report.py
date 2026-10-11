@@ -236,7 +236,7 @@ def test_blocked_is_reported_and_leads_the_summary(monkeypatch):
     out = dr.report(1234)
 
     assert out["blocked"] is True
-    assert out["summary"].startswith("Altium is BLOCKED by a modal."), (
+    assert out["summary"].startswith("Altium's main window is disabled."), (
         "a blocked editor is the single fact that explains a silent "
         "bridge, so it leads")
     assert out["kinds"] == ["nothing_to_do"]
@@ -251,7 +251,9 @@ def test_no_dialogs_is_stated_plainly(monkeypatch):
     out = dr.report(1234)
 
     assert out["dialog_count"] == 0
-    assert out["summary"] == "no dialog is open"
+    assert out["summary"] == "no visible dialog was detected"
+    assert out["blocked_without_visible_dialog"] is False
+    assert out["needs_a_human"] is False
 
 
 def test_blocked_with_no_dialog_does_not_claim_all_is_well(monkeypatch):
@@ -267,7 +269,11 @@ def test_blocked_with_no_dialog_does_not_claim_all_is_well(monkeypatch):
 
     out = dr.report(1234)
 
-    assert "something else is holding it" in out["summary"]
+    assert out["blocked_without_visible_dialog"] is True
+    assert out["needs_a_human"] is True
+    assert "no visible dialog was detected" in out["summary"]
+    assert "may be blocking" in out["summary"]
+    assert "no dialog is open" not in out["summary"]
 
 
 def test_it_refuses_rather_than_guessing_without_pywin32(monkeypatch):

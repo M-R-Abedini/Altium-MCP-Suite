@@ -467,7 +467,9 @@ def register_uiauto_tools(mcp):
         bridge looks identical whether Altium is showing a modal, busy
         compiling, or dead. This answers it directly: ``blocked`` is
         read from the main window being disabled, which is what Windows
-        does while a modal is up, and it works precisely when no other
+        often does while a modal is up. This does not prove the cause;
+        a hidden modal or running handler can escape dialog enumeration.
+        It works precisely when no other
         tool can because it does not use the bridge at all. It reads the
         Win32 process, so a blocked Altium answers it normally.
 
@@ -494,7 +496,9 @@ def register_uiauto_tools(mcp):
 
         Returns:
             Dict with ``blocked``, ``dialog_count``, ``dialogs``,
-            ``needs_a_human``, and a one-sentence ``summary``.
+            ``needs_a_human``, ``blocked_without_visible_dialog``, and a
+            one-sentence ``summary``. A disabled main window with no detected
+            dialog requires inspection; it is never reported as completion.
         """
         if not windows.available():
             return {"ok": False, "reason": (

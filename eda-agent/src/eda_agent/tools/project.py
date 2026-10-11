@@ -87,7 +87,12 @@ def register_project_tools(mcp):
     async def proj_close(
         project_path: Optional[str] = None, save: bool = True
     ) -> dict[str, Any]:
-        """Close a project.
+        """Close a project where the backend supports safe native close.
+
+        Altium design-project close is currently refused before any save
+        or focus change: AD26 can hang when closing inside the polling
+        handler. Detach the bridge, then use Altium's Close Project command.
+        Script-project cleanup retains its separate native checks.
 
         Args:
             project_path: Optional path to specific project. If None, closes active project.

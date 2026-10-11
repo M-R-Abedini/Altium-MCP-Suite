@@ -30,7 +30,7 @@ class CoordinationTests(unittest.TestCase):
         self.assertEqual(probe.call_count,2);self.launch.assert_not_called()
     def test_modal_is_not_mistaken_for_dead_loop(self):
         self.state.return_value={'pid':77,'blocked':True};probe=MagicMock()
-        with self.assertRaisesRegex(RuntimeError,'modal'):coord._ensure(probe)
+        with self.assertRaisesRegex(RuntimeError,'main window is disabled'):coord._ensure(probe)
         probe.assert_not_called();self.launch.assert_not_called()
     def test_live_handler_is_not_interrupted(self):
         (coord.WORKSPACE/'progress_live.json').write_text('{}');probe=MagicMock()
@@ -70,6 +70,7 @@ class WrapperTests(unittest.TestCase):
     def namespace(self):
         return {'threading':threading,'engine_lock':contextlib.nullcontext,
                 'background_engine_lock':lambda:contextlib.nullcontext(True),
+                'stop_eda':MagicMock(),
                 'ensure_eda':MagicMock(),'original':MagicMock(return_value={'ok':True})}
     def test_user_command_is_dispatched_once_after_health_check(self):
         n=self.namespace();fn=load_function(ROOT/'eda_stdio.py','coordinated',n)
@@ -88,7 +89,16 @@ class WrapperTests(unittest.TestCase):
         n['ensure_eda'].assert_not_called();n['original'].assert_not_called()
     def test_stop_does_not_restart_a_stopped_bridge(self):
         n=self.namespace();fn=load_function(ROOT/'eda_stdio.py','coordinated',n)
-        fn(object(),'application.stop_server',{},10);n['ensure_eda'].assert_not_called()
+        result=fn(object(),'application.stop_server',{},10)
+        self.assertTrue(result['engine_release_confirmed'])
+        n['stop_eda'].assert_called_once();n['ensure_eda'].assert_not_called()
+        n['original'].assert_not_called()
+    def test_stop_confirmation_failure_is_propagated_without_relaunch(self):
+        n=self.namespace();n['stop_eda'].side_effect=TimeoutError('shutdown unconfirmed')
+        fn=load_function(ROOT/'eda_stdio.py','coordinated',n)
+        with self.assertRaisesRegex(TimeoutError,'shutdown unconfirmed'):
+            fn(object(),'application.stop_server',{},10)
+        n['ensure_eda'].assert_not_called();n['original'].assert_not_called()
     def test_background_health_yields_when_another_bridge_owns_the_lock(self):
         n=self.namespace();n['background_engine_lock']=lambda:contextlib.nullcontext(False)
         fn=load_function(ROOT/'eda_stdio.py','coordinated',n)

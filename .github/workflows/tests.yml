@@ -26,6 +26,9 @@ jobs:
       - name: Schematic updates and SVG regression checks
         run: python -m pytest tests/test_display_audio_regressions.py tests/render/test_svg_wellformed.py tests/test_sch_properties_match_their_interface.py -q
         working-directory: eda-agent
+      - name: Disabled-window diagnosis and dialog completion
+        run: python -m pytest tests/test_dialog_report.py tests/test_dialog_driver.py tests/test_detach_confirmation.py -q
+        working-directory: eda-agent
   portable-python:
     runs-on: ubuntu-latest
     timeout-minutes: 10

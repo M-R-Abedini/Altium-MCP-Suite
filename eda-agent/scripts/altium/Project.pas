@@ -294,6 +294,16 @@ Begin
                     'The executing bridge cannot close itself; let it release the engine before closing it in Altium');
                 Exit;
             End;
+            { AD26 can deadlock CloseObject inside the polling handler even }
+            { after a confirmed save, with no visible prompt to dismiss.    }
+            { Refuse design-project close before saving or moving focus.    }
+            { The verified script-snapshot cleanup below is still allowed.  }
+            If UpperCase(ExtractFileExt(ProjectPath)) <> '.PRJSCR' Then
+            Begin
+                Result := BuildErrorResponse(RequestId, 'PROJECT_CLOSE_REQUIRES_UI',
+                    'Design project close inside the MCP loop is disabled after an AD26 hang. Detach the bridge, then use Close Project in Altium. No save or close was attempted');
+                Exit;
+            End;
             If ExtractJsonValue(Params, 'only_if_unmodified') = 'true' Then
             Begin
                 Blocker := ManagedScriptProjectCloseBlocker(Project,
