@@ -19,9 +19,11 @@ def main():
     settings = {'altium_exe': str(args.altium_exe.resolve())}
     (root / 'local-settings.json').write_text(json.dumps(settings, indent=2), encoding='utf-8')
     scripts = suite_config.configure_environment()
+    shared_env = {'ALTIUM_MCP_RUNTIME': str(suite_config.runtime_dir()),
+                  'EDA_AGENT_WORKSPACE': str(suite_config.workspace_dir())}
     config = {'mcpServers': {
-        'eda-agent': {'command': sys.executable, 'args': [str(root / 'eda_stdio.py'), '--toolset', args.toolset]},
-        'altium': {'command': sys.executable, 'args': [str(root / 'coffeenmusic/server/codex_stdio.py')]},
+        'eda-agent': {'command': sys.executable, 'args': [str(root / 'eda_stdio.py'), '--toolset', args.toolset], 'env': shared_env},
+        'altium': {'command': sys.executable, 'args': [str(root / 'coffeenmusic/server/codex_stdio.py')], 'env': shared_env},
     }}
     binary = root / 'altium-designer-mcp/target/release/altium-designer-mcp.exe'
     if args.library_dir:
@@ -35,6 +37,10 @@ def main():
     toml = []
     for name, server in config['mcpServers'].items():
         toml += [f'[mcp_servers.{name}]', 'command = '+json.dumps(server['command']), 'args = '+json.dumps(server['args']), '']
+        if server.get('env'):
+            toml += [f'[mcp_servers.{name}.env]']
+            toml += [key + ' = ' + json.dumps(value) for key, value in server['env'].items()]
+            toml.append('')
     (root / 'codex.local.toml').write_text('\n'.join(toml), encoding='utf-8')
     print('Created local MCP client configuration. Merge it into your client settings; restart the MCP servers once.')
     print('Runtime scripts:', scripts['eda'], scripts['legacy'])

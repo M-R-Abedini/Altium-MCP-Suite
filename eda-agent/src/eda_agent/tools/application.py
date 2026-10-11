@@ -320,9 +320,37 @@ def register_application_tools(mcp):
                     f"{len(unsaved)} document(s) have unsaved changes. "
                     "app_save_all flushes them, and reports still_dirty.")
 
+        # The suite binds both wrappers to this workspace. Expose the native
+        # session and content-addressed project so same-version stale code is
+        # distinguishable from the currently deployed sources.
+        import json
+        import os
+        from pathlib import Path
+        workspace = getattr(getattr(bridge, "config", None), "workspace_dir", None)
+        ready = {}
+        if workspace is not None:
+            try:
+                ready = json.loads((Path(workspace) / "bridge-ready.json").read_text(encoding="utf-8-sig"))
+                if not isinstance(ready, dict):
+                    ready = {}
+            except (OSError, ValueError):
+                pass
+        expected = os.environ.get("ALTIUM_MCP_EDA_SCRIPT")
+        actual = ready.get("project_path")
+        if not isinstance(actual, str):
+            actual = None
+        identity = {
+            "runtime_path": os.environ.get("ALTIUM_MCP_RUNTIME"),
+            "workspace_path": str(workspace) if workspace is not None else None,
+            "native_session_id": ready.get("session_id"),
+            "compiled_project_path": actual,
+            "expected_project_path": expected,
+            "script_hash_match": (Path(actual).resolve() == Path(expected).resolve()) if actual and expected else None,
+        }
         return {
             "backend": "altium",
             "bridge_answering": answering,
+            "coordination": identity,
             "script_version_match": version_match,
             "running_script_version": ping.get("altium_script_version"),
             "deployed_script_version": ping.get("bundled_script_version"),

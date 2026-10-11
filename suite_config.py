@@ -31,7 +31,44 @@ def runtime_dir():
 
 
 def workspace_dir():
-    return Path(os.environ.get('EDA_AGENT_WORKSPACE', str(runtime_dir() / 'workspace'))).resolve()
+    runtime = runtime_dir()
+    identity = runtime / 'workspace-identity.json'
+    try:
+        saved = json.loads(identity.read_text(encoding='utf-8'))
+        raw = saved['workspace']
+        if not isinstance(raw, str) or not raw.strip() or not Path(raw).is_absolute() or saved.get('schema') != 1:
+            raise ValueError('invalid workspace identity')
+        recorded = Path(raw).resolve()
+    except FileNotFoundError:
+        recorded = None
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        raise RuntimeError(f'Cannot validate {identity}; repair the shared workspace configuration before starting either server.') from error
+    explicit = os.environ.get('EDA_AGENT_WORKSPACE')
+    selected = Path(explicit).resolve() if explicit else recorded or runtime / 'workspace'
+    if recorded is not None and os.path.normcase(str(selected)) != os.path.normcase(str(recorded)):
+        raise RuntimeError(f'Workspace mismatch: requested {selected}, shared runtime {runtime} uses {recorded}. Set EDA_AGENT_WORKSPACE identically for both servers; no script was launched.')
+    return selected
+
+
+def bind_workspace():
+    """Publish a complete identity once; concurrent servers cannot overwrite it."""
+    runtime = runtime_dir()
+    selected = workspace_dir()
+    runtime.mkdir(parents=True, exist_ok=True)
+    target = runtime / 'workspace-identity.json'
+    temporary = runtime / ('workspace-identity.' + uuid.uuid4().hex + '.tmp')
+    try:
+        temporary.write_text(json.dumps({'schema': 1, 'workspace': str(selected)}), encoding='utf-8')
+        try:
+            os.link(temporary, target)
+        except FileExistsError:
+            pass
+        # Compare even when the other process won the publication race.
+        os.environ['EDA_AGENT_WORKSPACE'] = str(selected)
+        workspace_dir()
+    finally:
+        temporary.unlink(missing_ok=True)
+    return selected
 
 
 def altium_exe():
@@ -98,7 +135,10 @@ def prepare_runtime():
 
 
 def configure_environment():
+    bind_workspace()
     scripts = prepare_runtime()
+    os.environ['ALTIUM_MCP_RUNTIME'] = str(runtime_dir())
+    os.environ['ALTIUM_MCP_EDA_SCRIPT'] = str(scripts['eda'])
     os.environ.setdefault('EDA_AGENT_WORKSPACE', str(workspace_dir()))
     os.environ.setdefault('ALTIUM_EXE', str(altium_exe()))
     os.environ['ALTIUM_MCP_LEGACY_SCRIPT'] = str(scripts['legacy'])
