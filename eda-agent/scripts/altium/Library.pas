@@ -4,11 +4,105 @@
 { Library.pas - Library management functions for the Altium integration bridge                }
 {..............................................................................}
 
-{ Return a component's first linked implementation (the footprint model in   }
-{ the common case). Altium does not expose a "current implementation"         }
-{ getter, GetState_CurrentImplementation is not a real method, implementations}
-{ are reached only through the component's child-object iterator. Nil when    }
-{ the component has no implementations.                                        }
+{ Change the actual placed PCB implementation, never a text parameter.
+  Keep source-library locations and other model types intact. Ambiguous
+  footprint selection is refused before changing any implementation. }
+Function SetPlacedFootprint(Comp : ISch_Component; Name : String;
+    Var Diagnostic : String) : Boolean;
+Var
+    Iter : ISch_Iterator;
+    Impl, Target, First : ISch_Implementation;
+    Link : ISch_ModelDatafileLink;
+    Count, Currents, I : Integer;
+Begin
+    Result := False;
+    Diagnostic := '';
+    Target := Nil;
+    First := Nil;
+    Count := 0;
+    Currents := 0;
+    Iter := Comp.SchIterator_Create;
+    Try
+        Iter.AddFilter_ObjectSet(MkSet(eImplementation));
+        Impl := Iter.FirstSchObject;
+        While Impl <> Nil Do
+        Begin
+            If UpperCase(Impl.ModelType) = 'PCBLIB' Then
+            Begin
+                Inc(Count);
+                If First = Nil Then First := Impl;
+                If Impl.IsCurrent Then
+                Begin
+                    Target := Impl;
+                    Inc(Currents);
+                End;
+            End;
+            Impl := Iter.NextSchObject;
+        End;
+    Finally
+        Comp.SchIterator_Destroy(Iter);
+    End;
+    If (Currents > 1) Or ((Currents = 0) And (Count > 1)) Then
+    Begin
+        Diagnostic := 'AMBIGUOUS_FOOTPRINT: select one current PCB model first';
+        Exit;
+    End;
+    If Target = Nil Then Target := First;
+    Try
+        If Target = Nil Then
+        Begin
+            Target := Comp.AddSchImplementation;
+            If Target = Nil Then
+            Begin Diagnostic := 'Cannot create PCB implementation'; Exit; End;
+            Target.ModelType := 'PCBLIB';
+        End;
+        Target.ModelName := Name;
+        { Explicit model links must survive a library-source refresh. }
+        Target.UseComponentLibrary := False;
+        Target.IsCurrent := True;
+        If Target.DatafileLinkCount = 0 Then
+            Target.AddDataFileLink(Name, '', 'PCBLIB');
+        For I := 0 To Target.DatafileLinkCount - 1 Do
+        Begin
+            Link := Target.DatafileLink[I];
+            If UpperCase(Link.FileKind) = 'PCBLIB' Then
+                Link.EntityName := Name;
+        End;
+        Result := (Target.ModelName = Name) And Target.IsCurrent;
+        For I := 0 To Target.DatafileLinkCount - 1 Do
+        Begin
+            Link := Target.DatafileLink[I];
+            If UpperCase(Link.FileKind) = 'PCBLIB' Then
+                Result := Result And (Link.EntityName = Name);
+        End;
+        If Not Result Then Diagnostic := 'FOOTPRINT_READBACK_MISMATCH';
+    Except
+        Diagnostic := 'FOOTPRINT_WRITE_FAILED: inspect the returned model links before retrying';
+    End;
+End;
+
+Function GetPlacedFootprintName(Comp : ISch_Component) : String;
+Var
+    Iter : ISch_Iterator;
+    Impl : ISch_Implementation;
+Begin
+    Result := '';
+    Iter := Comp.SchIterator_Create;
+    Try
+        Iter.AddFilter_ObjectSet(MkSet(eImplementation));
+        Impl := Iter.FirstSchObject;
+        While Impl <> Nil Do
+        Begin
+            If (UpperCase(Impl.ModelType) = 'PCBLIB') And Impl.IsCurrent Then
+            Begin Result := Impl.ModelName; Exit; End;
+            Impl := Iter.NextSchObject;
+        End;
+    Finally
+        Comp.SchIterator_Destroy(Iter);
+    End;
+End;
+
+{ First linked implementation, or Nil when there are none. }
 Function GetFirstSchImplementation(Comp : ISch_Component) : ISch_Implementation;
 Var
     ImplIter : ISch_Iterator;

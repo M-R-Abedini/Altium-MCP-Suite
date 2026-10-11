@@ -23,6 +23,9 @@ jobs:
       - name: Project persistence and assembly variants
         run: python -m pytest tests/test_project_variants_persistence.py tests/test_query_input_consistency.py tests/test_variant_matrix_csv.py tests/test_print_all_variants_restore.py tests/test_handlers_verify_their_outcome.py -q
         working-directory: eda-agent
+      - name: Schematic updates and SVG regression checks
+        run: python -m pytest tests/test_display_audio_regressions.py tests/render/test_svg_wellformed.py tests/test_sch_properties_match_their_interface.py -q
+        working-directory: eda-agent
   portable-python:
     runs-on: ubuntu-latest
     timeout-minutes: 10

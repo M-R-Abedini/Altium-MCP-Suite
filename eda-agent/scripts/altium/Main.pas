@@ -14,7 +14,7 @@ Const
     // returns, mismatch means Altium is running a stale compiled script
     // (DelphiScript caches compiled units until the script project is
     // reopened or Altium is restarted).
-    SCRIPT_VERSION = '2026.10.10.lifecycle1';
+    SCRIPT_VERSION = '2026.10.11.schematic1';
     SUITE_SCRIPT_PROJECT = '__ALTIUM_MCP_SCRIPT_PROJECT__';
     SUITE_SCRIPT_CATALOG = '__ALTIUM_MCP_SCRIPT_CATALOG__';
 
@@ -616,14 +616,13 @@ Begin
           actually reached, so a pass that wrote nothing because nothing
           was open is not confused with one the editor declined. }
         ServerDoc := Client.GetDocumentByPath(Doc.DM_FullPath);
-        { Unconditional flush, Modified flag does not always propagate from   }
-        { ProcessControl.PostProcess to the IServerDocument layer in newer    }
-        { Altium builds, so checking it can leave docs unsaved. DoFileSave    }
-        { on a clean doc is a fast no-op.                                     }
-        If ServerDoc <> Nil Then
+        { Do not manufacture unsaved changes to force a write. Clean files
+          can be mapped by another reader and must not be rewritten merely
+          because their project is being saved or closed. Mutating handlers
+          mark their target document, and native UI edits set Modified. }
+        If (ServerDoc <> Nil) And ServerDoc.Modified Then
         Begin
             SaveAttempts := SaveAttempts + 1;
-            Try ServerDoc.SetModified(True); Except End;
             Try ServerDoc.DoFileSave(''); Except End;
         End;
     Except End;

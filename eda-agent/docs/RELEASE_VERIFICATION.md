@@ -854,6 +854,11 @@ must come back `success:false` with `Kind` under `properties.unknown`.
 
 ## 17. Writing a component's UniqueId (highest risk in this release)
 
+**2026-10-11 correction:** `sch_replicate_component` is disabled before mutation
+because native replication can change the source and remint IDs. The following
+historical procedure applies only to `sch_set_component_unique_id`; see the
+[current regression findings](../../docs/review/DISPLAY_AUDIO_2026-10-11.md).
+
 `sch_set_component_unique_id` and `sch_replicate_component` both assign
 `ISch_Component.UniqueId`. Nothing in this repository wrote it before,
 and **no independent script in `reference/` writes it at all**, so the
