@@ -2293,38 +2293,126 @@ End;
 
 Function Gen_Zoom(Params : String; RequestId : String) : String;
 Var
-    Action : String;
-    SchDoc : ISch_Document;
-    Board : IPCB_Board;
+    Action, NativeAction, ServerName, Path, Ext : String;
+    Workspace : IWorkspace;
+    Doc : IDocument;
 Begin
     Action := ExtractJsonValue(Params, 'action');
     If Action = '' Then Action := 'fit';
+    If (Action <> 'fit') And (Action <> 'selection') Then
+    Begin Result := BuildErrorResponse(RequestId, 'INVALID_PARAMETER', 'action must be fit or selection'); Exit; End;
+    Workspace := GetWorkspace;
+    If Workspace = Nil Then
+    Begin Result := BuildErrorResponse(RequestId, 'NO_DOCUMENT', 'No workspace'); Exit; End;
+    Doc := Workspace.DM_FocusedDocument;
+    If Doc = Nil Then
+    Begin Result := BuildErrorResponse(RequestId, 'NO_DOCUMENT', 'No focused design document'); Exit; End;
+    Path := Doc.DM_FullPath;
+    Ext := UpperCase(ExtractFileExt(Path));
+    If Ext = '.PCBDOC' Then ServerName := 'PCB'
+    Else If Ext = '.SCHDOC' Then ServerName := 'Sch'
+    Else
+    Begin Result := BuildErrorResponse(RequestId, 'WRONG_DOCUMENT', 'Focus a SchDoc or PcbDoc before zooming'); Exit; End;
+    If Action = 'fit' Then NativeAction := 'All' Else NativeAction := 'Selected';
+    ResetParameters;
+    AddStringParameter('Action', NativeAction);
+    RunProcess(ServerName + ':Zoom');
+    Result := BuildSuccessResponse(RequestId, '{"action":"' + Action
+        + '","document_path":"' + EscapeJsonString(Path)
+        + '","native_action":"' + NativeAction + '","dispatched":true}');
+End;
 
-    SchDoc := SchServer.GetCurrentSchDocument;
-    Board := GetPCBBoardAnywhere(0);
-
-    If Action = 'fit' Then
-    Begin
-        If SchDoc <> Nil Then RunProcess('Sch:ZoomToFit')
-        Else If Board <> Nil Then
+{ Target one placed PCB implementation; do not append a second failing link. }
+Function Gen_SetPlacedModelSource(Params : String; RequestId : String) : String;
+Var
+    SheetPath, UID, ModelName, SourceLib, BeforeJson, AfterJson : String;
+    SchDoc : ISch_Document;
+    Iter, Models : ISch_Iterator;
+    Comp, TargetComp : ISch_Component;
+    Impl, Target : ISch_Implementation;
+    Link : ISch_ModelDatafileLink;
+    Matches, ModelMatches, J, Links : Integer;
+    ReplaceLinks, Verified : Boolean;
+Begin
+    SheetPath := ExtractJsonValue(Params, 'sheet_path');
+    UID := ExtractJsonValue(Params, 'component_unique_id');
+    ModelName := ExtractJsonValue(Params, 'model_name');
+    SourceLib := ExtractJsonValue(Params, 'source_library');
+    ReplaceLinks := LowerCase(ExtractJsonValue(Params, 'replace_links')) = 'true';
+    If (SheetPath = '') Or (UID = '') Or (ModelName = '') Then
+    Begin Result := BuildErrorResponse(RequestId, 'MISSING_PARAMS', 'sheet_path, component_unique_id and model_name are required'); Exit; End;
+    If (SourceLib <> '') And ((Not FileExists(SourceLib)) Or (UpperCase(ExtractFileExt(SourceLib)) <> '.PCBLIB') Or (Copy(SourceLib, 2, 1) <> ':')) Then
+    Begin Result := BuildErrorResponse(RequestId, 'INVALID_PARAMETER', 'Source must be empty or an existing absolute PcbLib path'); Exit; End;
+    SchDoc := SchServer.GetSchDocumentByPath(SheetPath);
+    If (SchDoc = Nil) Or (UpperCase(ExtractFileExt(SheetPath)) <> '.SCHDOC') Then
+    Begin Result := BuildErrorResponse(RequestId, 'NO_SCHEMATIC', 'The explicit schematic must be loaded'); Exit; End;
+    TargetComp := Nil; Matches := 0;
+    Iter := SchDoc.SchIterator_Create;
+    Try
+        Iter.AddFilter_ObjectSet(MkSet(eSchComponent));
+        Comp := Iter.FirstSchObject;
+        While Comp <> Nil Do
         Begin
-            ResetParameters;
-            AddStringParameter('Action', 'ZoomToFit');
-            RunProcess('PCB:Zoom');
+            If Comp.UniqueId = UID Then Begin TargetComp := Comp; Inc(Matches); End;
+            Comp := Iter.NextSchObject;
         End;
-    End
-    Else If Action = 'selection' Then
-    Begin
-        If SchDoc <> Nil Then RunProcess('Sch:ZoomToSelected')
-        Else If Board <> Nil Then
-        Begin
-            ResetParameters;
-            AddStringParameter('Action', 'ZoomToSelection');
-            RunProcess('PCB:Zoom');
-        End;
+    Finally
+        SchDoc.SchIterator_Destroy(Iter);
     End;
-
-    Result := BuildSuccessResponse(RequestId, '{"action":"' + Action + '"}');
+    If Matches <> 1 Then
+    Begin Result := BuildErrorResponse(RequestId, 'AMBIGUOUS_COMPONENT', 'UID must match exactly one placed component on the specified sheet'); Exit; End;
+    Target := Nil; ModelMatches := 0;
+    Models := TargetComp.SchIterator_Create;
+    Try
+        Models.AddFilter_ObjectSet(MkSet(eImplementation));
+        Impl := Models.FirstSchObject;
+        While Impl <> Nil Do
+        Begin
+            If (UpperCase(Impl.ModelType) = 'PCBLIB') And (Impl.ModelName = ModelName) Then
+            Begin Target := Impl; Inc(ModelMatches); End;
+            Impl := Models.NextSchObject;
+        End;
+    Finally
+        TargetComp.SchIterator_Destroy(Models);
+    End;
+    If ModelMatches <> 1 Then
+    Begin Result := BuildErrorResponse(RequestId, 'AMBIGUOUS_MODEL', 'model_name must match exactly one PCBLIB implementation'); Exit; End;
+    Links := Target.DatafileLinkCount;
+    If (Links > 1) And (Not ReplaceLinks) Then
+    Begin Result := BuildErrorResponse(RequestId, 'DUPLICATE_MODEL_LINKS', 'Multiple datafile links require explicit replace_links=true; no edit made'); Exit; End;
+    For J := 0 To Links - 1 Do
+        If UpperCase(Target.DatafileLink[J].FileKind) <> 'PCBLIB' Then
+        Begin Result := BuildErrorResponse(RequestId, 'UNSUPPORTED_MODEL_LINK', 'Non-PCBLIB datafile link was preserved; no edit made'); Exit; End;
+    BeforeJson := BuildImplementationsJson(TargetComp);
+    Verified := False;
+    SchServer.ProcessControl.PreProcess(SchDoc, '');
+    Try
+        SchBeginModify(Target);
+        Try
+            If ReplaceLinks And (Links > 1) Then Target.ClearAllDatafileLinks;
+            If Target.DatafileLinkCount = 0 Then Target.AddDataFileLink(ModelName, '', 'PCBLIB');
+            Link := Target.DatafileLink[0];
+            Link.EntityName := ModelName;
+            Link.Location := SourceLib;
+            Target.UseComponentLibrary := False;
+            Verified := (Target.DatafileLinkCount = 1) And (Link.EntityName = ModelName)
+                And (Link.Location = SourceLib) And (UpperCase(Link.FileKind) = 'PCBLIB')
+                And (Not Target.UseComponentLibrary);
+        Except
+            Verified := False;
+        End;
+        SchEndModify(Target);
+    Finally
+        SchServer.ProcessControl.PostProcess(SchDoc, 'Set placed model source');
+        InvalidateCompileCache(0);
+        SchDoc.GraphicallyInvalidate;
+        MarkDocDirtyByPath(SheetPath);
+    End;
+    AfterJson := BuildImplementationsJson(TargetComp);
+    Result := BuildSuccessResponse(RequestId, '{"success":' + BoolToJsonStr(Verified)
+        + ',"verified":' + BoolToJsonStr(Verified) + ',"resolution_verified":false'
+        + ',"component_unique_id":"' + EscapeJsonString(UID)
+        + '","before":' + BeforeJson + ',"after":' + AfterJson + '}');
 End;
 
 {..............................................................................}
@@ -10500,6 +10588,7 @@ Begin
         'select_objects':   Result := Gen_SelectObjects(Params, RequestId);
         'deselect_all':     Result := Gen_DeselectAll(RequestId);
         'zoom':             Result := Gen_Zoom(Params, RequestId);
+        'set_placed_model_source': Result := Gen_SetPlacedModelSource(Params, RequestId);
         'run_erc':          Result := Gen_RunERC(Params, RequestId);
         'get_sch_geometry': Result := Gen_GetSchGeometry(Params, RequestId);
         'get_pcb_geometry': Result := Gen_GetPcbGeometry(Params, RequestId);

@@ -67,11 +67,14 @@ def register_project_tools(mcp):
         return result
 
     @mcp.tool()
-    async def proj_save(project_path: Optional[str] = None) -> dict[str, Any]:
+    async def proj_save(project_path: Optional[str] = None,
+                        include_libraries: bool = False) -> dict[str, Any]:
         """Save the current or specified project.
 
         Args:
             project_path: Optional path to specific project. If None, saves active project.
+            include_libraries: Explicitly save open project libraries as well.
+                Default saves non-library members and the project definition.
 
         Returns:
             Dictionary confirming save operation
@@ -80,7 +83,7 @@ def register_project_tools(mcp):
         params = {}
         if project_path:
             params["project_path"] = project_path
-        result = await verified_save(bridge, project_path)
+        result = await verified_save(bridge, project_path, include_libraries=include_libraries)
         return result
 
     @mcp.tool()

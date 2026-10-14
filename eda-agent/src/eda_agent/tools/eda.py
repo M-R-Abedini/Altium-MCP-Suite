@@ -40,8 +40,9 @@ def register_eda_tools(mcp) -> None:
 
     @mcp.tool()
     async def review_design(backend: Optional[str] = None) -> dict[str, Any]:
-        """EDA-agnostic design review of the open board.
+        """Netlist review of the active design (Altium: compiled schematic).
 
+        This does not prove schematic-to-PCB transfer or copper connectivity.
         Runs the same netlist-level review regardless of the active EDA
         (Altium or KiCad): board stats and net classes, annotation hygiene
         (unannotated, duplicate references, missing values), and connectivity
@@ -54,12 +55,22 @@ def register_eda_tools(mcp) -> None:
         snap, reason = await _snapshot(backend)
         if snap is None:
             return {"ok": False, "reason": reason}
-        return review_snapshot(snap)
+        return dict(review_snapshot(snap), data_domain="schematic" if snap.source == "altium" else "physical_pcb")
 
     @mcp.tool()
     async def get_board_info(backend: Optional[str] = None) -> dict[str, Any]:
         """Object counts and net-class summary for the open board, from the
-        active backend (or the one named by ``backend``)."""
+        active backend (or the one named by ``backend``).
+
+        Altium reads physical PCB objects; no BOM fallback is allowed.
+        Counts alone do not verify an ECO or copper connectivity.
+        """
+        try:
+            be = resolve_backend(backend)
+            if be.name == "altium":
+                return await be.board_info()
+        except Exception as e:
+            return {"ok": False, "reason": str(e), "data_domain": "physical_pcb"}
         snap, reason = await _snapshot(backend)
         if snap is None:
             return {"ok": False, "reason": reason}
@@ -69,8 +80,10 @@ def register_eda_tools(mcp) -> None:
 
     @mcp.tool()
     async def list_components(backend: Optional[str] = None) -> dict[str, Any]:
-        """Every component on the open board (reference, value, footprint,
-        kind), from the active backend (or the one named by ``backend``)."""
+        """Components from the backend snapshot (reference, value, footprint, kind).
+
+        Altium reads the compiled schematic, not placed PCB components; use
+        pcb_get_components or pcb_get_pad_connectivity for physical objects."""
         snap, reason = await _snapshot(backend)
         if snap is None:
             return {"ok": False, "reason": reason}
@@ -78,6 +91,7 @@ def register_eda_tools(mcp) -> None:
                   "footprint": p.footprint, "kind": p.kind,
                   "dnp": p.dnp} for p in snap.parts]
         return {"ok": True, "source": snap.source, "count": len(comps),
+                "data_domain": "schematic" if snap.source == "altium" else "physical_pcb",
                 "components": comps}
 
     @mcp.tool()
@@ -121,8 +135,10 @@ def register_eda_tools(mcp) -> None:
 
     @mcp.tool()
     async def list_nets(backend: Optional[str] = None) -> dict[str, Any]:
-        """Every net on the open board with pin count and class (power / ground
-        / signal), from the active backend (or the one named by ``backend``)."""
+        """Snapshot nets with pin count and class (power / ground / signal).
+
+        Altium reads compiled schematic nets; these are not PCB Net objects.
+        Use pcb_get_pad_connectivity for physical pad assignments."""
         snap, reason = await _snapshot(backend)
         if snap is None:
             return {"ok": False, "reason": reason}
@@ -130,4 +146,5 @@ def register_eda_tools(mcp) -> None:
                  "is_power": n.is_power, "is_ground": n.is_ground}
                 for n in snap.nets]
         return {"ok": True, "source": snap.source, "count": len(nets),
+                "data_domain": "schematic" if snap.source == "altium" else "physical_pcb",
                 "nets": nets}

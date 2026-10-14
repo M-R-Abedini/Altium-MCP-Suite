@@ -14,7 +14,7 @@ Const
     // returns, mismatch means Altium is running a stale compiled script
     // (DelphiScript caches compiled units until the script project is
     // reopened or Altium is restarted).
-    SCRIPT_VERSION = '2026.10.11.lifecycle1';
+    SCRIPT_VERSION = '2026.10.13.transfer1';
     SUITE_SCRIPT_PROJECT = '__ALTIUM_MCP_SCRIPT_PROJECT__';
     SUITE_SCRIPT_CATALOG = '__ALTIUM_MCP_SCRIPT_CATALOG__';
 
@@ -629,11 +629,21 @@ Begin
     Except End;
 End;
 
-Procedure SaveProjectMembers(Project : IProject);
+Function IsLibraryDocument(Doc : IDocument) : Boolean;
+Var Ext : String;
+Begin
+    Ext := UpperCase(ExtractFileExt(Doc.DM_FullPath));
+    Result := (Ext = '.SCHLIB') Or (Ext = '.PCBLIB') Or (Ext = '.INTLIB')
+        Or (Ext = '.DBLIB') Or (Ext = '.SVNDBLIB');
+End;
+
+Procedure SaveProjectMembersWithLibraries(Project : IProject; IncludeLibraries : Boolean);
 Var
     J : Integer;
     Workspace : IWorkspace;
     Previous, Focused : IProject;
+    Doc : IDocument;
+    ServerDoc : IServerDocument;
 Begin
     ProjectDefinitionSaveDispatched := False;
     If Project = Nil Then Exit;
@@ -641,7 +651,8 @@ Begin
     If (Project.DM_ProjectFullPath = '') Or (Not FileExists(Project.DM_ProjectFullPath)) Then
     Begin
         For J := 0 To Project.DM_LogicalDocumentCount - 1 Do
-            SaveOneDocByDocRef(Project.DM_LogicalDocuments(J));
+            If IncludeLibraries Or (Not IsLibraryDocument(Project.DM_LogicalDocuments(J))) Then
+                SaveOneDocByDocRef(Project.DM_LogicalDocuments(J));
         Exit;
     End;
     { A project definition is not an IServerDocument. Save it through the
@@ -656,13 +667,16 @@ Begin
           it unless the native focused project is the requested one. }
         If Focused = Nil Then Exit;
         If UpperCase(Focused.DM_ProjectFullPath) <> UpperCase(Project.DM_ProjectFullPath) Then Exit;
-        { AD26's editor can have unsaved edits while ServerDoc.Modified is
-          false. Use the native standard-save process for target members;
-          do not manufacture changes or rely on that SDK flag to skip them. }
-        ResetParameters;
-        AddStringParameter('ObjectKind', 'ProjectDocuments');
-        AddStringParameter('SaveMode', 'Standard');
-        RunProcess('WorkspaceManager:SaveObject');
+        { Save only open target members. DoFileSave does not depend on the
+          unreliable Modified flag. Library writes require explicit opt-in. }
+        For J := 0 To Project.DM_LogicalDocumentCount - 1 Do
+        Begin
+            Doc := Project.DM_LogicalDocuments(J);
+            If Doc = Nil Then Continue;
+            If IsLibraryDocument(Doc) And (Not IncludeLibraries) Then Continue;
+            ServerDoc := Client.GetDocumentByPath(Doc.DM_FullPath);
+            If ServerDoc <> Nil Then ServerDoc.DoFileSave('');
+        End;
         ResetParameters;
         AddStringParameter('ObjectKind', 'FocusedProject');
         AddStringParameter('SaveMode', 'Standard');
@@ -670,6 +684,28 @@ Begin
         ProjectDefinitionSaveDispatched := True;
     Finally
         If Previous <> Nil Then Previous.DM_SetAsCurrentProject;
+    End;
+End;
+
+Procedure SaveProjectMembers(Project : IProject);
+Begin
+    SaveProjectMembersWithLibraries(Project, False);
+End;
+
+Function CountDirtySaveTargets(Project : IProject; IncludeLibraries : Boolean) : Integer;
+Var
+    J : Integer;
+    Doc : IDocument;
+    ServerDoc : IServerDocument;
+Begin
+    Result := 0;
+    For J := 0 To Project.DM_LogicalDocumentCount - 1 Do
+    Begin
+        Doc := Project.DM_LogicalDocuments(J);
+        If Doc = Nil Then Continue;
+        If IsLibraryDocument(Doc) And (Not IncludeLibraries) Then Continue;
+        ServerDoc := Client.GetDocumentByPath(Doc.DM_FullPath);
+        If (ServerDoc <> Nil) And ServerDoc.Modified Then Inc(Result);
     End;
 End;
 
@@ -948,10 +984,10 @@ Begin
 
     // Real projects + their member docs
     For I := 0 To Workspace.DM_ProjectCount - 1 Do
-        SaveProjectMembers(Workspace.DM_Projects(I));
+        SaveProjectMembersWithLibraries(Workspace.DM_Projects(I), True);
 
     // Free documents live inside the synthetic FreeDocumentsProject
-    Try SaveProjectMembers(Workspace.DM_FreeDocumentsProject); Except End;
+    Try SaveProjectMembersWithLibraries(Workspace.DM_FreeDocumentsProject, True); Except End;
 End;
 
 {..............................................................................}

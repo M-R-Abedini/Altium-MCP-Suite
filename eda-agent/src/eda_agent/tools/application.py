@@ -277,10 +277,7 @@ def register_application_tools(mcp):
         version_match = bool(ping.get("version_match"))
         if not answering:
             warnings.append(ping.get("message", "the bridge is not answering"))
-            next_step = (
-                "Start the polling loop: File > Run Script > Altium_API > "
-                "Dispatcher.pas > StartMCPServer."
-            )
+            next_step = ping.get("next_step") or "Inspect the bridge error before retrying; do not launch a concurrent script."
         elif not version_match:
             # Ranked above everything else on purpose. Every other answer
             # below is being produced by code that is not the code on
@@ -642,16 +639,24 @@ def register_application_tools(mcp):
                 "message": "Altium Designer is not running",
             }
 
-        result = bridge.ping_with_version()
+        failure = None
+        try:
+            result = await bridge.send_command_async("application.ping", timeout=3.0)
+        except Exception as exc:
+            result = None
+            failure = str(exc)
+        if result == "pong":
+            result = {"pong": True, "script_version": ""}
         bundled = _bundled_script_version()
-        if result is None:
+        if not isinstance(result, dict):
             return {
                 "success": False,
                 "mcp_server_version": _mcp_server_version,
                 "altium_script_version": None,
                 "bundled_script_version": bundled,
                 "version_match": False,
-                "message": "Altium script is not responding. Run StartMCPServer in Altium_API.PrjScr.",
+                "message": failure or "Altium returned an invalid health response",
+                "next_step": "Inspect Altium and the reported bridge error. Confirm any previous script has stopped before resetting ownership or retrying; do not start a second script.",
             }
 
         altium_ver = result.get("script_version") or ""
@@ -734,10 +739,17 @@ def register_application_tools(mcp):
         altium_ver: Optional[str] = None
         match = False
         round_trip_ms: Optional[float] = None
+        bridge_error = None
         if running:
             start = time.perf_counter()
-            ping = bridge.ping_with_version()
-            if ping is not None:
+            try:
+                ping = await bridge.send_command_async("application.ping", timeout=3.0)
+            except Exception as exc:
+                ping = None
+                bridge_error = str(exc)
+            if ping == "pong":
+                ping = {"pong": True, "script_version": ""}
+            if isinstance(ping, dict):
                 round_trip_ms = round((time.perf_counter() - start) * 1000.0, 1)
                 altium_ver = ping.get("script_version") or ""
                 match = bundled is not None and altium_ver == bundled
@@ -752,6 +764,7 @@ def register_application_tools(mcp):
             "workspace_dir": str(ws),
             "workspace_exists": ws_exists,
             "file_counts": counts,
+            "bridge_error": bridge_error,
         }
 
     @mcp.tool()

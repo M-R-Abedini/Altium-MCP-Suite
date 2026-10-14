@@ -160,8 +160,10 @@ Var
     ProjectPath : String;
     Workspace : IWorkspace;
     Project : IProject;
+    IncludeLibraries : Boolean;
 Begin
     ProjectPath := ExtractJsonValue(Params, 'project_path');
+    IncludeLibraries := LowerCase(ExtractJsonValue(Params, 'include_libraries')) = 'true';
 
     Workspace := GetWorkspace;
     If Workspace <> Nil Then
@@ -178,14 +180,14 @@ Begin
             { scratch project wrote every dirty document in the workspace,    }
             { client projects included. app_save_all is the tool for that,    }
             { and its name says so.                                           }
-            SaveProjectMembers(Project);
+            SaveProjectMembersWithLibraries(Project, IncludeLibraries);
             If Not ProjectDefinitionSaveDispatched Then
             Begin
                 Result := BuildErrorResponse(RequestId, 'SAVE_UNCONFIRMED',
                     'Could not dispatch a project-scoped definition save');
                 Exit;
             End;
-            If CountDirtyInProject(Project) > 0 Then
+            If CountDirtySaveTargets(Project, IncludeLibraries) > 0 Then
             Begin
                 Result := BuildErrorResponse(RequestId, 'SAVE_UNCONFIRMED',
                     'Project members remain modified after saving');
@@ -201,6 +203,7 @@ Begin
                 '{"success":true,"project_path":"'
                 + EscapeJsonString(Project.DM_ProjectFullPath) + '"'
                 + ',"document_count":' + IntToStr(Project.DM_LogicalDocumentCount)
+                + ',"libraries_included":' + BoolToJsonStr(IncludeLibraries)
                 + ',"variant_count":' + IntToStr(Project.DM_ProjectVariantCount) + '}');
         End
         Else

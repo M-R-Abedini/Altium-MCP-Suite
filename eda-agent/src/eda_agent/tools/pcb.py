@@ -312,6 +312,23 @@ _TERMINATION_DEFAULTS = {
 
 
 def register_pcb_tools(mcp):
+    @mcp.tool()
+    async def pcb_get_pad_connectivity(board_path: Optional[str] = None,
+                                       designator: str = "", limit: int = 0) -> dict[str, Any]:
+        """Read structured physical component/pad/net identities in one native call.
+
+        Includes free pads (component=""), netless pads (net=""), physical object
+        counts, board_path and explicit truncation. Zero limit means unlimited.
+        An explicit path must identify a loaded PcbDoc; it never falls back.
+        Use after executing ECO. These are pad assignments, not copper DRC.
+        """
+        if isinstance(limit, bool) or not isinstance(limit, int) or limit < 0:
+            return {"ok": False, "reason": "limit must be a nonnegative integer"}
+        params = {"designator": designator, "limit": limit}
+        if board_path:
+            params["board_path"] = board_path
+        return await get_bridge().send_command_async("pcb.get_pad_connectivity", params)
+
     """Register PCB tools with the MCP server."""
 
     @mcp.tool()

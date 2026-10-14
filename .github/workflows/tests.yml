@@ -29,6 +29,9 @@ jobs:
       - name: Disabled-window diagnosis and dialog completion
         run: python -m pytest tests/test_dialog_report.py tests/test_dialog_driver.py tests/test_detach_confirmation.py -q
         working-directory: eda-agent
+      - name: Physical PCB counts, placed models and ECO evidence
+        run: python -m pytest tests/test_pcb_transfer_reliability.py tests/test_backend_adapter_contract.py -q
+        working-directory: eda-agent
   portable-python:
     runs-on: ubuntu-latest
     timeout-minutes: 10

@@ -121,6 +121,27 @@ class KiCadBackend:
 class AltiumBackend:
     name = "altium"
 
+    async def board_info(self) -> dict[str, Any]:
+        """Physical PCB counts, never inferred from the schematic BOM."""
+        bridge, AltiumError = await self._bridge()
+        try:
+            raw = await bridge.send_command_async("pcb.get_pad_connectivity", {"limit": 1})
+        except AltiumError as e:
+            raise BackendUnavailableError(str(e)) from None
+        counts = raw.get("counts", {}) if isinstance(raw, dict) else {}
+        required = ("components", "nets", "pads", "tracks", "vias")
+        if (not isinstance(raw, dict) or raw.get("data_domain") != "physical_pcb"
+                or not isinstance(raw.get("board_path"), str) or not raw["board_path"].lower().endswith(".pcbdoc")
+                or not isinstance(counts, dict) or any(type(counts.get(k)) is not int or counts[k] < 0 for k in required)):
+            raise BackendUnavailableError("Native PCB counts are incomplete; no schematic fallback was used")
+        return {"ok": True, "source": "altium", "data_domain": "physical_pcb",
+                "board": raw["board_path"], "stats": {
+                    "part_count": counts["components"], "net_count": counts["nets"],
+                    "pad_count": counts["pads"], "tracks": counts["tracks"], "vias": counts["vias"]},
+                "net_classes": [], "net_classes_available": False,
+                "eco_verified": False,
+                "note": "Counts describe PCB objects. ECO and pad-net parity require separate post-execution verification."}
+
     async def _bridge(self):
         from ..bridge import get_bridge
         from ..bridge.exceptions import AltiumError

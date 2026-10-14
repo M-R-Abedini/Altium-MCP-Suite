@@ -155,8 +155,10 @@ def resolve_variant(variants, selector):
     return matches[0]
 
 
-async def verified_save(bridge, project_path=None):
+async def verified_save(bridge, project_path=None, *, include_libraries=False):
     params = {'project_path': project_path} if project_path else {}
+    if include_libraries:
+        params['include_libraries'] = True
     saved = await bridge.send_command_async('project.save', params)
     if not saved.get('success'):
         return saved

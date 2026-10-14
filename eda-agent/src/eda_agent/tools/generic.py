@@ -19,6 +19,31 @@ def register_generic_tools(mcp):
     """Register generic primitive tools with the MCP server."""
 
     @mcp.tool()
+    async def sch_set_placed_model_source(sheet_path: str, component_unique_id: str,
+                                          model_name: str, source_library: str,
+                                          replace_links: bool = False) -> dict[str, Any]:
+        """Set the source of one placed PCBLIB implementation, with native readback.
+
+        Selects a loaded sheet and a unique component UID, including multipart
+        ambiguity checks. source_library="" clears Location for project/installed
+        library lookup. Other paths must be absolute existing PcbLib files.
+        Duplicate links require explicit replace_links=True, leaving exactly one
+        link. Other model types and pin mapping remain intact. Does not save or
+        execute ECO; verified describes stored links, not footprint resolution.
+        """
+        if not sheet_path or not component_unique_id or not model_name:
+            return {"ok": False, "reason": "sheet_path, component_unique_id and model_name are required"}
+        if source_library:
+            from pathlib import Path
+            path = Path(source_library)
+            if not path.is_absolute() or path.suffix.lower() != ".pcblib" or not path.is_file():
+                return {"ok": False, "reason": "source_library must be empty or an existing absolute PcbLib path"}
+        return await get_bridge().send_command_async("generic.set_placed_model_source", {
+            "sheet_path": sheet_path, "component_unique_id": component_unique_id,
+            "model_name": model_name, "source_library": source_library,
+            "replace_links": replace_links})
+
+    @mcp.tool()
     async def obj_query(
         object_type: str,
         properties: str,
@@ -462,6 +487,8 @@ def register_generic_tools(mcp):
             Dictionary confirming the zoom action
         """
         bridge = get_bridge()
+        if action not in ("fit", "selection"):
+            return {"ok": False, "reason": "action must be fit or selection"}
         result = await bridge.send_command_async(
             "generic.zoom", {"action": action}
         )

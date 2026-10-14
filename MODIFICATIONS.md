@@ -1,5 +1,10 @@
 # Local changes
 
+## Added 2026-10-14
+
+- Physical PCB totals and bulk component/pad/net readback replace schematic-derived board counts. Added placed-model source set/clear with native before/after readback, library-save opt-in, focused native fit, and exact ECO evidence export with incomplete-grid reporting.
+- Unconfirmed health/startup timeouts cannot authorize a second script. Desktop barriers propagate faults; explicit manual-stop recovery archives stale markers. Process-exit recovery preserves unbound newer sessions. Native acceptance and remaining limits are recorded in [PCB transfer review](docs/review/PCB_TRANSFER_2026-10-14.md). Script version: `2026.10.13.transfer1`.
+
 ## Added 2026-10-11
 
 - Native script `2026.10.11.lifecycle1`: close design projects once outside the polling loop, with confirmed shutdown, focused-owner checks and request-specific native readback; retain ownership on modal/timeout without replay. Unregister deleted components and invalidate compiled caches to remove multipart ghosts. Require an editor-thread WM_NULL round trip after final completion before engine handover. Forced compile saves only its target project. Native Standard project-member save replaces the unreliable dirty-flag optimization; it persists edits missed by the SDK flag but can rewrite clean members. See the [native acceptance evidence and limits](docs/review/DISPLAY_AUDIO_2026-10-11.md).
