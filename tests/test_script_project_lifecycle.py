@@ -42,6 +42,51 @@ def test_reload_tracks_old_and_new_without_replacing_sources(runtime):
     assert catalog.stat().st_mtime_ns == stamp
 
 
+def test_native_workspace_is_embedded_and_changes_generation(runtime, monkeypatch):
+    folder, _ = runtime
+    first_work=folder/'first workspace'
+    monkeypatch.setenv('EDA_AGENT_WORKSPACE',str(first_work))
+    first=suite_config.prepare_runtime()
+    source=(first['eda'].parent/'Main.pas').read_text()
+    assert str(first_work).replace("'","''") in source
+    assert '__ALTIUM_MCP_WORKSPACE__' not in source
+    second_work=folder/'second workspace'
+    monkeypatch.setenv('EDA_AGENT_WORKSPACE',str(second_work))
+    second=suite_config.prepare_runtime()
+    assert first['eda']!=second['eda'] and first['legacy']==second['legacy']
+    source=(second['eda'].parent/'Main.pas').read_text()
+    assert str(second_work).replace("'","''") in source
+
+
+def test_unreferenced_generated_monolith_does_not_change_native_identity(runtime):
+    folder, root = runtime
+    first=suite_config.prepare_runtime()
+    mono=root/'eda-agent/scripts/altium/Altium_MCP.pas'
+    mono.write_text('{ a different local monolithic build }')
+    assert suite_config.prepare_runtime()==first
+    assert not (first['eda'].parent/'Altium_MCP.pas').exists()
+    assert 'Altium_MCP.pas' not in json.loads((first['eda'].parent/registry.MARKER).read_text())['files']
+
+
+def test_suite_uses_private_pointer_without_overriding_explicit_test_pointer(runtime, monkeypatch):
+    folder, _ = runtime
+    import os
+    # configure_environment sets these directly; reserve undo entries so a
+    # test's generated script/workspace cannot leak into subsequent tests.
+    for name in ('ALTIUM_MCP_EDA_SCRIPT','ALTIUM_MCP_LEGACY_SCRIPT','ALTIUM_MCP_LEGACY_EXCHANGE'):
+        monkeypatch.setenv(name,os.environ.get(name,''))
+    monkeypatch.setenv('EDA_AGENT_WORKSPACE',str(folder/'workspace'))
+    exe=folder/'X2.EXE';exe.parent.mkdir(parents=True,exist_ok=True);exe.touch()
+    monkeypatch.setenv('ALTIUM_EXE',str(exe))
+    monkeypatch.delenv('EDA_AGENT_POINTER_FILE',raising=False)
+    suite_config.configure_environment()
+    assert Path(__import__('os').environ['EDA_AGENT_POINTER_FILE'])==folder/'workspace-path.txt'
+    explicit=folder/'test-pointer'
+    monkeypatch.setenv('EDA_AGENT_POINTER_FILE',str(explicit))
+    suite_config.configure_environment()
+    assert Path(__import__('os').environ['EDA_AGENT_POINTER_FILE'])==explicit
+
+
 def test_changed_generated_file_is_preserved_and_excluded(runtime):
     folder, _ = runtime
     project = suite_config.prepare_runtime()['eda']

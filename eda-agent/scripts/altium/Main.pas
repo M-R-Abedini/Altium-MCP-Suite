@@ -14,9 +14,10 @@ Const
     // returns, mismatch means Altium is running a stale compiled script
     // (DelphiScript caches compiled units until the script project is
     // reopened or Altium is restarted).
-    SCRIPT_VERSION = '2026.10.13.transfer1';
+    SCRIPT_VERSION = '2026.10.14.identity1';
     SUITE_SCRIPT_PROJECT = '__ALTIUM_MCP_SCRIPT_PROJECT__';
     SUITE_SCRIPT_CATALOG = '__ALTIUM_MCP_SCRIPT_CATALOG__';
+    SUITE_SCRIPT_WORKSPACE = '__ALTIUM_MCP_WORKSPACE__';
 
     // How far up the mechanical layers a pair tidy looks. Altium allows 1024,
     // and checking every combination of those is a million probes for a stack
@@ -1009,6 +1010,14 @@ Var
     F : TextFile;
     Line : String;
 Begin
+    { Generated suite scripts never depend on the shared ProgramData pointer. }
+    If (SUITE_SCRIPT_WORKSPACE <> '') And (Pos('__ALTIUM_MCP_', SUITE_SCRIPT_WORKSPACE) <> 1) Then
+    Begin
+        Line := SUITE_SCRIPT_WORKSPACE;
+        If Copy(Line, Length(Line), 1) <> '\' Then Line := Line + '\';
+        Result := Line;
+        Exit;
+    End;
     Result := '';
     PointerFile := 'C:\ProgramData\eda-agent\workspace-path.txt';
     Try

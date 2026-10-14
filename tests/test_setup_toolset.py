@@ -32,6 +32,8 @@ def test_wrapper_selects_surface_before_import_and_preserves_coordination(monkey
 
 @pytest.mark.parametrize('mode', ['full', 'minimal'])
 def test_generated_clients_select_the_same_toolset(tmp_path, monkeypatch, mode):
+    monkeypatch.setenv('ALTIUM_MCP_RUNTIME',str(tmp_path/'runtime'))
+    monkeypatch.setenv('EDA_AGENT_WORKSPACE',str(tmp_path/'workspace'))
     executable = tmp_path / 'X2.EXE'; executable.touch()
     monkeypatch.setattr(setup, '__file__', str(tmp_path / 'setup.py'))
     monkeypatch.setattr(setup.suite_config, 'configure_environment', lambda: {'eda': 'eda.PrjScr', 'legacy': 'legacy.PrjScr'})

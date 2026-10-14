@@ -95,8 +95,21 @@ def prepare_runtime():
     projects = {}
     for kind, source in sources.items():
         files = sorted(p for p in source.iterdir() if p.suffix.lower() in {'.pas', '.dfm', '.prjscr'})
+        if kind == 'eda':
+            # build.py's ignored monolithic output is not compiled by the
+            # modular project. Different local builds must not cause two
+            # clients with identical sources to keep restarting each other.
+            template = source / 'Altium_API.PrjScr'
+            references_mono = (template.is_file() and any(
+                line.strip().casefold() == 'documentpath=altium_mcp.pas'
+                for line in template.read_text(encoding='utf-8-sig').splitlines()))
+            if not references_mono:
+                files = [p for p in files if p.name.casefold() != 'altium_mcp.pas']
         contents = {path: path.read_bytes() for path in files}
+        workspace = workspace_dir()
         digest = hashlib.sha256(('script-project-lifecycle-v1:' + str(exchange)).encode())
+        if kind == 'eda':
+            digest.update(('workspace:' + str(workspace)).encode())
         for path in files:
             digest.update(path.name.encode())
             digest.update(contents[path])
@@ -111,7 +124,8 @@ def prepare_runtime():
             if kind == 'eda' and path.name == 'Main.pas':
                 text = data.decode('utf-8')
                 for token, value in [('__ALTIUM_MCP_SCRIPT_PROJECT__', project),
-                                     ('__ALTIUM_MCP_SCRIPT_CATALOG__', runtime / CATALOG)]:
+                                     ('__ALTIUM_MCP_SCRIPT_CATALOG__', runtime / CATALOG),
+                                     ('__ALTIUM_MCP_WORKSPACE__', workspace)]:
                     if text.count(token) != 1:
                         raise RuntimeError(f'{path} must contain exactly one {token} placeholder.')
                     text = text.replace(token, str(value).replace("'", "''"))
@@ -140,6 +154,9 @@ def configure_environment():
     os.environ['ALTIUM_MCP_RUNTIME'] = str(runtime_dir())
     os.environ['ALTIUM_MCP_EDA_SCRIPT'] = str(scripts['eda'])
     os.environ.setdefault('EDA_AGENT_WORKSPACE', str(workspace_dir()))
+    # Suite scripts contain their workspace. Upstream workspace preparation
+    # must not repoint another installation through the machine-global file.
+    os.environ.setdefault('EDA_AGENT_POINTER_FILE', str(runtime_dir() / 'workspace-path.txt'))
     os.environ.setdefault('ALTIUM_EXE', str(altium_exe()))
     os.environ['ALTIUM_MCP_LEGACY_SCRIPT'] = str(scripts['legacy'])
     os.environ['ALTIUM_MCP_LEGACY_EXCHANGE'] = str(runtime_dir() / 'legacy-exchange')

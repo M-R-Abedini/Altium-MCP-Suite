@@ -2,6 +2,8 @@
 
 ## Added 2026-10-14
 
+- Cross-client ownership (`2026.10.14.identity1`): Windows user/session mutex plus durable editor/runtime binding; foreign runtimes and multiple editors are refused before native dispatch. Generated scripts embed their workspace and suite pointer files are private. Antigravity/Codex environments were aligned; three two-client native read/Detach loops passed without design-file changes. See [shared engine review](docs/review/SHARED_ENGINE_2026-10-14.md) and [prioritized remaining work](docs/review/RELIABILITY_BACKLOG.md).
+
 - Physical PCB totals and bulk component/pad/net readback replace schematic-derived board counts. Added placed-model source set/clear with native before/after readback, library-save opt-in, focused native fit, and exact ECO evidence export with incomplete-grid reporting.
 - Unconfirmed health/startup timeouts cannot authorize a second script. Desktop barriers propagate faults; explicit manual-stop recovery archives stale markers. Process-exit recovery preserves unbound newer sessions. Native acceptance and remaining limits are recorded in [PCB transfer review](docs/review/PCB_TRANSFER_2026-10-14.md). Script version: `2026.10.13.transfer1`.
 - Iterative live review corrected stock split-button recognition and text setters that could rename labels. Health errors are preserved through asynchronous checks; native dirty-flag detection is explicitly incomplete. Three start/read/Detach cycles passed after verified manual Stop and marker recovery.
