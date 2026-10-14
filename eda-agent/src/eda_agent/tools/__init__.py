@@ -33,6 +33,7 @@ from .render import register_render_tools
 from .audit import register_audit_tools
 from .route import register_route_tools
 from .connectivity_contracts import register_connectivity_contract_tools
+from .shared_reads import register_shared_read_tools
 from .easyeda import register_easyeda_tools
 from .kicad import register_kicad_tools
 from .eda import register_eda_tools
@@ -199,6 +200,7 @@ def register_all_tools(mcp):
     register_audit_tools(mcp)
     register_route_tools(mcp)
     register_connectivity_contract_tools(mcp)
+    register_shared_read_tools(mcp)
 
 
 def register_backend(
@@ -327,5 +329,6 @@ __all__ = [
     "register_audit_tools",
     "register_route_tools",
     "register_connectivity_contract_tools",
+    "register_shared_read_tools",
     "register_kicad_tools",
 ]

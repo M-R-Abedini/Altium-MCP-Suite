@@ -23,7 +23,8 @@ configure_cli(sys.argv[1:])
 sys.path.insert(0, str(Path(__file__).resolve().parent / 'eda-agent' / 'src'))
 from suite_config import configure_environment
 configure_environment()
-from bridge_coordination import engine_lock, background_engine_lock, ensure_eda, stop_eda, close_project_once
+from bridge_coordination import (engine_lock, async_engine_lock, run_engine_worker,
+                                 background_engine_lock, ensure_eda, stop_eda, close_project_once)
 from eda_agent.bridge.altium_bridge import AltiumBridge
 
 original = AltiumBridge._execute_command
@@ -40,24 +41,58 @@ def coordinated(self, command, params, timeout):
             # it cannot hold the shared lock for five seconds ahead of a user.
             return original(self, command, params, min(timeout, 1.0))
     with engine_lock():
-        if command == 'application.stop_server':
-            # A stop response is written before DelphiScript returns. Wait
-            # for session-bound final shutdown evidence, without relaunching.
-            stop_eda()
-            return {'success': True, 'engine_release_confirmed': True}
-        health = ensure_eda(self, original)
-        if command == 'project.close':
-            target = dict(params)
-            if not target.get('project_path'):
-                target['project_path'] = original(self, 'project.get_focused', {}, timeout)['project_path']
-            if not target['project_path'].lower().endswith('.prjscr'):
-                return close_project_once(target, timeout)
-        if command == 'application.ping' and not params:
-            # The foreground preflight already answered this exact query.
-            return health
-        return original(self, command, params, timeout)
+        return dispatch_locked(self, command, params, timeout)
+
+
+def dispatch_locked(self, command, params, timeout):
+    if command == 'application.stop_server':
+        # A stop response is written before DelphiScript returns. Wait
+        # for session-bound final shutdown evidence, without relaunching.
+        stop_eda()
+        return {'success': True, 'engine_release_confirmed': True}
+    health = ensure_eda(self, original)
+    if command == 'suite.capture_snapshot':
+        import time
+        from bridge_coordination import _guard_editor, _session_started_at
+        from suite_reads import capture
+        board_path = params.get('board_path', '')
+        if not Path(board_path).is_absolute() or not board_path.lower().endswith('.pcbdoc'):
+            raise ValueError('An absolute loaded PcbDoc path is required')
+        state = _guard_editor()
+        editor = dict(pid=state['pid'], started=_session_started_at(state['pid']))
+        started = time.time()
+        # One native iterator pass; no other client's command can run
+        # between sections and no focus-dependent second read is needed.
+        data = original(self, 'pcb.get_pad_connectivity',
+                        dict(board_path=board_path, include_components=True, limit=0), timeout)
+        return capture(data, started, editor, health)
+    if command == 'project.close':
+        target = dict(params)
+        if not target.get('project_path'):
+            target['project_path'] = original(self, 'project.get_focused', {}, timeout)['project_path']
+        if not target['project_path'].lower().endswith('.prjscr'):
+            return close_project_once(target, timeout)
+    if command == 'application.ping' and not params:
+        # The foreground preflight already answered this exact query.
+        return health
+    return original(self, command, params, timeout)
+
+
+async def coordinated_async(self, command, params=None, timeout=None):
+    from eda_agent.bridge.exceptions import AltiumNotRunningError
+    if not self.is_altium_running():
+        raise AltiumNotRunningError()
+    self._ensure_keepalive()
+    if timeout is None:
+        timeout = self.config.poll_timeout
+    # Waiting is cancellable. After dispatch, cancellation drains the native
+    # worker before releasing either admission or the Windows engine mutex.
+    async with async_engine_lock():
+        return await run_engine_worker(lambda: dispatch_locked(self, command, params or {}, timeout))
 
 AltiumBridge._execute_command = coordinated
+AltiumBridge.send_command_async = coordinated_async
+AltiumBridge.suite_shared_reads = True
 from eda_agent.server import main
 if __name__ == '__main__':
     main()

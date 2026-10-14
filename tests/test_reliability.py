@@ -68,11 +68,13 @@ def load_function(path,name,namespace):
 
 class WrapperTests(unittest.TestCase):
     def namespace(self):
-        return {'threading':threading,'engine_lock':contextlib.nullcontext,
+        namespace = {'threading':threading,'engine_lock':contextlib.nullcontext,
                 'background_engine_lock':lambda:contextlib.nullcontext(True),
                 'stop_eda':MagicMock(),
                 'close_project_once':MagicMock(return_value={'closed':True}),
                 'ensure_eda':MagicMock(),'original':MagicMock(return_value={'ok':True})}
+        load_function(ROOT/'eda_stdio.py', 'dispatch_locked', namespace)
+        return namespace
     def test_design_close_uses_released_one_shot_instead_of_polling(self):
         n=self.namespace();fn=load_function(ROOT/'eda_stdio.py','coordinated',n)
         params={'project_path':'scratch.PrjPcb','save':False}

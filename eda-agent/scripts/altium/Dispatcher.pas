@@ -281,8 +281,14 @@ Begin
     { Surface the error message to the dashboard (inline detail row + last- }
     { error banner) when the response is success=false. ExtractJsonValue   }
     { handles the nested error/code/message path via two successive calls. }
-    DashIsError := (ResultTag = 'EXCEPTION');
-    DashErrPayload := ExtractJsonValue(ResponseContent, 'error');
+    { success precedes data in the envelope. Looking for error on every
+      successful reply walks the entire potentially huge data container in
+      DelphiScript AFTER Python has received its answer, blocking the next
+      command's health probe. Parse error details only on failed envelopes. }
+    DashIsError := (ResultTag = 'EXCEPTION') Or
+                   (ExtractJsonValue(ResponseContent, 'success') = 'false');
+    DashErrPayload := '';
+    If DashIsError Then DashErrPayload := ExtractJsonValue(ResponseContent, 'error');
     DashDetail := '';
     DashCode := '';
     If (DashErrPayload <> '') And (DashErrPayload <> 'null') Then
