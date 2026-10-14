@@ -69,8 +69,73 @@ def test_uncertain_stop_still_requires_both_probes(session, damage):
         marker = json.loads((work / filename).read_text()); marker[key] = value
         (work / filename).write_text(json.dumps(marker))
     probe = MagicMock(side_effect=[TimeoutError(), TimeoutError(), {'pong': True}])
+    if damage == 'different_process_start':
+        coord._ensure(probe)
+        assert probe.call_args_list == [((2.0,),), ((3.0,),), ((2.0,),)]
+        launch.assert_called_once()
+    else:
+        with pytest.raises((TimeoutError, RuntimeError)):
+            coord._ensure(probe)
+        launch.assert_not_called()
+
+
+def test_live_session_ping_timeouts_never_launch_a_second_script(session):
+    work, launch = session
+    (work / 'bridge-stopped.json').unlink()
+    (work / 'bridge-ready.json').write_text('{"session_id":"native-1","script_version":"v1"}')
+    probe = MagicMock(side_effect=TimeoutError('slow editor'))
+    with pytest.raises(TimeoutError, match='shutdown is not confirmed'):
+        coord._ensure(probe)
+    assert probe.call_count == 2
+    launch.assert_not_called()
+    assert (work / 'bridge-ready.json').exists()
+
+
+def test_exited_editor_retires_only_matching_native_session(session, monkeypatch):
+    import psutil
+    work, launch = session
+    (work/'bridge-ready.json').write_text('{"session_id":"native-1","script_version":"v1"}')
+    monkeypatch.setattr(coord, '_session_started_at', lambda pid: 101)
+    probe = MagicMock(side_effect=[TimeoutError(), TimeoutError(), {'pong': True}])
     coord._ensure(probe)
-    assert probe.call_args_list == [((2.0,),), ((3.0,),), ((2.0,),)]
+    launch.assert_called_once()
+
+
+def test_exited_owner_cannot_retire_a_newer_unbound_ready(session, monkeypatch):
+    work, launch = session
+    (work/'bridge-ready.json').write_text('{"session_id":"newer","script_version":"v1"}')
+    monkeypatch.setattr(coord, '_session_started_at', lambda pid: 101)
+    with pytest.raises(TimeoutError, match='shutdown is not confirmed'):
+        coord._ensure(MagicMock(side_effect=TimeoutError()))
+    launch.assert_not_called()
+    assert json.loads((work/'bridge-ready.json').read_text())['session_id'] == 'newer'
+
+
+@pytest.mark.parametrize('binding', [{'pid':77, 'session_started_at':100},
+                                   {'pid':88, 'session_started_at':100}, {}])
+def test_expired_failed_startup_is_not_permission_to_retry(session, binding):
+    work, launch = session
+    (work / 'bridge-stopped.json').unlink()
+    (work / 'bridge-owner.json').unlink()
+    coord.LAUNCH_STATE.write_text(json.dumps({'attempted_at': time.time()-100, **binding}))
+    with pytest.raises(TimeoutError, match='shutdown is not confirmed'):
+        coord._ensure(MagicMock(side_effect=TimeoutError()))
+    launch.assert_not_called()
+
+
+def test_idle_release_during_failed_probes_is_rechecked_before_launch(session):
+    work, launch = session
+    stopped = (work / 'bridge-stopped.json').read_text()
+    (work / 'bridge-stopped.json').unlink()
+    calls = []
+    def probe(timeout):
+        calls.append(timeout)
+        if len(calls) == 2:
+            (work / 'bridge-stopped.json').write_text(stopped)
+        if len(calls) <= 2:
+            raise TimeoutError('release raced the ping')
+        return {'pong': True}
+    assert coord._ensure(probe) == {'pong': True}
     launch.assert_called_once()
 
 

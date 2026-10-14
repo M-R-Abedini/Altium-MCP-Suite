@@ -48,7 +48,7 @@ class CoordinationTests(unittest.TestCase):
     def test_failed_launch_cooldown_prevents_duplicate_process(self):
         import json,time
         coord.LAUNCH_STATE.write_text(json.dumps({'attempted_at':time.time()}))
-        with self.assertRaisesRegex(TimeoutError,'already attempted'):
+        with self.assertRaisesRegex(TimeoutError,'shutdown is not confirmed'):
             coord._ensure(MagicMock(side_effect=TimeoutError()))
         self.launch.assert_not_called()
     def test_legacy_handover_refuses_running_handler(self):

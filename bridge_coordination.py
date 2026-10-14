@@ -130,6 +130,36 @@ def _session_started_at(pid):
     import psutil
     return psutil.Process(pid).create_time()
 
+
+def _owner_process_ended(owner):
+    """A different foreground PID alone does not prove the old editor exited."""
+    import psutil
+    pid, started = owner.get('pid'), owner.get('session_started_at')
+    try:
+        if type(pid) is not int or pid <= 0 or type(started) not in (int, float) or not math.isfinite(started) or started <= 0:
+            return False
+        return _session_started_at(pid) != started
+    except psutil.NoSuchProcess:
+        return True
+    except Exception:
+        # Inspection failure is uncertainty, never permission to relaunch.
+        return False
+
+
+def _retire_restarted_session():
+    owner = _read_marker('bridge-owner.json')
+    if not _owner_process_ended(owner):
+        return
+    # Never erase a ready file from an unbound/newer native session.
+    for name in ('bridge-ready.json', 'bridge-stopped.json'):
+        if (WORKSPACE / name).exists():
+            marker = _read_marker(name)
+            if any(not owner.get(k) or marker.get(k) != owner[k] for k in ('session_id', 'script_version')):
+                return
+    for name in ('bridge-ready.json', 'bridge-stopped.json', 'bridge-owner.json'):
+        (WORKSPACE / name).unlink(missing_ok=True)
+    log_event('retired_exited_editor_session', pid=owner['pid'])
+
 def _legacy_marker():
     return RUNTIME / 'legacy-operation.json'
 
@@ -256,11 +286,46 @@ def _editor_state():
     import win32gui
     import win32process
     editors = []
-    def visit(hwnd, _):
+    def visit(hwnd, en=None):
         if win32gui.IsWindowVisible(hwnd) and win32gui.GetClassName(hwnd) == 'TDocumentForm':
-            editors.append((hwnd, win32process.GetWindowThreadProcessId(hwnd)[1]))
+            pid = win32process.GetWindowThreadProcessId(hwnd)[1]
+            if en is None:
+                en = bool(win32gui.IsWindowEnabled(hwnd))
+            editors.append((hwnd, pid, en))
         return True
-    win32gui.EnumWindows(visit, None)
+    try:
+        import win32service, ctypes
+        from ctypes import wintypes
+        desk = win32service.OpenDesktop('Default', 0, False, 0x41)  # READOBJECTS | ENUMERATE
+        try:
+            user32 = ctypes.WinDLL('user32', use_last_error=True)
+            callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+            user32.EnumDesktopWindows.argtypes = [wintypes.HANDLE, callback_type, wintypes.LPARAM]
+            user32.EnumDesktopWindows.restype = wintypes.BOOL
+            user32.IsWindowEnabled.argtypes = [wintypes.HWND]
+            user32.IsWindowEnabled.restype = wintypes.BOOL
+            failures = []
+            @callback_type
+            def enum_cb(h, _):
+                try:
+                    visit(h, bool(user32.IsWindowEnabled(h)))
+                except Exception as error:
+                    failures.append(error)
+                    return False
+                return True
+            ctypes.set_last_error(0)
+            if not user32.EnumDesktopWindows(int(desk), enum_cb, 0) or failures:
+                raise RuntimeError('Editor window enumeration failed')
+        finally:
+            desk.CloseDesktop()
+    except Exception:
+        editors.clear()
+        win32gui.EnumWindows(visit, None)
+    if not editors:
+        try:
+            win32gui.EnumWindows(visit, None)
+        except Exception:
+            pass
     fg = win32gui.GetForegroundWindow()
     pid = win32process.GetWindowThreadProcessId(fg)[1] if fg else None
     active = [e for e in editors if e[1] == pid]
@@ -268,23 +333,62 @@ def _editor_state():
         editors = active
     if len(editors) != 1:
         raise RuntimeError('Expected one Altium editor; found %d. No script was launched.' % len(editors))
-    hwnd, pid = editors[0]
-    return {'pid': pid, 'hwnd': hwnd, 'blocked': not win32gui.IsWindowEnabled(hwnd)}
+    hwnd, pid, en = editors[0]
+    return {'pid': pid, 'hwnd': hwnd, 'blocked': not en}
 
 
 def _ui_thread_barrier(hwnd, timeout_ms):
     """Read-only WM_NULL round trip; never sends a command or user input."""
     import ctypes
     from ctypes import wintypes
-    send = ctypes.WinDLL('user32', use_last_error=True).SendMessageTimeoutW
-    send.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM,
-                     wintypes.LPARAM, wintypes.UINT, wintypes.UINT,
-                     ctypes.POINTER(ctypes.c_size_t)]
-    send.restype = wintypes.LPARAM
-    result = ctypes.c_size_t()
-    # BLOCK | ABORTIFHUNG | ERRORONEXIT. WM_NULL has no side effects.
-    if not send(hwnd, 0, 0, 0, 0x23, timeout_ms, ctypes.byref(result)):
-        raise TimeoutError('Altium UI thread has not returned after native completion; engine ownership retained')
+    import threading
+
+    errors, completed = [], threading.Event()
+    def worker():
+        desk, original, attached = None, None, False
+        try:
+            import win32service, win32api
+            user32 = ctypes.WinDLL('user32', use_last_error=True)
+            user32.GetThreadDesktop.argtypes = [wintypes.DWORD]
+            user32.GetThreadDesktop.restype = wintypes.HANDLE
+            user32.SetThreadDesktop.argtypes = [wintypes.HANDLE]
+            user32.SetThreadDesktop.restype = wintypes.BOOL
+            original = user32.GetThreadDesktop(win32api.GetCurrentThreadId())
+            if not original:
+                raise ctypes.WinError(ctypes.get_last_error())
+            # Only this fresh thread attaches; no desktop switch or UI input.
+            desk = win32service.OpenDesktop('Default', 0, False, 0xC1)
+            if not user32.SetThreadDesktop(int(desk)):
+                raise ctypes.WinError(ctypes.get_last_error())
+            attached = True
+            send = user32.SendMessageTimeoutW
+            send.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM,
+                             wintypes.LPARAM, wintypes.UINT, wintypes.UINT,
+                             ctypes.POINTER(ctypes.c_size_t)]
+            send.restype = wintypes.LPARAM
+            result = ctypes.c_size_t()
+            ctypes.set_last_error(0)
+            # BLOCK | ABORTIFHUNG | ERRORONEXIT. WM_NULL has no side effects.
+            if not send(hwnd, 0, 0, 0, 0x23, timeout_ms, ctypes.byref(result)):
+                raise OSError(ctypes.get_last_error(), 'WM_NULL return barrier failed')
+        except Exception as error:
+            errors.append(error)
+        finally:
+            try:
+                if attached and not user32.SetThreadDesktop(original):
+                    raise ctypes.WinError(ctypes.get_last_error())
+                if desk is not None:
+                    desk.CloseDesktop()
+            except Exception as error:
+                errors.append(error)
+            completed.set()
+
+    t = threading.Thread(target=worker, daemon=True)
+    t.start()
+    t.join(timeout_ms / 1000 + 2)
+    if not completed.is_set() or errors:
+        detail = str(errors[0]) if errors else 'barrier worker timed out'
+        raise TimeoutError('Altium UI return could not be confirmed; engine ownership retained: ' + detail)
 
 
 def _confirm_editor_return(state):
@@ -356,6 +460,7 @@ def _file_ping(timeout, *, command_pending=False):
 
 def _ensure(probe):
     state = _guard_editor()
+    _retire_restarted_session()
     if _handler_busy():
         # A live handler is not a dead loop. Do not interrupt or replay it.
         log_event('busy_handler_no_restart')
@@ -382,9 +487,27 @@ def _ensure(probe):
             return result
         except TimeoutError:
             pass
-    _guard_editor()
+    state = _guard_editor()
     if _handler_busy():
         raise RuntimeError('An EDA handler started during the health check. No new command was queued.')
+    # A slow ping is not evidence that the native scripting engine is free.
+    # Idle shutdown may have completed DURING either probe: reread its proof.
+    released = _cleanly_released(state)
+    if released:
+        _confirm_editor_return(state)
+    else:
+        owner = _read_marker('bridge-owner.json')
+        old_editor = _owner_process_ended(owner)
+        known_current = (owner.get('pid') == state['pid'] and
+                         owner.get('session_started_at') == _session_started_at(state['pid']))
+        uncertain_markers = (not old_editor and any((WORKSPACE / name).exists() for name in
+                             ('bridge-owner.json', 'bridge-stopped.json')))
+        attempted = _launch_attempted_at()
+        pending_launch = json.loads(LAUNCH_STATE.read_text(encoding='utf-8')) if attempted else {}
+        unconfirmed_start = bool(pending_launch) and not _owner_process_ended(pending_launch)
+        if known_current or uncertain_markers or unconfirmed_start or (WORKSPACE / 'bridge-ready.json').exists():
+            log_event('unconfirmed_shutdown_no_restart', pid=state['pid'])
+            raise TimeoutError('EDA did not answer, but native shutdown is not confirmed. No second script was launched; inspect Altium or wait for confirmed idle release.')
     if time.time() - _launch_attempted_at() < 45:
         raise TimeoutError('A bridge startup was already attempted recently. No duplicate Altium process was launched.')
     script = SCRIPT or prepare_runtime()['eda']
@@ -396,7 +519,8 @@ def _ensure(probe):
     LAUNCH_STATE.parent.mkdir(parents=True, exist_ok=True)
     launch_temp = LAUNCH_STATE.with_name(LAUNCH_STATE.name + '.' + uuid.uuid4().hex + '.tmp')
     try:
-        launch_temp.write_text(json.dumps({'attempted_at': time.time()}), encoding='utf-8')
+        launch_temp.write_text(json.dumps({'attempted_at': time.time(), 'pid': state['pid'],
+                                          'session_started_at': _session_started_at(state['pid'])}), encoding='utf-8')
         launch_temp.replace(LAUNCH_STATE)
     finally:
         launch_temp.unlink(missing_ok=True)
@@ -584,6 +708,15 @@ def reset_after_manual_stop():
         (RUNTIME / 'legacy-exchange' / 'request.json').unlink(missing_ok=True)
         (WORKSPACE / 'project-close-request.json').unlink(missing_ok=True)
         LAUNCH_STATE.unlink(missing_ok=True)
+        # This explicit assertion also retires stale polling-session evidence.
+        # Archive it for diagnosis; a timeout never calls this reset.
+        archive = WORKSPACE / ('manual-stop-' + uuid.uuid4().hex)
+        for name in ('bridge-ready.json', 'bridge-owner.json', 'bridge-stopped.json'):
+            path = WORKSPACE / name
+            if path.exists():
+                archive.mkdir(exist_ok=True)
+                path.replace(archive / name)
+        (WORKSPACE / 'stop').unlink(missing_ok=True)
         log_event('manual_ownership_reset', pid=state['pid'])
 
 if __name__ == '__main__':
