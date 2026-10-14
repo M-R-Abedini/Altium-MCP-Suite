@@ -110,7 +110,10 @@ _NOT_BUTTON_CLASSES = ("check", "radio", "group", "docbar",
 #: where a checkbox and a pushbutton share one class name and are told
 #: apart by these bits alone.
 _BS_TYPEMASK = 0x0000000F
-_BS_PRESSABLE = (0x0, 0x1, 0x8, 0xB)   # push, default-push, user, ownerdraw
+_BS_PRESSABLE = (0x0, 0x1, 0x8, 0xB, 0xC, 0xD, 0xE, 0xF)
+# push/default-push, user, ownerdraw, split/default-split, command/default-command
+# File pickers use default split buttons for Open. Check/radio/group styles
+# remain excluded; a caption match still selects the action explicitly.
 
 
 #: Kill switch. UI automation is ON by default, because for a great deal

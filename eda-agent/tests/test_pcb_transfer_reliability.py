@@ -4,8 +4,8 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 import pytest
 from eda_agent.core.backends import AltiumBackend, BackendUnavailableError
-from eda_agent.tools import eda, pcb, generic, project, application
-from eda_agent.ui import eco_report, menu
+from eda_agent.tools import eda, pcb, generic, project, application, uiauto
+from eda_agent.ui import eco_report, menu, windows, controls
 
 
 def register(module):
@@ -157,6 +157,53 @@ async def test_health_preserves_ownership_error_and_never_advises_second_launch(
     assert not context['bridge_answering'] and 'shutdown is not confirmed' in context['warnings'][0]
     assert 'do not start a second script' in context['next_step']
     assert 'Run Script' not in context['next_step']
+
+
+@pytest.mark.parametrize('style', [0xC, 0xD, 0xE, 0xF])
+def test_file_picker_split_and_command_buttons_remain_pressable(style):
+    control = windows.Control(hwnd=1, class_name='Button', text='&Open', style=0x50000000|style)
+    dialog = windows.Window(hwnd=2, class_name='#32770', title='Choose Document to Open', pid=3, controls=[control])
+    assert dialog.find_button('Open') is control
+    for toggle in (0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x9):
+        control.style = 0x50000000|toggle
+        assert dialog.find_button('Open') is None
+
+
+@pytest.mark.parametrize('role,readonly', [('statictext',False), ('combobox',False), ('text',True)])
+def test_text_setter_refuses_labels_and_readonly_fields(monkeypatch, role, readonly):
+    monkeypatch.setattr(controls,'read',lambda _:dict(ok=True,role=role,read_only=readonly,enabled=True))
+    message=MagicMock()
+    monkeypatch.setattr(controls,'win32gui',SimpleNamespace(SendMessage=message),raising=False)
+    assert not controls.set_text(1,'new')['ok']
+    message.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_text_dialog_write_selects_the_edit_instead_of_its_label(monkeypatch):
+    dialog=SimpleNamespace(title='Choose Document to Open')
+    monkeypatch.setattr(controls,'available',lambda:True)
+    monkeypatch.setattr(uiauto,'_altium_pid',lambda:(3,None))
+    monkeypatch.setattr(windows,'dialogs',lambda _:[dialog])
+    find=MagicMock(return_value={'hwnd':42})
+    monkeypatch.setattr(controls,'find',find)
+    write=MagicMock(return_value={'ok':True,'text':'path'})
+    monkeypatch.setattr(controls,'set_text',write)
+    result=await register(uiauto)['app_set_dialog_control']('File name:',text='path')
+    assert result['ok']
+    find.assert_called_once_with(dialog,'File name:',role='text')
+    write.assert_called_once_with(42,'path')
+
+
+@pytest.mark.asyncio
+async def test_context_dirty_flags_do_not_claim_clean_or_advise_global_save(monkeypatch):
+    bridge=SimpleNamespace(is_altium_running=lambda:True,send_command_async=AsyncMock(side_effect=[
+        {'script_version':'test'}, {'file_path':'b.PcbDoc'},
+        {'documents':[{'file_path':'inspected.PcbLib','modified':True}]}]))
+    monkeypatch.setattr(application,'get_bridge',lambda:bridge)
+    monkeypatch.setattr(application,'_bundled_script_version',lambda:'test')
+    result=await register(application)['app_context']()
+    assert result['unsaved']==['inspected.PcbLib'] and result['unsaved_detection_complete'] is False
+    assert 'proj_save' in result['next_step'] and 'app_save_all' not in result['next_step']
 
 
 @pytest.mark.parametrize('operation', ['click_path', 'list_path'])

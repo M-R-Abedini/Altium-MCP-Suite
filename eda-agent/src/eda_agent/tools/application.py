@@ -315,7 +315,7 @@ def register_application_tools(mcp):
             if unsaved and not next_step:
                 next_step = (
                     f"{len(unsaved)} document(s) have unsaved changes. "
-                    "app_save_all flushes them, and reports still_dirty.")
+                    "Review the targets, then save the intended project with proj_save.")
 
         # The suite binds both wrappers to this workspace. Expose the native
         # session and content-addressed project so same-version stale code is
@@ -354,6 +354,8 @@ def register_application_tools(mcp):
             "active_document": active,
             "open_document_count": open_count,
             "unsaved": unsaved,
+            "unsaved_source": "native_modified_flag",
+            "unsaved_detection_complete": False,
             "warnings": warnings,
             "next_step": next_step,
         }

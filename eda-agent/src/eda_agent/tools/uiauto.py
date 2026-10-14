@@ -375,7 +375,11 @@ def register_uiauto_tools(mcp):
             return {"ok": True, "dialog": dialog.title,
                     "controls": controls.describe_all(dialog)}
 
-        found = controls.find(dialog, control_label)
+        if sum(value is not None for value in (checked, text, select_row)) > 1:
+            return {"ok": False, "reason": "Specify only one of checked, text or select_row"}
+        # A static label and its edit can expose the same accessible name.
+        # Restrict text writes to the edit, never rename the label itself.
+        found = controls.find(dialog, control_label, role="text" if text is not None else None)
         if found is None:
             labels = [c["label"] or c["name"]
                       for c in controls.describe_all(dialog)]
@@ -675,7 +679,7 @@ def register_uiauto_tools(mcp):
             return {"ok": True, "dialog": target.title,
                     "pressed": button.text, "role": role,
                     "dialog_closed": closed,
-                    "outcome_verified": bool(closed) or not dismissing}
+                    "outcome_verified": bool(closed)}
 
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, press)

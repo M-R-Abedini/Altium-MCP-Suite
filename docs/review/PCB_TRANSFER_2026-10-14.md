@@ -19,6 +19,8 @@ suite's ignored test directory. No repair to the electronics design is included.
 | Desktop worker exceptions could falsely release ownership | Win32 handles are pointer-sized. A fresh barrier worker attaches to Default, checks every API result, propagates exceptions, uses a bounded wait and restores its original desktop before closing the opened handle. Editor enumeration is read-only. Caller threads are not moved. |
 | Confirmed manual Stop left stale ready/owner markers | The explicit `--confirm-script-stopped` recovery archives native session markers and removes stop/inbox files. Ordinary timeout never calls it. Exited-process recovery requires process creation-time proof and matching native session markers; a different foreground PID alone is insufficient. |
 | Health checks hid the reason for blocked startup | `app_ping` and `app_get_report` now await health traffic off the server event loop and preserve the actual exception. `app_context` relays that diagnosis instead of recommending an uncoordinated second script launch. Legacy `pong` health responses remain supported. |
+| File-dialog Open was invisible to the button matcher | Stock split/default-split and command-link buttons are recognized by their styles. Checkbox/radio/group styles remain excluded. A button that stays open no longer reports a verified outcome merely because its role is unknown. |
+| Text setter renamed a static label and returned success | Text writes select the accessible text role and reject static labels, non-text controls and read-only fields. Mutually exclusive operations are validated before mutation. Native file-picker set/readback and Open/closure passed after correction. |
 
 ## Assessment of the attached analysis
 
@@ -58,8 +60,12 @@ suite's ignored test directory. No repair to the electronics design is included.
   configured workspace contained an unbound shutdown marker; a separate runtime
   contained different stale session evidence. No marker was erased to force the
   test through. The resulting misleading health advice prompted the health
-  diagnostics correction above. This loop did not establish a new native
-  acceptance pass; manual Stop/recovery is still required for that runtime.
+  diagnostics correction above. Native Run → Stop was subsequently invoked;
+  Stop was observed disabled, and the UI-return barrier passed. Explicit manual
+  recovery archived both runtimes' stale markers. **Three subsequent cycles of
+  context, physical counts, bounded pad readback and confirmed Detach passed**,
+  each using a newly started, matching native session. Design files retained
+  their hashes around this loop; no save, compile or ECO was issued.
 - Regression tests exercise empty-board provenance, invalid targets, zero limit,
   explicit library opt-in, failed COM initialization, blank/invalid ECO grids,
   output cleanup, ownership retention, process identity and worker faults. Both
@@ -69,6 +75,11 @@ suite's ignored test directory. No repair to the electronics design is included.
   selection zoom and UIA extraction from a live ECO grid. These paths have guards
   or regression checks; their general reliability is not asserted here.
 
+`app_context.unsaved` uses Altium's native Modified flag, which AD26 can leave
+false despite unsaved edits. Its result now marks detection incomplete and does
+not recommend a workspace-wide Save All. An empty list is not proof that every
+document is clean; inspect the native UI before closing or discarding buffers.
+
 Pre-ECO Unknown Pin entries on an empty board do not establish missing physical
 pads. After execution, compare native schematic/PCB state and physical pad-net
 assignments. Counts and exported ECO screenshots never verify copper connectivity;
@@ -77,4 +88,5 @@ was specific to the inspected design, not a blanket waiver for missing nets.
 
 API references: [Altium schematic implementations](https://www.altium.com/documentation/altium-dxp-developer/schematic-api-design-objects-interfaces-reference),
 [SetThreadDesktop](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setthreaddesktop),
-[SendMessageTimeoutW](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendmessagetimeoutw).
+[SendMessageTimeoutW](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendmessagetimeoutw),
+[Windows button styles](https://learn.microsoft.com/en-us/windows/win32/controls/button-styles).
