@@ -141,6 +141,7 @@ def read(hwnd: int) -> dict:
         "checked": checked,
         "enabled": not bool(state & _STATE_UNAVAILABLE),
         "selected": bool(state & _STATE_SELECTED),
+        "read_only": bool(state & 0x00000040),
         "hwnd": hwnd,
     }
 
@@ -272,6 +273,8 @@ def set_text(hwnd: int, text: str, settle: float = 0.2) -> dict:
     before = read(hwnd)
     if not before.get("ok"):
         return before
+    if before.get("role") != "text" or before.get("read_only", False):
+        return {"ok": False, "reason": "The target is not an editable text field; no text was set"}
     if not before["enabled"]:
         return {"ok": False, "reason": f"{before['name']!r} is disabled"}
     try:

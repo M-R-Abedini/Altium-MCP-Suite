@@ -429,8 +429,8 @@ def click_path(pid: int, path: str, settle: float = 1.2) -> dict:
     try:
         comtypes.CoInitialize()
         owned = True
-    except Exception:                            # pragma: no cover - guard
-        owned = False
+    except Exception as exc:
+        return {"ok": False, "reason": f"COM initialization failed on the menu worker: {exc}"}
     try:
         return _click_path(pid, path, settle)
     finally:
@@ -530,8 +530,8 @@ def _click_path(pid: int, path, settle: float) -> dict:
             return {"ok": False, "reason": (
                 f"a menu opened but exposed no items, so {wanted!r} could "
                 f"not be looked for. The accessible layer returned "
-                f"nothing, which usually means COM is not initialised on "
-                f"this thread"), "offered": []}
+                f"nothing after successful COM initialization. The provider "
+                f"may not expose this popup"), "offered": []}
 
         hit = next((e for e in entries if _same(_name(e), wanted)), None)
         if hit is None:
@@ -587,8 +587,8 @@ def list_path(pid: int, path: str = "", settle: float = 1.2) -> dict:
     try:
         comtypes.CoInitialize()
         owned = True
-    except Exception:                            # pragma: no cover - guard
-        owned = False
+    except Exception as exc:
+        return {"ok": False, "reason": f"COM initialization failed on the menu worker: {exc}"}
     try:
         return _list_path(pid, path, settle)
     finally:

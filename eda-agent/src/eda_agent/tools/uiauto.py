@@ -130,6 +130,29 @@ def _resolve_dialog_control(pid, control_label: str, dialog_title: str):
 
 
 def register_uiauto_tools(mcp):
+    @mcp.tool()
+    async def app_export_eco_evidence(output_path: str = "", phase: str = "unknown",
+                                       native_report_path: str = "") -> dict[str, Any]:
+        """Export the exact ECO window as PNG and JSON without executing changes.
+
+        Reads UIA grid cells when supported; unreadable/virtualized grids report
+        grid_read_complete=False. Blank cells never imply no validation errors.
+        Optionally includes a text file already exported by Altium's Report
+        Changes command. Phase is caller-supplied, not inferred from the grid.
+        Does not run Validate/Execute/Report Changes or save any design document.
+        """
+        from ..ui import eco_report
+        from ..config import get_config
+        from pathlib import Path
+        import uuid
+        pid, problem = _altium_pid()
+        if problem:
+            return problem
+        if not output_path:
+            output_path = str(Path(get_config().workspace_dir) / ("eco-" + uuid.uuid4().hex + ".json"))
+        return await asyncio.get_running_loop().run_in_executor(
+            None, eco_report.export, pid, output_path, phase, native_report_path)
+
     """Register the dialog-driving tools. Windows and Altium only."""
 
     @mcp.tool()
@@ -352,7 +375,11 @@ def register_uiauto_tools(mcp):
             return {"ok": True, "dialog": dialog.title,
                     "controls": controls.describe_all(dialog)}
 
-        found = controls.find(dialog, control_label)
+        if sum(value is not None for value in (checked, text, select_row)) > 1:
+            return {"ok": False, "reason": "Specify only one of checked, text or select_row"}
+        # A static label and its edit can expose the same accessible name.
+        # Restrict text writes to the edit, never rename the label itself.
+        found = controls.find(dialog, control_label, role="text" if text is not None else None)
         if found is None:
             labels = [c["label"] or c["name"]
                       for c in controls.describe_all(dialog)]
@@ -652,7 +679,7 @@ def register_uiauto_tools(mcp):
             return {"ok": True, "dialog": target.title,
                     "pressed": button.text, "role": role,
                     "dialog_closed": closed,
-                    "outcome_verified": bool(closed) or not dismissing}
+                    "outcome_verified": bool(closed)}
 
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, press)

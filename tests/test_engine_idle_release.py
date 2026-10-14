@@ -42,7 +42,8 @@ def test_launch_probe_waits_until_native_startup_has_finished(tmp_path,monkeypat
     script=tmp_path/'script.PrjScr';script.touch();exe=tmp_path/'X2.exe';exe.touch()
     for name,value in {'WORKSPACE':work,'RUNTIME':tmp_path,'LAUNCH_STATE':tmp_path/'state.json',
                        'SCRIPT':script,'EXE':exe}.items():monkeypatch.setattr(coord,name,value)
-    monkeypatch.setattr(coord,'_guard_editor',lambda:None)
+    monkeypatch.setattr(coord,'_guard_editor',lambda:{'pid':77,'blocked':False})
+    monkeypatch.setattr(coord,'_session_started_at',lambda pid:100)
     monkeypatch.setattr(coord,'_handler_busy',lambda:False)
     launched=[]
     monkeypatch.setattr(coord.subprocess,'CREATE_NO_WINDOW',0,raising=False)

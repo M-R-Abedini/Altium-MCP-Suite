@@ -5608,6 +5608,83 @@ End;
 { Params: designator=<ref>                                                   }
 {..............................................................................}
 
+{ One physical read; no compiled schematic and no descriptor parsing. }
+Function PCB_GetPadConnectivity(Params : String; RequestId : String) : String;
+Var
+    Board : IPCB_Board;
+    Iter : IPCB_BoardIterator;
+    Obj : IPCB_Primitive;
+    Pad : IPCB_Pad;
+    Comp : IPCB_Component;
+    Path, Wanted, Des, NetName, Items, LimitStr, Why : String;
+    Components, Nets, Pads, Tracks, Vias, Matched, Returned, MaxItems : Integer;
+Begin
+    Path := ExtractJsonValue(Params, 'board_path');
+    Wanted := ExtractJsonValue(Params, 'designator');
+    LimitStr := ExtractJsonValue(Params, 'limit');
+    MaxItems := 0;
+    If LimitStr <> '' Then MaxItems := StrToIntDef(LimitStr, -1);
+    If MaxItems < 0 Then
+    Begin Result := BuildErrorResponse(RequestId, 'INVALID_PARAMETER', 'limit must be a nonnegative integer'); Exit; End;
+    If Path <> '' Then Board := PCBServer.GetPCBBoardByPath(Path)
+    Else Board := GetPCBBoardForMutation(Why);
+    If Board = Nil Then
+    Begin Result := BuildErrorResponse(RequestId, 'NO_PCB', 'No matching loaded PCB; no schematic fallback'); Exit; End;
+    If UpperCase(ExtractFileExt(Board.FileName)) <> '.PCBDOC' Then
+    Begin Result := BuildErrorResponse(RequestId, 'NO_PCB', 'A physical PcbDoc is required, not a library'); Exit; End;
+    If (Path <> '') And (UpperCase(Path) <> UpperCase(Board.FileName)) Then
+    Begin Result := BuildErrorResponse(RequestId, 'WRONG_PCB', 'The requested board did not read back'); Exit; End;
+    Components := 0; Nets := 0; Pads := 0; Tracks := 0; Vias := 0;
+    Matched := 0; Returned := 0; Items := '';
+    Iter := Board.BoardIterator_Create;
+    Try
+        Iter.AddFilter_ObjectSet(MkSet(eComponentObject, eNetObject, ePadObject, eTrackObject, eViaObject));
+        Iter.AddFilter_LayerSet(AllLayers);
+        Iter.AddFilter_Method(eProcessAll);
+        Obj := Iter.FirstPCBObject;
+        While Obj <> Nil Do
+        Begin
+            If Obj.ObjectId = eComponentObject Then Inc(Components)
+            Else If Obj.ObjectId = eNetObject Then Inc(Nets)
+            Else If Obj.ObjectId = eTrackObject Then Inc(Tracks)
+            Else If Obj.ObjectId = eViaObject Then Inc(Vias)
+            Else If Obj.ObjectId = ePadObject Then
+                Begin
+                    Inc(Pads);
+                    Pad := Obj;
+                    Comp := Pad.Component;
+                    Des := ''; If Comp <> Nil Then Des := Comp.Name.Text;
+                    If (Wanted = '') Or (UpperCase(Wanted) = UpperCase(Des)) Then
+                    Begin
+                        Inc(Matched);
+                        If (MaxItems = 0) Or (Returned < MaxItems) Then
+                        Begin
+                            NetName := ''; If Pad.Net <> Nil Then NetName := Pad.Net.Name;
+                            If Returned > 0 Then Items := Items + ',';
+                            Items := Items + '{"component":"' + EscapeJsonString(Des)
+                                + '","pad":"' + EscapeJsonString(Pad.Name)
+                                + '","net":"' + EscapeJsonString(NetName)
+                                + '","pad_name_present":' + BoolToJsonStr(Pad.Name <> '')
+                                + ',"x":' + IntToStr(CoordToMils(Pad.X))
+                                + ',"y":' + IntToStr(CoordToMils(Pad.Y))
+                                + ',"layer":"' + EscapeJsonString(GetLayerString(Pad.Layer)) + '"}';
+                            Inc(Returned);
+                        End;
+                    End;
+            End;
+            Obj := Iter.NextPCBObject;
+        End;
+    Finally
+        Board.BoardIterator_Destroy(Iter);
+    End;
+    Result := BuildSuccessResponse(RequestId,
+        '{"board_path":"' + EscapeJsonString(Board.FileName) + '","data_domain":"physical_pcb"'
+        + ',"counts":{"components":' + IntToStr(Components) + ',"nets":' + IntToStr(Nets)
+        + ',"pads":' + IntToStr(Pads) + ',"tracks":' + IntToStr(Tracks) + ',"vias":' + IntToStr(Vias) + '}'
+        + ',"pads":[' + Items + '],"count":' + IntToStr(Returned) + ',"matched":' + IntToStr(Matched)
+        + ',"truncated":' + BoolToJsonStr(Returned < Matched) + ',"units":"mil"}');
+End;
+
 Function PCB_GetComponentPads(Params : String; RequestId : String) : String;
 Var
     Board : IPCB_Board;
@@ -12807,6 +12884,7 @@ Begin
         'create_design_rule':      Result := PCB_CreateDesignRule(Params, RequestId);
         'delete_design_rule':      Result := PCB_DeleteDesignRule(Params, RequestId);
         'get_component_pads':      Result := PCB_GetComponentPads(Params, RequestId);
+        'get_pad_connectivity':    Result := PCB_GetPadConnectivity(Params, RequestId);
         'flip_component':          Result := PCB_FlipComponent(Params, RequestId);
         'align_components':        Result := PCB_AlignComponents(Params, RequestId);
         'get_clearance_violations': Result := PCB_GetClearanceViolations(Params, RequestId);

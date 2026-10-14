@@ -130,7 +130,13 @@ Begin
         Begin
             { Component Name is an IPCB_Text; return its .Text, not the object }
             { (Dispatch->OleStr otherwise crashed EscapeJsonString via modal). }
-            If Oid = eComponentObject Then Begin Comp := Obj; Result := Comp.Name.Text; End;
+            If Oid = eComponentObject Then Begin Comp := Obj; Result := Comp.Name.Text; End
+            Else If Oid = ePadObject Then Begin Pad := Obj; Result := Pad.Name; End;
+        End
+        Else If PropName = 'Component' Then
+        Begin
+            Comp := Obj.Component;
+            If Comp <> Nil Then Result := Comp.Name.Text;
         End
         Else If (PropName = 'Designator') Or (PropName = 'Designator.Text') Then
         Begin
@@ -467,7 +473,7 @@ Begin
         (PropName = 'Text') Or (PropName = 'Pattern') Or
         (PropName = 'Designator') Or (PropName = 'Designator.Text') Or
         (PropName = 'Comment') Or (PropName = 'Comment.Text') Or
-        (PropName = 'SourceDesignator');
+        (PropName = 'SourceDesignator') Or (PropName = 'Component');
 End;
 
 Function UnknownPCBProperties(PropsStr : String) : String;
@@ -506,7 +512,7 @@ End;
   Reported by a user as too many functions listed to find the right one. }
 Function KnownPCBPropertyList(Dummy : Integer) : String;
 Begin
-    Result := 'ObjectId, X, Y, Layer, Descriptor, Selected, Net, X1, Y1, '
+    Result := 'ObjectId, X, Y, Layer, Descriptor, Selected, Net, Component, X1, Y1, '
         + 'X2, Y2, Width, Radius, StartAngle, EndAngle, XCenter, YCenter, '
         + 'HoleSize, Size, TopShape, TopXSize, TopYSize, Rotation, Name, '
         + 'Text, Pattern, Designator, Comment, SourceDesignator, '
