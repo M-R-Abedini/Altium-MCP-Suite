@@ -9,6 +9,7 @@ import time
 import uuid
 from pathlib import Path
 from suite_config import runtime_dir, workspace_dir, altium_exe, prepare_runtime
+import engine_identity
 
 ROOT = Path(__file__).resolve().parent
 RUNTIME = runtime_dir()
@@ -227,24 +228,41 @@ def try_lock():
         import msvcrt
     except ModuleNotFoundError as error:
         raise RuntimeError('Altium engine coordination requires Windows (msvcrt).') from error
-    LOCK.parent.mkdir(parents=True, exist_ok=True)
-    f = LOCK.open('a+b')
-    if f.tell() == 0:
-        f.write(b'0')
-        f.flush()
-    f.seek(0)
-    try:
-        msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
-    except OSError:
-        f.close()
+    gate = engine_identity.try_mutex()
+    if gate is None:
         return None
-    return f
+    f, locked = None, False
+    try:
+        LOCK.parent.mkdir(parents=True, exist_ok=True)
+        f = LOCK.open('a+b')
+        if f.tell() == 0:
+            f.write(b'0'); f.flush()
+        f.seek(0)
+        try:
+            msvcrt.locking(f.fileno(), msvcrt.LK_NBLCK, 1)
+        except OSError:
+            return None
+        locked = True
+        return f, gate
+    finally:
+        if not locked:
+            try:
+                if f is not None:
+                    f.close()
+            finally:
+                gate.release()
 
-def unlock(f):
+def unlock(lease):
     import msvcrt
-    f.seek(0)
-    msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
-    f.close()
+    f, gate = lease
+    try:
+        f.seek(0)
+        msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+    finally:
+        try:
+            f.close()
+        finally:
+            gate.release()
 
 @contextlib.contextmanager
 def engine_lock():
@@ -326,11 +344,8 @@ def _editor_state():
             win32gui.EnumWindows(visit, None)
         except Exception:
             pass
-    fg = win32gui.GetForegroundWindow()
-    pid = win32process.GetWindowThreadProcessId(fg)[1] if fg else None
-    active = [e for e in editors if e[1] == pid]
-    if len(active) == 1:
-        editors = active
+    # Health replies and CLI RunScript dispatch do not identify their editor.
+    # Foreground preference cannot safely associate them with one of two VMs.
     if len(editors) != 1:
         raise RuntimeError('Expected one Altium editor; found %d. No script was launched.' % len(editors))
     hwnd, pid, en = editors[0]
@@ -406,11 +421,20 @@ def _confirm_editor_return(state):
     if after['blocked'] or (after['pid'], after['hwnd'], _session_started_at(after['pid'])) != identity:
         raise RuntimeError('Altium changed or became blocked during engine handover')
 
+def _bind_editor_runtime(state):
+    engine_identity.claim_editor(state['pid'], _session_started_at(state['pid']), RUNTIME, WORKSPACE)
+
+
+def _reset_editor_runtime(state):
+    engine_identity.reset_editor(state['pid'], _session_started_at(state['pid']))
+
+
 def _guard_editor():
     state = _editor_state()
     if state['blocked']:
         log_event('modal_blocked', pid=state['pid'])
         raise RuntimeError('Altium main window is disabled. Inspect Altium for a hidden dialog or running operation before retrying; no second script was launched.')
+    _bind_editor_runtime(state)
     _guard_legacy(state)
     return state
 
@@ -680,6 +704,7 @@ def reset_after_manual_stop():
         state = _editor_state()
         if state['blocked']:
             raise RuntimeError('Close the Altium dialog and stop its script before resetting ownership.')
+        _reset_editor_runtime(state)
         for pattern in ('request_*.json', 'progress_*.json'):
             for path in WORKSPACE.glob(pattern):
                 path.unlink(missing_ok=True)
