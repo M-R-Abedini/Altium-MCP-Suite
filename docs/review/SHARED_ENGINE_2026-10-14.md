@@ -31,6 +31,10 @@ process answered a file-based health probe or received CLI RunScript dispatch.
 - Generated EDA scripts contain their workspace; the generation hash includes
   it. Suite clients default to a private pointer file and do not rewrite the
   ProgramData pointer. Raw upstream scripts retain their legacy fallback.
+- The unreferenced generated `Altium_MCP.pas` build artifact is excluded from the
+  modular project's identity. Different ignored builds in the two checkouts
+  otherwise caused needless stop/restart exchanges despite identical compiled
+  source units. An explicitly referenced monolithic project retains its file.
 - Multiple Altium editors are rejected instead of guessing from foreground focus.
   The supported configuration is one editor shared by coordinated clients.
 - The existing Antigravity configuration was backed up and aligned with Codex's

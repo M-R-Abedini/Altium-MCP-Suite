@@ -58,6 +58,16 @@ def test_native_workspace_is_embedded_and_changes_generation(runtime, monkeypatc
     assert str(second_work).replace("'","''") in source
 
 
+def test_unreferenced_generated_monolith_does_not_change_native_identity(runtime):
+    folder, root = runtime
+    first=suite_config.prepare_runtime()
+    mono=root/'eda-agent/scripts/altium/Altium_MCP.pas'
+    mono.write_text('{ a different local monolithic build }')
+    assert suite_config.prepare_runtime()==first
+    assert not (first['eda'].parent/'Altium_MCP.pas').exists()
+    assert 'Altium_MCP.pas' not in json.loads((first['eda'].parent/registry.MARKER).read_text())['files']
+
+
 def test_suite_uses_private_pointer_without_overriding_explicit_test_pointer(runtime, monkeypatch):
     folder, _ = runtime
     import os

@@ -95,6 +95,16 @@ def prepare_runtime():
     projects = {}
     for kind, source in sources.items():
         files = sorted(p for p in source.iterdir() if p.suffix.lower() in {'.pas', '.dfm', '.prjscr'})
+        if kind == 'eda':
+            # build.py's ignored monolithic output is not compiled by the
+            # modular project. Different local builds must not cause two
+            # clients with identical sources to keep restarting each other.
+            template = source / 'Altium_API.PrjScr'
+            references_mono = (template.is_file() and any(
+                line.strip().casefold() == 'documentpath=altium_mcp.pas'
+                for line in template.read_text(encoding='utf-8-sig').splitlines()))
+            if not references_mono:
+                files = [p for p in files if p.name.casefold() != 'altium_mcp.pas']
         contents = {path: path.read_bytes() for path in files}
         workspace = workspace_dir()
         digest = hashlib.sha256(('script-project-lifecycle-v1:' + str(exchange)).encode())
