@@ -5617,6 +5617,9 @@ Var
     Pad : IPCB_Pad;
     Comp : IPCB_Component;
     Path, Wanted, Des, NetName, Items, LimitStr, Why : String;
+    ComponentItems, NetItems, Extra, CommentText, PatternText : String;
+    IncludeComponents : Boolean;
+    NetObj : IPCB_Net;
     Components, Nets, Pads, Tracks, Vias, Matched, Returned, MaxItems : Integer;
 Begin
     Path := ExtractJsonValue(Params, 'board_path');
@@ -5634,6 +5637,8 @@ Begin
     Begin Result := BuildErrorResponse(RequestId, 'NO_PCB', 'A physical PcbDoc is required, not a library'); Exit; End;
     If (Path <> '') And (UpperCase(Path) <> UpperCase(Board.FileName)) Then
     Begin Result := BuildErrorResponse(RequestId, 'WRONG_PCB', 'The requested board did not read back'); Exit; End;
+    IncludeComponents := LowerCase(ExtractJsonValue(Params, 'include_components')) = 'true';
+    ComponentItems := ''; NetItems := ''; Extra := '';
     Components := 0; Nets := 0; Pads := 0; Tracks := 0; Vias := 0;
     Matched := 0; Returned := 0; Items := '';
     Iter := Board.BoardIterator_Create;
@@ -5644,8 +5649,35 @@ Begin
         Obj := Iter.FirstPCBObject;
         While Obj <> Nil Do
         Begin
-            If Obj.ObjectId = eComponentObject Then Inc(Components)
-            Else If Obj.ObjectId = eNetObject Then Inc(Nets)
+            If Obj.ObjectId = eComponentObject Then
+            Begin
+                If IncludeComponents Then
+                Begin
+                    Comp := Obj;
+                    Des := Comp.Name.Text;
+                    CommentText := Comp.Comment.Text;
+                    PatternText := Comp.Pattern;
+                    If Components > 0 Then ComponentItems := ComponentItems + ',';
+                    ComponentItems := ComponentItems + '{"designator":"' + EscapeJsonString(Des)
+                        + '","comment":"' + EscapeJsonString(CommentText)
+                        + '","footprint":"' + EscapeJsonString(PatternText)
+                        + '","x":' + IntToStr(CoordToMils(Comp.X))
+                        + ',"y":' + IntToStr(CoordToMils(Comp.Y))
+                        + ',"rotation":' + FloatToJsonStr(Comp.Rotation)
+                        + ',"layer":"' + EscapeJsonString(GetLayerString(Comp.Layer)) + '"}';
+                End;
+                Inc(Components);
+            End
+            Else If Obj.ObjectId = eNetObject Then
+            Begin
+                If IncludeComponents Then
+                Begin
+                    If Nets > 0 Then NetItems := NetItems + ',';
+                    NetObj := Obj;
+                    NetItems := NetItems + '"' + EscapeJsonString(NetObj.Name) + '"';
+                End;
+                Inc(Nets);
+            End
             Else If Obj.ObjectId = eTrackObject Then Inc(Tracks)
             Else If Obj.ObjectId = eViaObject Then Inc(Vias)
             Else If Obj.ObjectId = ePadObject Then
@@ -5677,12 +5709,13 @@ Begin
     Finally
         Board.BoardIterator_Destroy(Iter);
     End;
+    If IncludeComponents Then Extra := ',"components":[' + ComponentItems + '],"nets":[' + NetItems + ']';
     Result := BuildSuccessResponse(RequestId,
         '{"board_path":"' + EscapeJsonString(Board.FileName) + '","data_domain":"physical_pcb"'
         + ',"counts":{"components":' + IntToStr(Components) + ',"nets":' + IntToStr(Nets)
         + ',"pads":' + IntToStr(Pads) + ',"tracks":' + IntToStr(Tracks) + ',"vias":' + IntToStr(Vias) + '}'
         + ',"pads":[' + Items + '],"count":' + IntToStr(Returned) + ',"matched":' + IntToStr(Matched)
-        + ',"truncated":' + BoolToJsonStr(Returned < Matched) + ',"units":"mil"}');
+        + ',"truncated":' + BoolToJsonStr(Returned < Matched) + ',"units":"mil"' + Extra + '}');
 End;
 
 Function PCB_GetComponentPads(Params : String; RequestId : String) : String;

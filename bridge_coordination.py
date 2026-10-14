@@ -10,6 +10,7 @@ import uuid
 from pathlib import Path
 from suite_config import runtime_dir, workspace_dir, altium_exe, prepare_runtime
 import engine_identity
+import engine_queue
 
 ROOT = Path(__file__).resolve().parent
 RUNTIME = runtime_dir()
@@ -267,37 +268,59 @@ def unlock(lease):
 @contextlib.contextmanager
 def engine_lock():
     deadline = time.monotonic() + 180
-    while (f := try_lock()) is None:
-        if time.monotonic() > deadline:
-            raise TimeoutError('Another Altium MCP command is still running')
-        time.sleep(.1)
+    admission = engine_queue.acquire()
+    f = None
     try:
+        while (f := try_lock()) is None:
+            if time.monotonic() > deadline:
+                raise TimeoutError('Another Altium MCP command is still running')
+            time.sleep(.1)
         yield
     finally:
-        unlock(f)
+        try:
+            if f is not None:
+                unlock(f)
+        finally:
+            admission.release()
 
 
 @contextlib.contextmanager
 def background_engine_lock():
     """Health traffic yields immediately to foreground work on either bridge."""
-    f = try_lock()
     try:
+        admission = engine_queue.acquire(timeout=.2, background=True)
+    except (OSError, ValueError, RuntimeError):
+        admission = None
+    f = None
+    try:
+        if admission is not None:
+            f = try_lock()
         yield f is not None
     finally:
-        if f is not None:
-            unlock(f)
+        try:
+            if f is not None:
+                unlock(f)
+        finally:
+            if admission is not None:
+                admission.release()
 
 @contextlib.asynccontextmanager
 async def async_engine_lock():
     deadline = time.monotonic() + 180
-    while (f := try_lock()) is None:
-        if time.monotonic() > deadline:
-            raise TimeoutError('Another Altium MCP command is still running')
-        await asyncio.sleep(.1)
+    admission = await engine_queue.acquire_async()
+    f = None
     try:
+        while (f := try_lock()) is None:
+            if time.monotonic() > deadline:
+                raise TimeoutError('Another Altium MCP command is still running')
+            await asyncio.sleep(.1)
         yield
     finally:
-        unlock(f)
+        try:
+            if f is not None:
+                unlock(f)
+        finally:
+            admission.release()
 
 def _editor_state():
     # Read window metadata only. Never send input or dismiss a dialog.

@@ -2,6 +2,8 @@
 
 ## Added 2026-10-14
 
+- Concurrent clients (`2026.10.14.queue2`): authenticated loopback FIFO admission service, foreground priority over health traffic, cancellable queued EDA requests and drained in-flight cancellation. Existing native mutex/ownership guards remain authoritative. One physical iterator pass captures components/nets/pads; immutable checksum-verified snapshots support concurrent offline analysis. Removed a large-response error-detail scan that blocked the next health probe after a successful reply. See [acceptance and timing](docs/review/CONCURRENT_CLIENTS_2026-10-14.md).
+
 - Cross-client ownership (`2026.10.14.identity1`): Windows user/session mutex plus durable editor/runtime binding; foreign runtimes and multiple editors are refused before native dispatch. Generated scripts embed their workspace and suite pointer files are private. Antigravity/Codex environments were aligned; three two-client native read/Detach loops passed without design-file changes. See [shared engine review](docs/review/SHARED_ENGINE_2026-10-14.md) and [prioritized remaining work](docs/review/RELIABILITY_BACKLOG.md).
 
 - Physical PCB totals and bulk component/pad/net readback replace schematic-derived board counts. Added placed-model source set/clear with native before/after readback, library-save opt-in, focused native fit, and exact ECO evidence export with incomplete-grid reporting.
