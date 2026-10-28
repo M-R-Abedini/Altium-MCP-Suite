@@ -9,8 +9,8 @@ canvas applies the placed instance's (x, y, rotation) to produce world
 coordinates.
 
 Caching: each SchLib is extracted once (via `lib_get_component_details`)
-and cached on disk keyed by (lib_path, lib_ref, lib_mtime). Subsequent
-runs re-use the cache when the .SchLib mtime is unchanged. To force a
+and cached on disk by full library path, reference, and content identity.
+Library batches check identity at both boundaries. To force a
 re-extract, delete the .symbol_cache/ directory or call
 `SymbolCache.invalidate(lib_path)`.
 
@@ -26,6 +26,10 @@ Coordinate convention (matches Altium):
 from __future__ import annotations
 
 import json
+import hashlib
+import os
+import uuid
+from contextlib import contextmanager
 import logging
 from dataclasses import dataclass, asdict
 from pathlib import Path
@@ -246,10 +250,10 @@ def parse_symbol_from_details(
 
 
 class SymbolCache:
-    """Disk-backed cache of SymbolModels, invalidated by SchLib mtime.
+    """Disk-backed cache bound to a full library path and on-disk content.
 
-    Layout: one JSON file per SchLib, named after the lib stem. Each file
-    holds {"lib_mtime": float, "components": {lib_ref: SymbolModel}}. We
+    Layout: one JSON file per resolved SchLib path. Each file
+    holds {"identity": ..., "components": {lib_ref: SymbolModel}}. We
     write per-SchLib (not per-component) so a single SchLib edit
     invalidates the whole lib in one shot.
     """
@@ -259,10 +263,54 @@ class SymbolCache:
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         # In-memory mirror so repeated lookups within one run don't re-read disk.
         self._memory: dict[str, dict[str, Any]] = {}
+        self._batch_identities: dict[str, Optional[dict[str, Any]]] = {}
 
     def _lib_cache_path(self, lib_path: str) -> Path:
         stem = Path(lib_path).stem
-        return self.cache_dir / f"{stem}.json"
+        key = hashlib.sha256(self._path_key(lib_path).encode("utf8")).hexdigest()[:24]
+        return self.cache_dir / f"{stem}-{key}.json"
+
+    @staticmethod
+    def _path_key(lib_path: str) -> str:
+        return os.path.normcase(str(Path(lib_path).resolve()))
+
+    def _identity(self, lib_path: str) -> Optional[dict[str, Any]]:
+        key = self._path_key(lib_path)
+        if key in self._batch_identities:
+            return self._batch_identities[key]
+        return self._read_identity(lib_path)
+
+    def _read_identity(self, lib_path: str) -> Optional[dict[str, Any]]:
+        path = Path(lib_path)
+        try:
+            before = path.stat()
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            after = path.stat()
+        except OSError:
+            return None
+        if (before.st_mtime_ns, before.st_size) != (after.st_mtime_ns, after.st_size):
+            return None
+        return {"path": self._path_key(lib_path), "mtime_ns": after.st_mtime_ns,
+                "size": after.st_size, "sha256": digest}
+
+    @contextmanager
+    def library_batch(self, lib_path: str):
+        """Hash once at each batch boundary, not once per symbol.
+
+        If a library changes while symbols are being collected, discard all
+        results for that library; the caller must not emit mixed revisions.
+        """
+        key = self._path_key(lib_path)
+        before = self._read_identity(lib_path)
+        state = {"unchanged": False}
+        self._batch_identities[key] = before
+        try:
+            yield state
+        finally:
+            self._batch_identities.pop(key, None)
+            state["unchanged"] = before is not None and before == self._read_identity(lib_path)
+            if not state["unchanged"]:
+                self.invalidate(lib_path)
 
     def _load_lib(self, lib_path: str) -> Optional[dict[str, Any]]:
         if lib_path in self._memory:
@@ -279,16 +327,16 @@ class SymbolCache:
         return data
 
     def is_fresh(self, lib_path: str) -> bool:
-        """True iff cached lib_mtime matches the SchLib's current mtime."""
+        """True iff the saved on-disk library content still matches.
+
+        This cannot establish freshness of unsaved edits in an open library.
+        Call invalidate when the caller knows that a native library was edited.
+        """
         data = self._load_lib(lib_path)
         if data is None:
             return False
-        try:
-            disk_mtime = Path(lib_path).stat().st_mtime
-        except OSError:
-            return False
-        cached_mtime = data.get("lib_mtime")
-        return cached_mtime is not None and abs(cached_mtime - disk_mtime) < 0.001
+        identity = self._identity(lib_path)
+        return identity is not None and data.get("identity") == identity
 
     def get(self, lib_path: str, lib_ref: str) -> Optional[SymbolModel]:
         if not self.is_fresh(lib_path):
@@ -301,7 +349,10 @@ class SymbolCache:
         if raw is None:
             return None
         try:
-            return SymbolModel.from_dict(raw)
+            model = SymbolModel.from_dict(raw)
+            if self._path_key(model.lib_path) != self._path_key(lib_path) or model.lib_ref != lib_ref:
+                return None
+            return model
         except (KeyError, TypeError) as exc:
             logger.warning(
                 "symbol cache corrupt entry %s/%s: %s", lib_path, lib_ref, exc
@@ -310,22 +361,18 @@ class SymbolCache:
 
     def put(self, model: SymbolModel) -> None:
         """Insert a model and persist the lib's cache file atomically."""
-        try:
-            disk_mtime = Path(model.lib_path).stat().st_mtime
-        except OSError as exc:
-            logger.warning(
-                "cannot stat %s, skipping cache write: %s", model.lib_path, exc
-            )
+        identity = self._identity(model.lib_path)
+        if identity is None:
             return
-        data = self._load_lib(model.lib_path) or {
-            "lib_mtime": disk_mtime,
-            "components": {},
-        }
-        data["lib_mtime"] = disk_mtime
+        data = self._load_lib(model.lib_path)
+        # Never refresh a stale library's timestamp while retaining its old
+        # components. One newly extracted symbol must not revive stale peers.
+        if data is None or data.get("identity") != identity:
+            data = {"identity": identity, "components": {}}
         data["components"][model.lib_ref] = model.to_dict()
         self._memory[model.lib_path] = data
         cache_file = self._lib_cache_path(model.lib_path)
-        tmp = cache_file.with_suffix(".tmp")
+        tmp = cache_file.with_suffix("." + uuid.uuid4().hex + ".tmp")
         tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
         tmp.replace(cache_file)
 
@@ -395,8 +442,13 @@ class SymbolExtractor:
         for lib_path, lib_ref in refs:
             by_lib.setdefault(lib_path, []).append(lib_ref)
         for lib_path, lib_refs in by_lib.items():
-            for lib_ref in lib_refs:
-                model = self.extract_one(lib_path, lib_ref)
-                if model is not None:
-                    out[(lib_path, lib_ref)] = model
+            with self.cache.library_batch(lib_path) as snapshot:
+                for lib_ref in dict.fromkeys(lib_refs):
+                    model = self.extract_one(lib_path, lib_ref)
+                    if model is not None:
+                        out[(lib_path, lib_ref)] = model
+            if not snapshot["unchanged"]:
+                logger.warning("library changed during symbol batch: %s", lib_path)
+                for lib_ref in lib_refs:
+                    out.pop((lib_path, lib_ref), None)
         return out

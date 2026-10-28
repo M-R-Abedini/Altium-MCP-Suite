@@ -8,7 +8,7 @@
 
 <div dir="rtl">
 
-سرورهای <span dir="ltr"><code>MCP</code></span> که به هوش مصنوعی اجازه می‌دهند شماتیک، برد و کتابخانه‌های آلتیوم شما را بخواند و ویرایش کند. آلتیوم باز می‌ماند و هوش مصنوعی روی همان پروژه‌ای که باز است، زنده کار می‌کند.
+یک اتصال <span dir="ltr"><code>MCP</code></span> با نام <span dir="ltr"><code>mcp altium suite</code></span> به هوش مصنوعی اجازه می‌دهد شماتیک، برد و کتابخانه‌های آلتیوم را بخواند و ویرایش کند. آلتیوم باز می‌ماند و عملیات روی پروژهٔ مشخص‌شده انجام می‌شود. موتورهای هماهنگ‌شدهٔ طراحی، عملیات قدیمی و کتابخانه درون همین اتصال کار می‌کنند.
 
 **پیش‌نیاز:** ویندوز و <span dir="ltr"><code>Python 3.12</code></span>. به‌صورت زنده روی <span dir="ltr"><code>Altium Designer 26</code></span> تست شده است.
 
@@ -20,6 +20,8 @@
 - بررسی اتصال با چهار ابزار فقط‌خواندنی: اسنپ‌شات نگاشت پین به نت (با دایجست <span dir="ltr"><code>SHA-256</code></span>)، قرارداد هر پین (نت مورد انتظار، یا وصل‌نبودن عمدی با ذکر دلیل)، مقایسهٔ قبل و بعد، و تطابق دوطرفهٔ پدهای شماتیک و برد.
 - محاسبهٔ عرض ترک، امپدانس و بودجهٔ طول. این‌ها ماشین‌حساب‌اند، نه اثبات یکپارچگی سیگنال.
 - خواندن و نوشتن فایل‌های کتابخانهٔ <span dir="ltr"><code>.SchLib</code></span> و <span dir="ltr"><code>.PcbLib</code></span>.
+- جست‌وجو و دانلود کتابخانه از فهرست عمومی <span dir="ltr"><code>ChilaBoard</code></span> با ثبت منبع، نسخه، هش و مجوز؛ دریافت فایل‌های خروجی رسمی <span dir="ltr"><code>SnapMagic</code></span> و <span dir="ltr"><code>SamacSys</code></span> برای بررسی محلی. API مستقیم این دو سرویس و تبدیل <span dir="ltr"><code>EPW</code></span> پیاده نشده‌اند. [راهنمای کتابخانهٔ ابری](review/CLOUD_LIBRARIES_2026-10-27.md).
+- مهارت <span dir="ltr"><code>$altium-circuit-design</code></span> برای نیازمندی مدار، بررسی دیتاشیت و نماد/فوت‌پرینت، طرح ساختاریافته و کنترل اتصال. دانلود مدل، تأیید درستی پین‌ها و پکیج نیست.
 - مدیریت واریانت‌های مونتاژ با شناسهٔ یکتا، تغییر گروهی وضعیت نصب قطعات و خروجی ماتریس قطعات؛ همراه با پشتیبان پروژه و بازخوانی از آلتیوم. [روش کار واریانت‌ها](review/STORAGE_VARIANTS_2026-10-08.md).
 - دو پل، یک موتور اسکریپت: قفل مشترک دسترسی دو پل پایتون به موتور را هماهنگ می‌کند؛ شناسهٔ هر درخواست مانع پذیرش پاسخ دیررسِ درخواست دیگری می‌شود.
 - کار هم‌زمان چند کلاینت: صف مشترک، فرمان‌های آلتیوم را به ترتیب اجرا می‌کند. دادهٔ قطعات، نت‌ها و پدها با یک پیمایش خوانده می‌شود؛ تحلیل snapshot بین کلاینت‌ها موازی است. snapshot وضعیت ثبت‌شده است و مجوز ویرایش زنده نیست. [روش استفاده و نتایج تست](review/CONCURRENT_CLIENTS_2026-10-14.md).
@@ -48,6 +50,12 @@
 
 [کنترل ارتباط و بازیابی دستی](review/TRANSPORT_FINDINGS_2026-10-08.md) توضیح می‌دهد پس از پایان مهلت فرمان یا خرابی موتور، مالکیت نامشخص اسکریپت چگونه بررسی و آزاد می‌شود.
 
+### پلاگین Codex
+
+بستهٔ پلاگین، اتصال واحد <span dir="ltr"><code>MCP</code></span>، مهارت طراحی مدار و راهنمای آماده‌سازی محیط را کنار هم ارائه می‌کند. مراحل واقعی ساخت، نصب از marketplace محلی و بررسی محیط در [راهنمای پلاگین](PLUGIN_PACKAGE.md) آمده است. پس از نصب، گفتگوی جدیدی باز کنید و آماده‌سازی محیط را انجام دهید. نصب پلاگین به معنی نصب یا ارائهٔ مجوز خود آلتیوم نیست. اتصال دستی و اتصال همان پلاگین را هم‌زمان فعال نگذارید.
+
+### اتصال دستی یا کلاینت‌های دیگر
+
 گیت، پایتون و آلتیوم را روی ویندوز نصب کنید. مسیر فایل اجرایی را مطابق نصب خودتان بگذارید:
 
 </div>
@@ -66,9 +74,9 @@ python -m venv .venv
 
 <div dir="rtl">
 
-ورودی‌های تولیدشده در <span dir="ltr"><code>mcp.local.json</code></span> یا <span dir="ltr"><code>codex.local.toml</code></span> را به تنظیمات کلاینت اضافه و اتصال‌ها را دوباره راه‌اندازی کنید. پروژه را در آلتیوم باز کنید و با <span dir="ltr"><code>app_context</code></span> وضعیت پل را بررسی کنید.
+نصب اکنون یک ورودی <span dir="ltr"><code>mcp-altium-suite</code></span> در <span dir="ltr"><code>mcp.local.json</code></span> یا <span dir="ltr"><code>codex.local.toml</code></span> تولید می‌کند. آن را به تنظیمات کلاینت اضافه و اتصال را دوباره راه‌اندازی کنید. تنظیمات خصوصی موتورهای داخلی در <span dir="ltr"><code>suite-backends.local.json</code></span> می‌ماند. پروژه را در آلتیوم باز کنید، ابزار <span dir="ltr"><code>app_context</code></span> را با <span dir="ltr"><code>suite_catalog</code></span> پیدا کنید و نام دقیق <span dir="ltr"><code>eda__app_context</code></span> را از طریق <span dir="ltr"><code>suite_invoke</code></span> اجرا کنید.
 
-برای کاهش حجم معرفی ابزارها، گزینهٔ <span dir="ltr"><code>--toolset minimal</code></span> را به نصب یا اجرای سرور اصلی اضافه کنید. ابزار را با <span dir="ltr"><code>tool_catalog</code></span> و گزینهٔ <span dir="ltr"><code>with_schema=True</code></span> پیدا کنید و از طریق <span dir="ltr"><code>tool_invoke</code></span> اجرا کنید. همهٔ عملیات در دسترس می‌مانند؛ تعریف ورودی‌ها هنگام نیاز بارگذاری و مانند حالت کامل اعتبارسنجی می‌شود. [نتایج اندازه‌گیری](review/PERFORMANCE_2026-10-08.md).
+حالت پیش‌فرض <span dir="ltr"><code>--toolset minimal</code></span> فقط <span dir="ltr"><code>suite_catalog</code></span>، <span dir="ltr"><code>suite_invoke</code></span> و <span dir="ltr"><code>suite_status</code></span> را معرفی می‌کند. ابزار مورد نیاز را با گزینهٔ <span dir="ltr"><code>with_schema=true</code></span> کشف کنید؛ نام‌ها با <span dir="ltr"><code>eda__</code></span>، <span dir="ltr"><code>legacy__</code></span>، <span dir="ltr"><code>libraries__</code></span> و <span dir="ltr"><code>cloud__</code></span> مشخص می‌شوند. همهٔ عملیات باقی می‌مانند و ورودی‌ها پیش از ارسال اعتبارسنجی می‌شوند. <span dir="ltr"><code>--toolset full</code></span> فهرست کامل و <span dir="ltr"><code>--separate-servers</code></span> چیدمان قبلی اتصال‌ها را تولید می‌کند. [راهنمای اتصال واحد و مهاجرت](review/UNIFIED_SUITE_2026-10-27.md).
 
 </div>
 
@@ -85,7 +93,7 @@ Pop-Location
 
 <div dir="rtl">
 
-سرور کتابخانه اختیاری است (به نسخهٔ پین‌شدهٔ راست و ابزارهای ساخت <span dir="ltr"><code>Visual Studio C++</code></span> نیاز دارد). برای چند پوشه، گزینهٔ <span dir="ltr"><code>--library-dir</code></span> را تکرار کنید.
+ساخت موتور کتابخانه از منبع به نسخهٔ پین‌شدهٔ راست و ابزارهای ساخت <span dir="ltr"><code>Visual Studio C++</code></span> نیاز دارد؛ برای فایل اجرایی موجود از <span dir="ltr"><code>--library-binary</code></span> استفاده کنید. برای چند پوشه، <span dir="ltr"><code>--library-dir</code></span> را تکرار کنید. نصب مسیرهای قبلی را حفظ و cache اختصاصی ابر را اضافه می‌کند. حساب یا مجوز آلتیوم و سرویس‌های کتابخانه همراه بسته ارائه نمی‌شود.
 
 ## پرسش‌ها و مشارکت
 

@@ -1,0 +1,5 @@
+# Run from the package root. Runtime setup is explicit, never a launch side effect.
+-c constraints-windows-py312.txt
+-e ./eda-agent
+pillow>=11.1,<12
+jsonschema>=4.26,<5

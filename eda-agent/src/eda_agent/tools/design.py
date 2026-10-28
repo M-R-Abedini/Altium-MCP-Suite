@@ -125,20 +125,25 @@ def register_design_tools(mcp) -> None:
 
     @mcp.tool()
     async def design_get_discipline() -> dict[str, Any]:
-        """Read the design discipline + DesignPlan JSON schema.
+        """Read the design discipline and structured design input schemas.
 
         ALWAYS call this first when starting a design task. The result
         contains the hard rules the planner must follow (net-label-driven
-        wiring, datasheet-first part choice, NDA isolation, etc.) plus
-        the JSON schema that ``design_execute_plan`` enforces on input.
+        wiring, datasheet-first part choice, NDA isolation, etc.), the
+        DesignPlan schema enforced by ``design_execute_plan``, and the
+        DesignRequirement schema accepted by ``design_validate_requirement``.
+        Requirement drafts can conform to their schema while still having
+        open questions that prevent the planning-readiness gate passing.
 
         Returns:
-            A dict with ``discipline`` (markdown text) and
-            ``schema`` (DesignPlan JSON schema as a dict).
+            A dict with ``discipline`` (markdown text), ``schema``
+            (DesignPlan JSON schema, retained for existing clients), and
+            ``requirement_schema`` (DesignRequirement JSON schema).
         """
         return {
             "discipline": get_discipline(),
             "schema": DesignPlan.model_json_schema(),
+            "requirement_schema": DesignRequirement.model_json_schema(),
         }
 
     # --- session journal (autonomy-harness durable state) ----------------
@@ -1974,6 +1979,7 @@ def register_design_tools(mcp) -> None:
         project_path: str,
         use_canvas: bool = True,
         placement_hints: Optional[dict[str, dict[str, int]]] = None,
+        result_detail: str = "full",
     ) -> dict[str, Any]:
         """Instantiate a DesignPlan in Altium.
 
@@ -1993,6 +1999,10 @@ def register_design_tools(mcp) -> None:
         Resolve those first by either picking an existing-lib equivalent
         or branching into a library-authoring sub-task.
 
+        For a prepared design, submit one complete plan rather than looping
+        over per-object tools. Symbol caching, placement, stamping and routing
+        are batched; inspect net_verification and timings_ms before refining.
+
         Args:
             plan_json: Either a DesignPlan JSON string, or the DesignPlan
                 as a JSON object/dict. The MCP framework auto-deserializes
@@ -2003,6 +2013,9 @@ def register_design_tools(mcp) -> None:
             use_canvas: Pick the execution path. Default ``True`` runs
                 the new canvas pipeline; pass ``False`` to fall back to
                 the legacy executor.
+            result_detail: ``full`` preserves the existing response.
+                ``summary`` (canvas only) retains placement and verification
+                results and publishes full canvas details at details_path.
             placement_hints: Optional ``{refdes: {"x": int, "y": int,
                 "rotation": int}}`` partial anchors. Hinted refdes pin
                 to the supplied position; others run through the
@@ -2026,7 +2039,10 @@ def register_design_tools(mcp) -> None:
             return execute_plan_via_canvas_from_json(
                 plan_json, project_path,
                 placement_hints=placement_hints,
+                result_detail=result_detail,
             )
+        if result_detail != "full":
+            return {"ok": False, "error": "result_detail=summary requires use_canvas=True; no commands sent"}
         if isinstance(plan_json, dict):
             plan_json = json.dumps(plan_json)
         result = execute_plan_from_json(plan_json, project_path)
@@ -2194,7 +2210,9 @@ def register_design_tools(mcp) -> None:
         stage the user must confirm). Pure Python, no Altium.
 
         Args:
-            requirement: DesignRequirement as a JSON object/dict. Units are
+            requirement: DesignRequirement as a JSON object/dict. Obtain its
+                full schema from ``design_get_discipline.requirement_schema``.
+                Units are
                 SI with the unit in the field name (``voltage_v``,
                 ``current_a``, ``temp_min_c``); mechanical dimensions are
                 MILLIMETRES (``board_size_mm``, ``height_max_mm``).

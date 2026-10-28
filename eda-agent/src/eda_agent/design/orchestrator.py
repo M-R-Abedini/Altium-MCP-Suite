@@ -17,6 +17,8 @@ from __future__ import annotations
 
 import json
 import logging
+import time
+import uuid
 from pathlib import Path
 from typing import Any, Optional, Union
 
@@ -55,6 +57,7 @@ def execute_plan_via_canvas_from_json(
     cache_dir: Optional[Path] = None,
     write_preview_svg: bool = False,
     placement_hints: Optional[dict[str, dict[str, int]]] = None,
+    result_detail: str = "full",
 ) -> dict[str, Any]:
     """Parse + validate + run the canvas-based execute pipeline.
 
@@ -81,13 +84,19 @@ def execute_plan_via_canvas_from_json(
         - ``needs_creation``: refdes list (from pipeline notes).
         - ``notes``: free-text notes from pipeline + emitter.
         - ``nets_labelled``, ``power_ports_placed``: counts.
-        - ``net_mismatches``: empty for now; canvas pipeline doesn't
-          do post-emit netlist verification yet (the legacy executor
-          did, via project.get_nets).
-        - ``canvas``: ``canvas.to_dict()`` for caller-side inspection.
+        - ``net_mismatches``: compiled native topology differences.
+        - ``net_verification``: passed, failed, incomplete, or not_run.
+        - ``timings_ms`` and ``native_calls``: phase and bridge timings.
+        - ``canvas``: full snapshot by default; summary mode publishes
+          the full result to ``details_path`` and returns canvas=None.
         - ``preview_svg_path``: where the SVG was written, when enabled.
     """
     out = _empty_result_dict(project_path)
+    started = time.perf_counter()
+    if result_detail not in ("full", "summary"):
+        out.update(ok=False)
+        out["notes"].append("result_detail must be full or summary; no commands sent")
+        return out
     payload = _parse_plan(plan_json, out)
     if payload is None:
         return out
@@ -122,10 +131,12 @@ def execute_plan_via_canvas_from_json(
     # closes the iteration loop the SVG renderer was always meant to
     # serve: the pipeline no longer ships the first canvas it produces
     # if a cheaper compress-the-bbox variant scores better.
+    phase_started = time.perf_counter()
     pipeline_result = build_best_canvas_from_plan(
         plan, extractor, placement_hints=placement_hints,
     )
     _merge_pipeline_result(out, pipeline_result)
+    out["timings_ms"]["symbols_and_layout"] = round((time.perf_counter() - phase_started) * 1000, 3)
     if not pipeline_result.ok:
         return out
 
@@ -158,6 +169,7 @@ def execute_plan_via_canvas_from_json(
     except Exception as exc:
         out["notes"].append(f"canvas snapshot write failed: {exc}")
 
+    phase_started = time.perf_counter()
     emit_result = emit_canvas(
         pipeline_result.canvas,
         project_path,
@@ -165,7 +177,83 @@ def execute_plan_via_canvas_from_json(
         parameter_stamps=pipeline_result.parameter_stamps,
     )
     _merge_emit_result(out, emit_result)
+    out["timings_ms"]["emit"] = round((time.perf_counter() - phase_started) * 1000, 3)
+    out["native_calls"] = emit_result.timings
+    if out["ok"]:
+        phase_started = time.perf_counter()
+        _verify_emitted_plan(plan, project_path, bridge, out)
+        out["timings_ms"]["verify"] = round((time.perf_counter() - phase_started) * 1000, 3)
+    out["timings_ms"]["total"] = round((time.perf_counter() - started) * 1000, 3)
+    if result_detail == "summary":
+        _compact_result(out, payload)
     return out
+
+
+def _verify_emitted_plan(plan, project_path, bridge, out):
+    """One fresh native readback at the completed batch boundary.
+
+    The shared legacy topology checker owns short/open comparison. A strict
+    adapter refuses truncated/malformed/absent native data before that checker
+    can confuse unavailable verification with a clean result.
+    """
+    from eda_agent.design.executor import ExecutorResult, _verify_nets
+    planned_pins = {(p.refdes, str(p.pin)) for n in plan.nets for p in n.pins}
+
+    class VerifiedBridge:
+        def send_command(self, command, params=None, **kwargs):
+            # The emitter just persisted this explicit project. Do not reuse
+            # a clean-document compile cache from before that emission.
+            params = dict(params or {})
+            params["force_recompile"] = "true"
+            reply = bridge.send_command(command, params, **kwargs)
+            if (not isinstance(reply, dict) or reply.get("error") or
+                    reply.get("success") is False or reply.get("truncated") or
+                    not isinstance(reply.get("pins"), list) or len(reply["pins"]) >= 10000):
+                raise ValueError("native netlist unavailable, failed or truncated")
+            for key in ("count", "total"):
+                if key in reply and (type(reply[key]) is not int or reply[key] != len(reply["pins"])):
+                    raise ValueError("native netlist count does not match pins")
+            seen = {}
+            for row in reply["pins"]:
+                if not isinstance(row, dict) or any(not isinstance(row.get(k), str) for k in ("component", "pin", "net")):
+                    raise ValueError("malformed native pin row")
+                key = row["component"], row["pin"]
+                if not all(key) or (key in planned_pins and (not row["net"] or row["net"] == "?")):
+                    raise ValueError("native pin connectivity is incomplete")
+                if key in seen and seen[key] != row["net"]:
+                    raise ValueError("conflicting native pin assignments")
+                seen[key] = row["net"]
+            return reply
+
+    result = ExecutorResult()
+    try:
+        _verify_nets(plan, project_path, VerifiedBridge(), result)
+    except Exception as exc:
+        out["ok"] = False
+        out["net_verification"] = {"status": "incomplete", "reason": str(exc)}
+        out["notes"].append("Post-emit topology verification incomplete: " + str(exc))
+        return
+    out["net_mismatches"] = result.to_dict()["net_mismatches"]
+    out["net_verification"] = {"status": "failed" if result.net_mismatches else "passed"}
+    if result.net_mismatches: out["ok"] = False
+
+
+def _compact_result(out, plan_payload):
+    """Opt-in response projection, after merging placements and verification.
+
+    Keep every legacy field; only the heavy canvas becomes null. The complete
+    result and plan are published first. Failed publication keeps full output.
+    """
+    target = Path(out["project_path"]).with_suffix(".execution." + uuid.uuid4().hex + ".json")
+    out["result_detail"] = "full"
+    try:
+        target.write_text(json.dumps({"plan": plan_payload, "result": out}, indent=2), encoding="utf8")
+    except OSError as exc:
+        out["notes"].append("Full details could not be saved; returning full result: " + str(exc))
+        return
+    out["details_path"] = str(target)
+    out["canvas"] = None
+    out["result_detail"] = "summary"
 
 
 def preview_plan_from_json(
@@ -281,6 +369,9 @@ def _empty_result_dict(project_path: str) -> dict[str, Any]:
         "canvas": None,
         "preview_svg_path": None,
         "canvas_snapshot_path": None,
+        "timings_ms": {},
+        "native_calls": [],
+        "net_verification": {"status": "not_run"},
     }
 
 

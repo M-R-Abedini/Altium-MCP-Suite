@@ -61,5 +61,10 @@ def test_generated_json_and_toml_configure_identical_wrapper_environments(tmp_pa
     json_servers = json.loads((tmp_path / 'mcp.local.json').read_text())['mcpServers']
     toml_servers = tomllib.loads((tmp_path / 'codex.local.toml').read_text())['mcp_servers']
     expected = {'ALTIUM_MCP_RUNTIME': str(tmp_path / 'runtime'), 'EDA_AGENT_WORKSPACE': str(tmp_path / 'workspace')}
-    for name in ('altium', 'eda-agent'):
-        assert json_servers[name]['env'] == toml_servers[name]['env'] == expected
+    assert json_servers == toml_servers
+    assert set(json_servers) == {'mcp-altium-suite'}
+    assert json_servers['mcp-altium-suite']['env'] == dict(
+        expected, ALTIUM_SUITE_CLOUD_CACHE=str(tmp_path / 'runtime' / 'cloud-libraries'))
+    workers = json.loads((tmp_path / 'suite-backends.local.json').read_text())['backends']
+    for name in ('legacy', 'eda'):
+        assert workers[name]['env'] == expected

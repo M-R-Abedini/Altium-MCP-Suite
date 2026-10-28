@@ -1,0 +1,4 @@
+interface:
+  display_name: "Altium Circuit Design"
+  short_description: "Design circuits with sourced parts and verified nets"
+  default_prompt: "Use $altium-circuit-design to design or review my circuit in Altium with verified symbols, footprints, connectivity and manufacturing constraints."

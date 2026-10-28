@@ -2435,6 +2435,33 @@ def register_generic_tools(mcp):
             {"operations": "~~".join(op_strs)},
         )
 
+    async def _place_bus_batch(items, command, key):
+        if not items:
+            return {"error": "Empty batch", "placed": 0, "command_sent": False}
+        operations = []
+        for item in items:
+            if any(type(item.get(k)) is not int for k in ("x1", "y1", "x2", "y2")):
+                return {"error": "Every item requires integer x1,y1,x2,y2", "placed": 0, "command_sent": False}
+            operations.append(";".join(f"{k}={item[k]}" for k in ("x1", "y1", "x2", "y2")))
+        return await get_bridge().send_command_async(command, {key: "~~".join(operations)})
+
+    @mcp.tool()
+    async def sch_place_buses(buses: list[dict[str, int]]) -> dict[str, Any]:
+        """Place bus segments in one native transaction; integer coordinates in mils.
+
+        Requires the matching generated native handler. Returns per-item results
+        and placed/failed/total; a partial result is not an atomic rollback.
+        """
+        return await _place_bus_batch(buses, "generic.place_buses", "buses")
+
+    @mcp.tool()
+    async def sch_place_bus_entries(entries: list[dict[str, int]]) -> dict[str, Any]:
+        """Place 45-degree bus entries in one native transaction (mils).
+
+        Each item needs x1,y1,x2,y2. Returns indexed success/failure records.
+        """
+        return await _place_bus_batch(entries, "generic.place_bus_entries", "entries")
+
     @mcp.tool()
     async def sch_place_wires(
         wires: list[dict[str, int]],

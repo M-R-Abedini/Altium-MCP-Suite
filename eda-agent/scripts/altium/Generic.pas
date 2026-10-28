@@ -7439,6 +7439,135 @@ End;
 { Params: wires = 'x1=100;y1=200;x2=300;y2=200~~x1=300;y1=200;x2=300;y2=400~~...' }
 {..............................................................................}
 
+{ Bus segments and entries share one document transaction and redraw. The
+  complete numeric payload is checked before creating any object. }
+Function ValidBatchCoordinate(Value : String) : Boolean;
+Var
+    Digits, Bound : String;
+    I : Integer;
+    Negative : Boolean;
+Begin
+    Result := False;
+    Digits := Trim(Value);
+    If Digits = '' Then Exit;
+    Negative := Copy(Digits, 1, 1) = '-';
+    If Negative Or (Copy(Digits, 1, 1) = '+') Then
+        Digits := Copy(Digits, 2, Length(Digits));
+    If Digits = '' Then Exit;
+    For I := 1 To Length(Digits) Do
+        If (Copy(Digits, I, 1) < '0') Or (Copy(Digits, I, 1) > '9') Then Exit;
+    While (Length(Digits) > 1) And (Copy(Digits, 1, 1) = '0') Do
+        Digits := Copy(Digits, 2, Length(Digits));
+    Bound := '2147483647';
+    If Negative Then Bound := '2147483648';
+    If Length(Digits) > Length(Bound) Then Exit;
+    If (Length(Digits) = Length(Bound)) And (Digits > Bound) Then Exit;
+    Result := True;
+End;
+
+Function Gen_PlaceBusBatch(Params, RequestId, PayloadKey : String; EntryMode : Boolean) : String;
+Var
+    Remaining, Op, ErrorText, ResultsJson : String;
+    Ops : TStringList;
+    SchDoc : ISch_Document;
+    Bus : ISch_Bus;
+    Entry : ISch_BusEntry;
+    I, X1, Y1, X2, Y2, Placed, Failed : Integer;
+    ItemOk : Boolean;
+Begin
+    Remaining := ExtractJsonValue(Params, PayloadKey);
+    If Remaining = '' Then
+    Begin Result := BuildErrorResponse(RequestId, 'MISSING_PARAM', PayloadKey + ' required'); Exit; End;
+    SchDoc := SchServer.GetCurrentSchDocument;
+    If SchDoc = Nil Then
+    Begin Result := BuildErrorResponse(RequestId, 'NO_SCHEMATIC', 'No schematic active'); Exit; End;
+    If SchDoc.ObjectId <> eSheet Then
+    Begin Result := BuildErrorResponse(RequestId, 'WRONG_DOC_KIND', 'Target must be a schematic sheet'); Exit; End;
+    Ops := TStringList.Create;
+    Try
+        While True Do
+        Begin
+            Op := NextBatchOp(Remaining);
+            If Op = '' Then Break;
+            { Do not rely on catching StrToInt: the IDE may break on even
+              handled conversion exceptions before the catch can execute. }
+            If (Not ValidBatchCoordinate(GetBatchField(Op, 'x1'))) Or
+               (Not ValidBatchCoordinate(GetBatchField(Op, 'y1'))) Or
+               (Not ValidBatchCoordinate(GetBatchField(Op, 'x2'))) Or
+               (Not ValidBatchCoordinate(GetBatchField(Op, 'y2'))) Then
+            Begin
+                Result := BuildErrorResponse(RequestId, 'INVALID_COORDINATES', 'Every item needs integer x1,y1,x2,y2; no objects created');
+                Exit;
+            End;
+            Ops.Add(Op);
+        End;
+        If Ops.Count = 0 Then
+        Begin Result := BuildErrorResponse(RequestId, 'MISSING_PARAM', 'Empty batch'); Exit; End;
+        Placed := 0;
+        Failed := 0;
+        ResultsJson := '';
+        SchServer.ProcessControl.PreProcess(SchDoc, '');
+        Try
+            For I := 0 To Ops.Count - 1 Do
+            Begin
+                Op := Ops[I];
+                X1 := StrToInt(GetBatchField(Op, 'x1'));
+                Y1 := StrToInt(GetBatchField(Op, 'y1'));
+                X2 := StrToInt(GetBatchField(Op, 'x2'));
+                Y2 := StrToInt(GetBatchField(Op, 'y2'));
+                ItemOk := False;
+                ErrorText := '';
+                Try
+                    If EntryMode Then
+                    Begin
+                        Entry := SchServer.SchObjectFactory(eBusEntry, eCreate_Default);
+                        If Entry <> Nil Then
+                        Begin
+                            Entry.Location := Point(MilsToCoord(X1), MilsToCoord(Y1));
+                            Entry.Corner := Point(MilsToCoord(X2), MilsToCoord(Y2));
+                            SchDoc.RegisterSchObjectInContainer(Entry);
+                            SchRegisterObject(SchDoc, Entry);
+                            ItemOk := True;
+                        End;
+                    End
+                    Else
+                    Begin
+                        Bus := SchServer.SchObjectFactory(eBus, eCreate_Default);
+                        If Bus <> Nil Then
+                        Begin
+                            Bus.Location := Point(MilsToCoord(X1), MilsToCoord(Y1));
+                            Bus.InsertVertex := 1;
+                            Bus.SetState_Vertex(1, Point(MilsToCoord(X1), MilsToCoord(Y1)));
+                            Bus.InsertVertex := 2;
+                            Bus.SetState_Vertex(2, Point(MilsToCoord(X2), MilsToCoord(Y2)));
+                            SchDoc.RegisterSchObjectInContainer(Bus);
+                            SchRegisterObject(SchDoc, Bus);
+                            ItemOk := True;
+                        End;
+                    End;
+                    If Not ItemOk Then ErrorText := 'CREATE_FAILED';
+                Except ErrorText := 'NATIVE_EXCEPTION_PARTIAL_OR_UNKNOWN'; End;
+                If ItemOk Then Inc(Placed) Else Inc(Failed);
+                If ResultsJson <> '' Then ResultsJson := ResultsJson + ',';
+                ResultsJson := ResultsJson + JsonObj(JsonInt('index', I) + ',' +
+                    JsonBool('success', ItemOk) + ',' + JsonStr('error', ErrorText));
+            End;
+        Finally
+            SchServer.ProcessControl.PostProcess(SchDoc, 'Edit');
+            SchDoc.GraphicallyInvalidate;
+        End;
+        Result := BuildSuccessResponse(RequestId, JsonObj(JsonBool('success', Failed = 0) + ',' +
+            JsonInt('placed', Placed) + ',' + JsonInt('failed', Failed) + ',' +
+            JsonInt('total', Ops.Count) + ',"results":[' + ResultsJson + ']'));
+    Finally Ops.Free; End;
+End;
+
+Function Gen_PlaceBuses(Params : String; RequestId : String) : String;
+Begin Result := Gen_PlaceBusBatch(Params, RequestId, 'buses', False); End;
+
+Function Gen_PlaceBusEntries(Params : String; RequestId : String) : String;
+Begin Result := Gen_PlaceBusBatch(Params, RequestId, 'entries', True); End;
+
 Function Gen_PlaceWires(Params : String; RequestId : String) : String;
 Var
     WireStr, Remaining : String;
@@ -7937,6 +8066,31 @@ Begin
 End;
 
 {..............................................................................}
+{ Visibility helper used inside the existing stamp pass, never a sheet sweep. }
+Function HideStampedParameters(Comp : ISch_Component; Names : TStringList) : Boolean;
+Var Iter : ISch_Iterator; Param : ISch_Parameter;
+Begin
+    Result := True;
+    Iter := Comp.SchIterator_Create;
+    Try
+        Iter.AddFilter_ObjectSet(MkSet(eParameter));
+        Param := Iter.FirstSchObject;
+        While Param <> Nil Do
+        Begin
+            If Names.IndexOf(Param.Name) >= 0 Then
+            Begin
+                Try
+                    SchBeginModify(Param);
+                    Try Param.IsHidden := True;
+                    Finally SchEndModify(Param); End;
+                    If Not Param.IsHidden Then Result := False;
+                Except Result := False; End;
+            End;
+            Param := Iter.NextSchObject;
+        End;
+    Finally Comp.SchIterator_Destroy(Iter); End;
+End;
+
 { Gen_SetSchComponentsParameters - Bulk parameter stamping.                    }
 { Params: stamps = 'designator=R1;Value=10k;Manufacturer=Yageo;MPN=...;        }
 {                   Footprint=0603~~designator=R2;Value=1k;Manufacturer=...'    }
@@ -7946,14 +8100,14 @@ End;
 
 Function Gen_SetSchComponentsParameters(Params : String; RequestId : String) : String;
 Var
-    StampsStr, SheetPath, Op, Remaining : String;
+    StampsStr, SheetPath, Op, Remaining, HiddenStr, HiddenName : String;
     OpCount, Updated, Failed, OpIdx, UpdatedInstances, MatchedInstances, I, N, Good : Integer;
     SchDoc : ISch_Document;
     Iter : ISch_Iterator;
     Obj : ISch_GraphicalObject;
     Comp : ISch_Component;
     DesigList : TStringList;
-    OpsList, FoundList, GoodList, ErrorList : TStringList;
+    OpsList, FoundList, GoodList, ErrorList, HiddenNames : TStringList;
     OpStr, FieldStr, Key, Val, Diagnostic, ResultsJson : String;
     InstanceOk, FieldCreated, HasFields : Boolean;
     P, EqPos, SemiPos : Integer;
@@ -7961,6 +8115,7 @@ Var
 Begin
     StampsStr := ExtractJsonValue(Params, 'stamps');
     SheetPath := ExtractJsonValue(Params, 'sheet_path');
+    HiddenStr := ExtractJsonValue(Params, 'hidden_parameters');
 
     If StampsStr = '' Then
     Begin
@@ -7998,7 +8153,15 @@ Begin
     FoundList := TStringList.Create;
     GoodList := TStringList.Create;
     ErrorList := TStringList.Create;
+    HiddenNames := TStringList.Create;
     Try
+        Remaining := HiddenStr;
+        While True Do
+        Begin
+            HiddenName := NextBatchOp(Remaining);
+            If HiddenName = '' Then Break;
+            HiddenNames.Add(HiddenName);
+        End;
         Remaining := StampsStr;
         OpCount := 0;
         While True Do
@@ -8089,6 +8252,12 @@ Begin
                                 End;
                             End;
                         End;
+                        If HiddenNames.Count > 0 Then
+                            If Not HideStampedParameters(Comp, HiddenNames) Then
+                            Begin
+                                InstanceOk := False;
+                                ErrorList[OpIdx] := 'VISIBILITY_READBACK_MISMATCH';
+                            End;
                         If InstanceOk Then
                         Begin
                             GoodList[OpIdx] := IntToStr(StrToIntDef(GoodList[OpIdx], 0) + 1);
@@ -8127,6 +8296,7 @@ Begin
         FoundList.Free;
         GoodList.Free;
         ErrorList.Free;
+        HiddenNames.Free;
     End;
 
     Try
@@ -8142,7 +8312,7 @@ Begin
         ',"matched_instances":' + IntToStr(MatchedInstances) +
         ',"updated_instances":' + IntToStr(UpdatedInstances) +
         ',"failed_instances":' + IntToStr(MatchedInstances - UpdatedInstances) +
-        ',"results":' + ResultsJson + '}');
+        ',"hidden_parameters_applied":true,"results":' + ResultsJson + '}');
 End;
 
 {..............................................................................}
@@ -10605,6 +10775,8 @@ Begin
         'get_unconnected_pins': Result := Gen_GetUnconnectedPins(Params, RequestId);
         'place_wire':       Result := Gen_PlaceWire(Params, RequestId);
         'place_bus':        Result := Gen_PlaceBus(Params, RequestId);
+        'place_buses':      Result := Gen_PlaceBuses(Params, RequestId);
+        'place_bus_entries': Result := Gen_PlaceBusEntries(Params, RequestId);
         'place_directive':  Result := Gen_PlaceDirective(Params, RequestId);
         'get_directives':   Result := Gen_GetDirectives(Params, RequestId);
         'place_compile_mask': Result := Gen_PlaceCompileMask(Params, RequestId);

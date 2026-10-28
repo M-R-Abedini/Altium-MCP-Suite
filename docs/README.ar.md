@@ -8,7 +8,7 @@
 
 <div dir="rtl">
 
-خوادم <span dir="ltr"><code>MCP</code></span> تتيح للذكاء الاصطناعي قراءة وتحرير مخططاتك ولوحاتك ومكتباتك في <span dir="ltr"><code>Altium</code></span>. يبقى <span dir="ltr"><code>Altium</code></span> مفتوحًا، ويعمل الذكاء الاصطناعي مباشرة على المشروع المفتوح.
+اتصال <span dir="ltr"><code>MCP</code></span> واحد باسم <span dir="ltr"><code>mcp altium suite</code></span> يتيح للذكاء الاصطناعي قراءة وتحرير مخططاتك ولوحاتك ومكتباتك في <span dir="ltr"><code>Altium</code></span>. يبقى البرنامج مفتوحًا وتستهدف العمليات المشروع المحدد. تعمل محركات التصميم والعمليات القديمة والمكتبات داخل الاتصال نفسه مع التنسيق المشترك.
 
 **المتطلبات:** <span dir="ltr"><code>Windows</code></span> و <span dir="ltr"><code>Python 3.12</code></span>. تم الاختبار المباشر على <span dir="ltr"><code>Altium Designer 26</code></span>.
 
@@ -20,6 +20,8 @@
 - أربعة أدوات للقراءة فقط لفحص التوصيل: لقطة لربط الأرجل بالشبكات (ببصمة <span dir="ltr"><code>SHA-256</code></span>)، وتعريف عقد لكل رجل (الشبكة المتوقعة، أو عدم توصيل مقصود مع ذكر السبب)، ومقارنة قبل/بعد، والتحقق باتجاهين من تطابق وسادات المخطط واللوحة.
 - حساب عرض المسار والمعاوقة وميزانية الأطوال. هذه حاسبات، ليست إثبات سلامة إشارة.
 - قراءة وكتابة ملفات المكتبات <span dir="ltr"><code>.SchLib</code></span> و <span dir="ltr"><code>.PcbLib</code></span>.
+- البحث في فهرس <span dir="ltr"><code>ChilaBoard</code></span> العام وتنزيل المكتبات مع الإصدار والمصدر والبصمات والترخيص؛ وتجهيز ملفات التنزيل الرسمية من <span dir="ltr"><code>SnapMagic</code></span> و <span dir="ltr"><code>SamacSys</code></span> للفحص المحلي. الربط المباشر بواجهتيهما وتحويل <span dir="ltr"><code>EPW</code></span> غير منفذين. [دليل المكتبات السحابية](review/CLOUD_LIBRARIES_2026-10-27.md).
+- مهارة <span dir="ltr"><code>$altium-circuit-design</code></span> لمتطلبات الدائرة ومراجعة البيانات والرموز والبصمات والتخطيط المنظم والتحقق من التوصيل. نجاح التنزيل لا يثبت صحة ترقيم الأرجل أو الحزمة.
 - إدارة بدائل التجميع بمعرّف فريد، وتحديث حالة تركيب المكونات دفعيًا، وتصدير مصفوفة المكونات؛ مع نسخ احتياطي للمشروع والتحقق عبر واجهة <span dir="ltr"><code>Altium</code></span>. [سير عمل البدائل](review/STORAGE_VARIANTS_2026-10-08.md).
 - جسران ومحرك سكربت واحد: قفل مشترك يمنع جسري بايثون من التنازع على محرك سكربت <span dir="ltr"><code>Altium</code></span>، وكل طلب يحمل معرّفًا حتى لا يُقبَل رد متأخر على طلب قديم.
 - عملاء متزامنون: يرتّب طابور مشترك أوامر Altium، وتُقرأ المكونات والشبكات والوسادات في مرور واحد. يمكن للعملاء تحليل اللقطة بالتوازي؛ اللقطة سجل سابق وليست شرطًا صالحًا للتعديل الحي. [الاستخدام والتحقق](review/CONCURRENT_CLIENTS_2026-10-14.md).
@@ -45,6 +47,12 @@
 
 ## التثبيت
 
+### إضافة Codex
+
+تجمع الإضافة اتصال <span dir="ltr"><code>MCP</code></span> الموحد ومهارة تصميم الدوائر وسير إعداد البيئة. يوضح [دليل الإضافة](PLUGIN_PACKAGE.md) أوامر البناء الفعلية والتثبيت من marketplace محلي وتشخيص البيئة. بعد التثبيت افتح محادثة جديدة وأكمل الإعداد. لا تشمل الإضافة برنامج <span dir="ltr"><code>Altium</code></span> أو ترخيصه. لا تُبقِ الاتصال اليدوي واتصال الإضافة نفسها مفعّلين معًا.
+
+### الاتصال اليدوي والعملاء الآخرون
+
 راجع [فحوص الاتصال والاستعادة اليدوية](review/TRANSPORT_FINDINGS_2026-10-08.md) لمعالجة ملكية السكربت غير المؤكدة بعد انتهاء المهلة أو تعطل المحرك.
 
 ثبّت <span dir="ltr"><code>Git</code></span> و <span dir="ltr"><code>Python 3.12</code></span> و <span dir="ltr"><code>Altium</code></span> على ويندوز. ضع مسار ملف التنفيذ الخاص بك:
@@ -65,9 +73,9 @@ python -m venv .venv
 
 <div dir="rtl">
 
-ادمج المدخلات المولّدة في <span dir="ltr"><code>mcp.local.json</code></span> أو <span dir="ltr"><code>codex.local.toml</code></span> في إعدادات عميل <span dir="ltr"><code>MCP</code></span> وأعد تشغيل الاتصالات. افتح مشروعك في <span dir="ltr"><code>Altium</code></span> واستدعِ <span dir="ltr"><code>app_context</code></span> للتحقق من حالة الجسر.
+ينشئ الإعداد مدخلاً واحدًا <span dir="ltr"><code>mcp-altium-suite</code></span> في <span dir="ltr"><code>mcp.local.json</code></span> أو <span dir="ltr"><code>codex.local.toml</code></span>. ادمجه في إعدادات العميل وأعد الاتصال. تبقى إعدادات المحركات الخاصة في <span dir="ltr"><code>suite-backends.local.json</code></span>. افتح مشروعك، واكتشف <span dir="ltr"><code>app_context</code></span> بواسطة <span dir="ltr"><code>suite_catalog</code></span> ثم استدعِ الاسم <span dir="ltr"><code>eda__app_context</code></span> عبر <span dir="ltr"><code>suite_invoke</code></span>.
 
-لتقليل حجم قائمة الأدوات، أضف <span dir="ltr"><code>--toolset minimal</code></span> عند التثبيت أو تشغيل الخادم الرئيسي. اكتشف الأداة عبر <span dir="ltr"><code>tool_catalog</code></span> مع <span dir="ltr"><code>with_schema=True</code></span> ثم شغّلها عبر <span dir="ltr"><code>tool_invoke</code></span>. تبقى جميع العمليات متاحة؛ تُحمّل تعريفات المعاملات عند الحاجة وتُتحقق وفق قواعد الوضع الكامل. راجع [نتائج القياس](review/PERFORMANCE_2026-10-08.md).
+الوضع الافتراضي <span dir="ltr"><code>--toolset minimal</code></span> يعرض فقط <span dir="ltr"><code>suite_catalog</code></span> و <span dir="ltr"><code>suite_invoke</code></span> و <span dir="ltr"><code>suite_status</code></span>. اكتشف المخطط باستخدام <span dir="ltr"><code>with_schema=true</code></span>؛ تبدأ الأسماء بـ <span dir="ltr"><code>eda__</code></span> أو <span dir="ltr"><code>legacy__</code></span> أو <span dir="ltr"><code>libraries__</code></span> أو <span dir="ltr"><code>cloud__</code></span>. تبقى العمليات متاحة وتُتحقق المدخلات قبل الإرسال. يعرض <span dir="ltr"><code>--toolset full</code></span> جميع الأدوات، ويولد <span dir="ltr"><code>--separate-servers</code></span> الاتصالات القديمة. [الاتصال الموحد والترحيل](review/UNIFIED_SUITE_2026-10-27.md).
 
 </div>
 
@@ -84,7 +92,7 @@ Pop-Location
 
 <div dir="rtl">
 
-خادم المكتبات اختياري (يحتاج نسخة <span dir="ltr"><code>Rust</code></span> المثبتة وأدوات بناء <span dir="ltr"><code>Visual Studio C++</code></span>). للمجلدات المتعددة كرر الخيار <span dir="ltr"><code>--library-dir</code></span>.
+بناء محرك المكتبات من المصدر يحتاج نسخة <span dir="ltr"><code>Rust</code></span> المحددة وأدوات <span dir="ltr"><code>Visual Studio C++</code></span>؛ يمكن استخدام ملف تنفيذي موجود عبر <span dir="ltr"><code>--library-binary</code></span>. للمجلدات المتعددة كرر <span dir="ltr"><code>--library-dir</code></span>. يحتفظ الإعداد بالمسارات السابقة ويضيف مخبأ السحابة الخاص. تراخيص البرنامج وحسابات مزودي المكتبات غير مشمولة.
 
 ## الأسئلة والمساهمة
 

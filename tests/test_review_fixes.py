@@ -163,6 +163,25 @@ def test_bad_annotation_never_writes_spec_or_calls_bridge(tmp_path):
     assert not list(tmp_path.iterdir())
 
 
+def test_build_groups_complete_part_metadata_by_library(tmp_path):
+    async def backend(command, params):
+        lines = Path(params['spec_file']).read_text(encoding='cp1252').splitlines()
+        records = [line.split('|') for line in lines]
+        parts = [record for record in records if record[0] == 'PART']
+        assert [(r[1], r[2]) for r in parts] == [('R2', 'a.SchLib'), ('R1', 'b.SchLib'), ('R3', 'b.SchLib')]
+        for i, record in enumerate(records):
+            if record[0] == 'PART':
+                ref = record[1]
+                assert records[i+1:i+5] == [['COMMENT',ref], ['FOOTPRINT',ref],
+                                           ['DESCRIPTION',ref], ['PARAM','Owner',ref]]
+        assert records[-1][0] == 'WIRE'
+        return {'success':True,'result':{}}
+    parts = [dict(designator=r, symbol_library=lib, symbol='R', x=0, y=0,
+                  comment=r, footprint=r, description=r, parameters={'Owner':r})
+             for r,lib in [('R1','b.SchLib'),('R2','a.SchLib'),('R3','b.SchLib')]]
+    asyncio.run(build_method(tmp_path,backend)(None,parts,wires=[[0,0,100,0]]))
+
+
 def test_each_build_uses_configured_unique_input_and_pin_map(tmp_path):
     calls=[]
     (tmp_path/'pin_map.txt').write_text('PIN|WRONG|1|999|999')

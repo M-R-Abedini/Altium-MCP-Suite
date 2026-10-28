@@ -1,5 +1,45 @@
 # Local changes
 
+## Added 2026-10-28
+
+- Portable Codex plugin manifests, a clean reproducible source package and local
+  marketplace, with bundled circuit-design and setup skills. Explicit adoption
+  and bootstrap preserve native workspace identity; normal startup never
+  installs dependencies. Private state lives outside the versioned plugin cache
+  and native workers resolve against the current package on every launch.
+  See [plugin installation and verification](docs/PLUGIN_PACKAGE.md).
+- The gateway caches checked JSON Schema validators without changing validation
+  errors or applying defaults. Prompt discovery initializes capabilities in
+  parallel and does not fetch every tool schema just to enumerate prompts.
+- Deployment carries the shared ignore policy and all maintained root skills.
+  Generated backend/deployment manifests and repair backups remain local.
+  Windows/portable CI now build and exercise the clean plugin artifact and
+  planner/batch contracts. Existing upstream code and license scope are retained.
+
+## Added 2026-10-27
+
+- Unified `mcp altium suite` stdio endpoint with lean discovery/invocation/status,
+  namespaced EDA/legacy/library/cloud tools, retained original schemas/results,
+  lazy workers, cancellation draining and migrated per-tool restrictions.
+  Setup/deployment now support the one-connection layout; configuration migration
+  backs up originals and preserves unrelated settings, worker timeouts and
+  existing library allowlists. See [unified suite](docs/review/UNIFIED_SUITE_2026-10-27.md).
+- Public ChilaBoard catalog/download adapter, revision/hash/license receipts and
+  bounded immutable staging. Authorized local SnapMagic/SamacSys CAD downloads
+  can be staged for inspection. No private provider API is assumed. See
+  [cloud libraries](docs/review/CLOUD_LIBRARIES_2026-10-27.md).
+- Added researched `skills/altium-circuit-design`. Modified Apache-2.0 files
+  `eda-agent/src/eda_agent/design/discipline.py` and `tools/design.py` to correct
+  zone/label guidance and add discoverable DesignRequirement schema while
+  retaining existing response keys. Upstream notices and licenses are retained.
+
+## Added 2026-10-26
+
+- Batched buses/entries, same-pass parameter visibility, content-bound symbol
+  caches, target-only saves, compiled topology verification, timing evidence and
+  optional summary artifacts. Legacy builds group symbols by library. See
+  [performance batch changes](docs/review/PERFORMANCE_BATCHES_2026-10-26.md).
+
 ## Added 2026-10-14
 
 - Concurrent clients (`2026.10.14.queue2`): authenticated loopback FIFO admission service, foreground priority over health traffic, cancellable queued EDA requests and drained in-flight cancellation. Existing native mutex/ownership guards remain authoritative. One physical iterator pass captures components/nets/pads; immutable checksum-verified snapshots support concurrent offline analysis. Removed a large-response error-detail scan that blocked the next health probe after a successful reply. See [acceptance and timing](docs/review/CONCURRENT_CLIENTS_2026-10-14.md).
