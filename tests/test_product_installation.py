@@ -160,7 +160,9 @@ def test_real_pip_parses_runtime_paths_with_spaces(tmp_path, monkeypatch):
         from pip._internal.network.session import PipSession
         from pip._internal.req.req_file import parse_requirements
         parsed.extend(parse_requirements(command[-1], session=PipSession()))
-    monkeypatch.setattr(runtime.subprocess, 'run', parse_real)
+    # Replace this module's dependency, not subprocess.run globally: pip's
+    # Linux distro probe itself legitimately invokes subprocess.check_output.
+    monkeypatch.setattr(runtime, 'subprocess', SimpleNamespace(run=parse_real))
     runtime.install_runtime(Path(sys.executable), root)
     assert any(item.constraint and item.requirement == 'jsonschema==4.26.0' for item in parsed)
     assert any(item.requirement == (root / 'eda-agent').as_uri() and not item.is_editable for item in parsed)
