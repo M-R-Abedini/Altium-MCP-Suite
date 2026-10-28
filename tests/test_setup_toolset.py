@@ -39,7 +39,49 @@ def test_generated_clients_select_the_same_toolset(tmp_path, monkeypatch, mode):
     monkeypatch.setattr(setup.suite_config, 'configure_environment', lambda: {'eda': 'eda.PrjScr', 'legacy': 'legacy.PrjScr'})
     monkeypatch.setattr(sys, 'argv', ['setup.py', '--altium-exe', str(executable), '--toolset', mode])
     setup.main()
-    json_config = json.loads((tmp_path / 'mcp.local.json').read_text())['mcpServers']['eda-agent']
-    toml_config = tomllib.loads((tmp_path / 'codex.local.toml').read_text())['mcp_servers']['eda-agent']
+    json_config = json.loads((tmp_path / 'mcp.local.json').read_text())['mcpServers']['mcp-altium-suite']
+    toml_config = tomllib.loads((tmp_path / 'codex.local.toml').read_text())['mcp_servers']['mcp-altium-suite']
     assert toml_config == json_config
-    assert json_config['args'] == [str(tmp_path / 'eda_stdio.py'), '--toolset', mode]
+    assert json_config['args'] == [str(tmp_path / 'suite_stdio.py'), '--toolset', mode,
+                                  '--backend-config', str(tmp_path / 'suite-backends.local.json')]
+    assert len(json.loads((tmp_path / 'mcp.local.json').read_text())['mcpServers']) == 1
+    backends = json.loads((tmp_path / 'suite-backends.local.json').read_text())['backends']
+    assert backends['eda']['args'] == [str(tmp_path / 'eda_stdio.py'), '--toolset', 'full', '--no-dashboard']
+    assert backends['eda']['env'] == backends['legacy']['env']
+
+
+def test_separate_connections_remain_explicit_compatibility_option(tmp_path, monkeypatch):
+    monkeypatch.setenv('ALTIUM_MCP_RUNTIME', str(tmp_path / 'runtime'))
+    monkeypatch.setenv('EDA_AGENT_WORKSPACE', str(tmp_path / 'workspace'))
+    executable = tmp_path / 'X2.EXE'; executable.touch()
+    monkeypatch.setattr(setup, '__file__', str(tmp_path / 'setup.py'))
+    monkeypatch.setattr(setup.suite_config, 'configure_environment', lambda: {'eda': 'eda.PrjScr', 'legacy': 'legacy.PrjScr'})
+    monkeypatch.setattr(sys, 'argv', ['setup.py', '--altium-exe', str(executable), '--separate-servers'])
+    setup.main()
+    config = json.loads((tmp_path / 'mcp.local.json').read_text())['mcpServers']
+    assert set(config) == {'eda-agent', 'altium'}
+    assert '--toolset' in config['eda-agent']['args']
+    assert not (tmp_path / 'suite-backends.local.json').exists()
+
+
+def test_setup_rerun_retains_existing_library_paths_and_options(tmp_path, monkeypatch):
+    monkeypatch.setenv('ALTIUM_MCP_RUNTIME', str(tmp_path / 'runtime'))
+    monkeypatch.setenv('EDA_AGENT_WORKSPACE', str(tmp_path / 'workspace'))
+    executable = tmp_path / 'X2.EXE'; executable.touch()
+    binary = tmp_path / 'library-server.exe'; binary.touch()
+    existing_root = tmp_path / 'existing-libraries'; existing_root.mkdir()
+    extra_root = tmp_path / 'extra-libraries'; extra_root.mkdir()
+    library_config = tmp_path / 'libraries.local.json'
+    library_config.write_text(json.dumps({'allowed_paths': [str(existing_root)],
+                                         'logging': {'level': 'warn', 'audit_log_path': None}}))
+    monkeypatch.setattr(setup, '__file__', str(tmp_path / 'setup.py'))
+    monkeypatch.setattr(setup.suite_config, 'configure_environment', lambda: {'eda': 'eda', 'legacy': 'legacy'})
+    for additional in (['--library-dir', str(extra_root)], []):
+        monkeypatch.setattr(sys, 'argv', ['setup.py', '--altium-exe', str(executable),
+                                        '--library-binary', str(binary)] + additional)
+        setup.main()
+    saved = json.loads(library_config.read_text())
+    assert saved['allowed_paths'] == [str(existing_root), str(extra_root), str(tmp_path / 'runtime' / 'cloud-libraries')]
+    assert saved['logging'] == {'level': 'warn', 'audit_log_path': None}
+    workers = json.loads((tmp_path / 'suite-backends.local.json').read_text())['backends']
+    assert workers['libraries']['args'] == [str(library_config)]

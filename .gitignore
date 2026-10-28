@@ -8,6 +8,9 @@ local-settings.json
 mcp.local.json
 codex.local.toml
 libraries.local.json
+suite-backends.local.json
+deployment-manifest.json
+repair-backups/
 *.log
 *.bak
 .env

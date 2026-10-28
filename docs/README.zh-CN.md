@@ -2,7 +2,7 @@
 
 [English](../README.md) · [فارسی](README.fa.md) · [简体中文](README.zh-CN.md) · [العربية](README.ar.md)
 
-让 AI 读取和编辑你的 Altium 原理图、PCB 和库的 MCP 服务器。Altium 保持打开，AI 直接在你打开的项目上实时操作。
+通过一个名为 **mcp altium suite** 的 MCP 连接，让 AI 读取和编辑 Altium 原理图、PCB 和库。Altium 保持打开，操作针对明确指定的项目；设计、旧版操作和库文件后端在同一连接内部协调运行。
 
 **Windows · Python 3.12 · 已在 Altium Designer 26 上实测**
 
@@ -14,6 +14,8 @@
 - 四个只读工具做连接检查：引脚-网络映射快照（SHA-256 摘要）、逐引脚约定（期望网络，或注明原因的有意悬空）、前后 diff、原理图↔PCB 焊盘双向一致性。
 - 计算线宽、阻抗和长度预算。只是计算器，不是信号完整性证明。
 - 读写 `.SchLib` / `.PcbLib` 库文件。
+- 搜索 ChilaBoard 公共目录并下载固定版本的库，保留来源、哈希和许可证；暂存从 SnapMagic/SamacSys 官方渠道获得的本地文件。尚未实现这两家服务的直接 API 或 EPW 转换。[云库工作流程](review/CLOUD_LIBRARIES_2026-10-27.md)。
+- `$altium-circuit-design` 技能覆盖需求、数据手册、符号/封装核验、结构化原理图计划和连接检查。下载成功不等于引脚映射或封装正确。
 - 通过唯一标识管理原生装配变体，批量更新元件的装配状态并导出元件矩阵；修改前备份项目，修改后通过 Altium 接口回读验证。参见[变体工作流程](review/STORAGE_VARIANTS_2026-10-08.md)。
 - 两个桥，一个脚本引擎：共享锁让两个 Python 桥不会抢 Altium 的脚本引擎；每个请求带 ID，过期的旧响应不会被接受。
 - 多客户端并发：共享 FIFO 队列顺序执行 Altium 命令，一次遍历读取元件、网络和焊盘。客户端可并行分析同一快照；快照仅代表采集时的状态，不能作为实时编辑的前置条件。[用法与验证](review/CONCURRENT_CLIENTS_2026-10-14.md)。
@@ -39,6 +41,12 @@
 
 ## 安装
 
+### Codex 插件
+
+插件将统一 MCP 连接、电路设计技能和环境初始化流程一起提供。[插件指南](PLUGIN_PACKAGE.md)说明实际构建、从本地 marketplace 安装和环境诊断命令。安装后打开新对话并完成初始化。插件不包含 Altium 软件或许可证。不要同时启用手动连接和同一插件的连接。
+
+### 手动连接及其他客户端
+
 命令超时或引擎故障后的脚本所有权处理，参见[传输检查与手动恢复](review/TRANSPORT_FINDINGS_2026-10-08.md)。
 
 在 Windows 上安装 Git、Python 3.12 和 Altium。把可执行文件路径换成你自己的：
@@ -51,9 +59,9 @@ python -m venv .venv
 .\.venv\Scripts\python.exe setup.py --altium-exe "C:\Program Files\Altium\AD26\X2.EXE"
 ```
 
-把生成的 `mcp.local.json`（或 `codex.local.toml`）条目合并到 MCP 客户端配置，重启连接。在 Altium 里打开项目，调用 `app_context` 检查桥的状态。
+设置程序现在在 `mcp.local.json`（或 `codex.local.toml`）中只生成一个 `mcp-altium-suite` 连接。将其合并到客户端配置并重新连接。后端的私有配置保存在 `suite-backends.local.json`。在 Altium 打开项目后，用 `suite_catalog` 发现 `app_context`，再用 `suite_invoke` 调用确切名称 `eda__app_context`。
 
-为减少工具列表大小，可在安装或启动主服务器时添加 `--toolset minimal`。先用 `tool_catalog(query="...", with_schema=True)` 获取参数，再用 `tool_invoke` 执行。所有操作仍可用，参数定义按需加载，验证规则与完整模式一致。参见[实测结果](review/PERFORMANCE_2026-10-08.md)。
+默认 `--toolset minimal` 只公布 `suite_catalog`、`suite_invoke` 和 `suite_status`。用 `suite_catalog(backend="eda", query="...", with_schema=true)` 获取参数，再用 `suite_invoke(name="eda__...", arguments={...})` 执行。命名空间为 `eda__`、`legacy__`、`libraries__`、`cloud__`。所有操作仍可用，参数在转发前验证。`--toolset full` 公布全部工具；`--separate-servers` 显式生成旧版多连接配置。[统一连接及迁移](review/UNIFIED_SUITE_2026-10-27.md)。
 
 ```powershell
 Push-Location altium-designer-mcp
@@ -62,7 +70,7 @@ Pop-Location
 .\.venv\Scripts\python.exe setup.py --altium-exe "C:\Program Files\Altium\AD26\X2.EXE" --library-dir "D:\MyProject\Libraries"
 ```
 
-库服务器是可选的（需要锁定版本的 Rust 工具链和 Visual Studio C++ 构建工具）。多个目录可重复 `--library-dir`。
+从源码构建库后端需要锁定版本的 Rust 工具链和 Visual Studio C++ 构建工具；已有可执行文件可用 `--library-binary` 指定。多个目录可重复 `--library-dir`。设置保留已有目录并加入专用云库缓存目录。Altium 许可证与供应商账户不包含在内。
 
 ## 问题与贡献
 

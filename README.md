@@ -4,7 +4,7 @@
 
 [English](README.md) · [فارسی](docs/README.fa.md) · [简体中文](docs/README.zh-CN.md) · [العربية](docs/README.ar.md)
 
-MCP servers that let an AI read and edit your Altium schematics, PCBs, and libraries. You keep Altium open; the AI works on the project you have open, live.
+**MCP Altium Suite** is a desktop Codex plugin that packages one MCP connection, circuit-design and setup skills, and the coordinated Altium workers. It lets an AI read and edit schematics, PCBs and library files while you keep Altium open. This repository remains the source of truth for both the plugin and standalone MCP installation.
 
 **Windows · Python 3.12 · Tested live on Altium Designer 26**
 
@@ -16,6 +16,8 @@ MCP servers that let an AI read and edit your Altium schematics, PCBs, and libra
 - Check connectivity with four read-only tools: snapshot pin-to-net assignments (SHA-256 digest), per-pin contracts (expected net, or intentional NC with a reason), before/after diffs, and schematic↔PCB pad parity in both directions.
 - Calculate trace width, impedance, and length budgets. These are calculators, not a signal-integrity proof.
 - Read and write `.SchLib` / `.PcbLib` library files.
+- Search ChilaBoard's public catalog and download revision-pinned libraries with source/hash/license receipts. Stage authorized SnapMagic/SamacSys downloads without executing archive contents. Native geometry and pin mapping still need verification. See [unified suite and cloud workflow](docs/review/UNIFIED_SUITE_2026-10-27.md).
+- Use the researched [altium-circuit-design skill](skills/altium-circuit-design/SKILL.md) for requirements, model verification, structured schematic plans and design-check evidence.
 - Manage native assembly variants by GUID, bulk-update fitted states, and export their component matrix. Changes use project backups and native readback; see the [variant workflow](docs/review/STORAGE_VARIANTS_2026-10-08.md).
 - Two bridges, one script engine: a shared lock keeps the two Python bridges from fighting over Altium's script engine, and every request carries an ID so a late answer to an old request is never accepted.
 - Concurrent clients: a local FIFO service admits native commands in order; health traffic yields to queued work. `pcb_capture_snapshot` reads components, nets and pad assignments in one native pass. Clients can then use `design_read_snapshot` and `design_analyze_snapshot` concurrently without occupying Altium. Snapshots are historical evidence, not live edit preconditions. See [usage and measured limits](docs/review/CONCURRENT_CLIENTS_2026-10-14.md).
@@ -41,6 +43,28 @@ MCP servers that let an AI read and edit your Altium schematics, PCBs, and libra
 
 ## Setup
 
+### Codex plugin
+
+The plugin bundles its MCP definition and skills together. From a development
+checkout with the Python dependencies installed, build a clean package, register
+its local marketplace, and install it with the supported Codex CLI:
+
+```powershell
+.\.venv\Scripts\python.exe scripts/build_plugin.py --output dist --smoke
+codex plugin marketplace add ./dist/marketplace --json
+codex plugin add mcp-altium-suite@altium-mcp-suite --json
+```
+
+Run the bundled **Altium Suite Setup** workflow after installation. It can adopt
+an existing tested suite or explicitly prepare a private runtime. Altium Designer
+and its license remain separate prerequisites. Runtime configuration stays outside
+the plugin cache; upgrades select the new package's code while preserving the
+chosen editor workspace, library paths and tool restrictions. Normal startup does
+not install dependencies. Avoid enabling a second standalone connection alongside
+the plugin. See [installation, upgrades and verification](docs/PLUGIN_PACKAGE.md).
+
+### Standalone MCP / development
+
 See [transport checks and manual recovery](docs/review/TRANSPORT_FINDINGS_2026-10-08.md) for unresolved script ownership after a timeout or engine fault.
 
 Install Git, Python 3.12, and Altium on Windows. Use your own Altium path.
@@ -53,9 +77,9 @@ python -m venv .venv
 .\.venv\Scripts\python.exe setup.py --altium-exe "C:\Program Files\Altium\AD26\X2.EXE"
 ```
 
-Merge the generated `mcp.local.json` (or `codex.local.toml`) into your MCP client config and restart its connections. Open your project in Altium and call `app_context` to check the bridge.
+Merge the generated `mcp.local.json` (or `codex.local.toml`) into your MCP client config and restart its connections. Setup now emits one `mcp-altium-suite` connection, with display identity `mcp altium suite`, and a private `suite-backends.local.json` worker manifest. Open your project in Altium, discover `app_context` with `suite_catalog`, then invoke the returned `eda__app_context` name through `suite_invoke`.
 
-For a smaller tool list, pass `--toolset minimal` to `setup.py` or the EDA server. Discover an operation with `tool_catalog(query="...", with_schema=True)`, then call `tool_invoke(name="...", arguments={...})`. All operations remain available; schemas load on demand with the same input validation as full mode. See [measured latency and tool-list size](docs/review/PERFORMANCE_2026-10-08.md).
+The default `--toolset minimal` advertises only `suite_catalog`, `suite_invoke` and `suite_status`. Discover an operation with `suite_catalog(query="...", backend="eda", with_schema=true)`, then call `suite_invoke(name="eda__...", arguments={...})`. Namespaces are `eda__`, `legacy__`, `libraries__` and `cloud__`. Schemas load on demand and arguments are validated before forwarding. `--toolset full` advertises every namespaced tool; `--separate-servers` explicitly generates the older connection layout. Existing EDA-only measurements in the [performance review](docs/review/PERFORMANCE_2026-10-08.md) are not unified-suite benchmarks.
 
 ```powershell
 Push-Location altium-designer-mcp
@@ -64,7 +88,9 @@ Pop-Location
 .\.venv\Scripts\python.exe setup.py --altium-exe "C:\Program Files\Altium\AD26\X2.EXE" --library-dir "D:\MyProject\Libraries"
 ```
 
-The library server is optional (needs the pinned Rust toolchain + VS C++ build tools). Repeat `--library-dir` for more directories.
+The library worker needs the pinned Rust toolchain + VS C++ build tools when building from source. Repeat `--library-dir` for more directories, or use `--library-binary` for an existing executable. Setup adds only the suite's cloud staging root alongside the selected library roots. SnapMagic and SamacSys account/API access is not bundled.
+
+For an existing three-server Codex installation, deploy and test the new entrypoint first, then use `configure_suite.py --cloud-cache <absolute-cache-path>` to preview migration. Add `--apply` to back up and migrate the three connection tables while preserving unrelated settings. See [migration and rollback](docs/review/UNIFIED_SUITE_2026-10-27.md).
 
 ## Questions and contributions
 

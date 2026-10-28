@@ -1340,7 +1340,11 @@ async def build_schematic(ctx: Context, parts: list, wires: list = None,
         return json.dumps({"success": False, "error": str(error), "command_sent": False})
 
     lines = []
-    for p in parts:
+    # Keep every PART plus its metadata together, but visit each library once.
+    # The native builder's library switch includes a synchronous open/wait.
+    # Sorting only these independent placements leaves wires and labels after
+    # all symbols and avoids paying that wait for an alternating BOM order.
+    for p in sorted(parts, key=lambda item: str(item.get("symbol_library", "")).casefold()):
         for key in ("designator", "symbol_library", "symbol", "x", "y"):
             if key not in p:
                 return json.dumps({"success": False,

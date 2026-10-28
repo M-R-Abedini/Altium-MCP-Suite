@@ -279,7 +279,7 @@ class _RecBridge:
 
     def send_command(self, command, params=None, timeout=None):
         self.calls.append((command, params or {}))
-        return {"ok": True}
+        return {"success": True, "placed": 1, "failed": 0, "total": 1}
 
 
 def test_emit_buses_and_entries_call_bridge():
@@ -292,10 +292,10 @@ def test_emit_buses_and_entries_call_bridge():
                       fb, res, "main")
     assert res.buses_emitted == 1 and res.bus_entries_emitted == 1
     cmds = [c for c, _ in fb.calls]
-    assert "generic.place_bus" in cmds
-    assert "generic.place_bus_entry" in cmds
-    bus_params = next(p for c, p in fb.calls if c == "generic.place_bus")
-    assert bus_params == {"x1": "0", "y1": "0", "x2": "0", "y2": "800"}
+    assert "generic.place_buses" in cmds
+    assert "generic.place_bus_entries" in cmds
+    bus_params = next(p for c, p in fb.calls if c == "generic.place_buses")
+    assert bus_params == {"buses": "x1=0;y1=0;x2=0;y2=800"}
 
 
 def test_emit_buses_records_failure_note_and_stops():

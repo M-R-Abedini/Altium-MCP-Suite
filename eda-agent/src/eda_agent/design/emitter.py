@@ -24,6 +24,7 @@ Failure modes the emitter surfaces (not hides):
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
@@ -66,6 +67,26 @@ class EmitResult:
     bus_entries_emitted: int = 0
     failures: list[EmitFailure] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    timings: list[dict[str, Any]] = field(default_factory=list)
+
+
+class _TimedBridge:
+    """Record command names and monotonic timings, never design payloads."""
+
+    def __init__(self, bridge: Any, result: EmitResult) -> None:
+        self.bridge, self.result = bridge, result
+
+    def send_command(self, command: str, params=None, **kwargs):
+        started = time.perf_counter()
+        ok = False
+        try:
+            response = self.bridge.send_command(command, params, **kwargs)
+            ok = not (isinstance(response, dict) and
+                      (response.get("success") is False or response.get("error")))
+            return response
+        finally:
+            self.result.timings.append({"command": command, "ok": bool(ok),
+                "elapsed_ms": round((time.perf_counter() - started) * 1000, 3)})
 
 
 def emit_canvas(
@@ -90,6 +111,7 @@ def emit_canvas(
         EmitResult with one entry per sheet emitted and per failed refdes.
     """
     result = EmitResult(project_path=project_path)
+    bridge = _TimedBridge(bridge, result)
     project = Path(project_path)
 
     _open_or_create_project(project, bridge, result)
@@ -101,11 +123,15 @@ def emit_canvas(
                     parameter_stamps=parameter_stamps)
 
     try:
-        bridge.send_command("application.save_all", {}, timeout=_SAVE_TIMEOUT_S)
-        result.notes.append("save_all completed")
+        reply = bridge.send_command("project.save", {
+            "project_path": str(project), "include_libraries": "false",
+        }, timeout=_SAVE_TIMEOUT_S)
+        if not isinstance(reply, dict) or reply.get("success") is not True:
+            raise ValueError("target project save was not confirmed")
+        result.notes.append("target project save completed (libraries excluded)")
     except Exception as exc:
         result.ok = False
-        result.notes.append(f"save_all failed: {exc}")
+        result.notes.append(f"target project save failed: {exc}")
 
     return result
 
@@ -167,7 +193,7 @@ def _ensure_sheet_loaded(
                 "kind": "SCH",
                 "file_path": str(sheet_path),
                 "name": sheet_name,
-                "add_to_project": "true",
+                "add_to_project": "false",
             },
         )
         result.notes.append(f"Created sheet: {sheet_path}")
@@ -175,29 +201,26 @@ def _ensure_sheet_loaded(
         result.ok = False
         result.notes.append(f"create_document failed for {sheet_name}: {exc}")
         return None
-    # create_document's add_to_project=true attaches the new doc to whatever
-    # is the currently FOCUSED project. Right after project.create, the
-    # focused project may still be "Free Documents" (or a previously open
-    # project), so the new sheet ends up orphaned. Explicitly attach it
-    # to OUR target project to guarantee membership; the call is a no-op
-    # if the doc is already a member.
+    # Never attach to the implicitly focused project, which may be unrelated.
+    # Attach only to the explicitly requested target.
     try:
-        bridge.send_command(
+        reply = bridge.send_command(
             "project.add_document",
             {
                 "document_path": str(sheet_path),
                 "project_path": str(project),
             },
         )
+        if not isinstance(reply, dict) or reply.get("success") is False or reply.get("error"):
+            raise ValueError("target project attachment was not confirmed")
     except Exception as exc:
-        # Not fatal -- the sheet is on disk; project.add_document may
-        # have other names across Altium versions. Surface the warning
-        # but keep going; the user can manually attach if needed.
+        result.ok = False
         result.notes.append(
             f"explicit project.add_document failed for {sheet_name} -> "
             f"{project}: {exc}. If the sheet shows as 'Free Documents', "
             f"add it to the project manually or check the bridge handler."
         )
+        return None
     return sheet_path
 
 
@@ -220,6 +243,7 @@ def _emit_sheet(
         )
         result.sheets_emitted.append(sheet_name)
     except Exception as exc:
+        result.ok = False
         result.notes.append(f"set_active_document {sheet_name} failed: {exc}")
         return
 
@@ -345,42 +369,35 @@ def _emit_parameter_stamps(
     if not ops:
         return
     try:
-        bridge.send_command(
+        reply = bridge.send_command(
             "generic.set_sch_components_parameters",
-            {"stamps": "~~".join(ops), "sheet_path": str(sheet_path)},
+            {"stamps": "~~".join(ops), "sheet_path": str(sheet_path),
+             "hidden_parameters": "Manufacturer~~Manufacturer Part Number~~Datasheet"},
             timeout=_PARAM_TIMEOUT_S * max(1, len(ops) // 8),
         )
+        if not isinstance(reply, dict) or reply.get("error") or reply.get("success") is False or reply.get("failed", 0):
+            result.ok = False
+            result.notes.append("parameter stamp pass returned incomplete or failed results")
+            return
     except Exception as exc:
+        result.ok = False
         result.notes.append(f"parameter stamp pass failed: {exc}")
         return
 
-    # Discipline rule 16: Manufacturer, Manufacturer Part Number, and
-    # Datasheet must be invisible on the schematic body by default --
-    # only Designator + Value are user-facing. The stamping API creates
-    # the parameters with default visibility, so we sweep the placed
-    # sheet right after stamping and flip IsHidden=true on those three
-    # parameter names across every component.
-    _DISCIPLINE_HIDDEN_PARAMS = (
-        "Manufacturer",
-        "Manufacturer Part Number",
-        "Datasheet",
-    )
-    for param_name in _DISCIPLINE_HIDDEN_PARAMS:
-        try:
-            bridge.send_command(
-                "generic.modify_objects",
-                {
-                    "object_type": "eParameter",
-                    "scope": f"doc:{sheet_path}",
-                    "filter": f"Name={param_name}",
-                    "set": "IsHidden=true",
-                },
-                timeout=_PARAM_TIMEOUT_S,
-            )
-        except Exception as exc:
-            result.notes.append(
-                f"hide-{param_name} pass failed: {exc}"
-            )
+    # Visibility is applied by the stamping handler, only to the matched
+    # components. Avoid three full-sheet sweeps and three native round trips.
+    # Older generated scripts ignore the new option: keep the old visibility
+    # passes in that case instead of silently returning visible metadata.
+    if reply.get("hidden_parameters_applied") is not True:
+        for name in ("Manufacturer", "Manufacturer Part Number", "Datasheet"):
+            try:
+                bridge.send_command("generic.modify_objects", {
+                    "object_type": "eParameter", "scope": f"doc:{sheet_path}",
+                    "filter": f"Name={name}", "set": "IsHidden=true",
+                }, timeout=_PARAM_TIMEOUT_S)
+            except Exception as exc:
+                result.ok = False
+                result.notes.append(f"hide-{name} compatibility pass failed: {exc}")
 
 
 def _emit_wires(
@@ -418,40 +435,32 @@ def _emit_junctions(
 def _emit_buses(
     buses: list, bridge: Any, result: EmitResult, sheet_name: str
 ) -> None:
-    # The Altium bridge exposes single-object place_bus / place_bus_entry (no
-    # bulk variant). Buses are few (one short line per IC bus stub), so the
-    # per-object loop is fine. Stop on the first failure so a broken bridge
-    # doesn't spam one note per segment.
-    for b in buses:
-        try:
-            bridge.send_command(
-                "generic.place_bus",
-                {"x1": str(b.x1), "y1": str(b.y1),
-                 "x2": str(b.x2), "y2": str(b.y2)},
-                timeout=_BULK_TIMEOUT_S,
-            )
-            result.buses_emitted += 1
-        except Exception as exc:
-            result.notes.append(f"place_bus for {sheet_name} failed: {exc}")
-            break
+    _emit_bus_batch(buses, "generic.place_buses", "buses", bridge, result, sheet_name)
 
 
 def _emit_bus_entries(
     entries: list, bridge: Any, result: EmitResult, sheet_name: str
 ) -> None:
-    for e in entries:
-        try:
-            bridge.send_command(
-                "generic.place_bus_entry",
-                {"x1": str(e.x1), "y1": str(e.y1),
-                 "x2": str(e.x2), "y2": str(e.y2)},
-                timeout=_BULK_TIMEOUT_S,
-            )
-            result.bus_entries_emitted += 1
-        except Exception as exc:
-            result.notes.append(
-                f"place_bus_entry for {sheet_name} failed: {exc}")
-            break
+    _emit_bus_batch(entries, "generic.place_bus_entries", "entries", bridge, result, sheet_name)
+
+
+def _emit_bus_batch(items, command, key, bridge, result, sheet_name):
+    payload = "~~".join(f"x1={i.x1};y1={i.y1};x2={i.x2};y2={i.y2}" for i in items)
+    try:
+        reply = bridge.send_command(command, {key: payload},
+                                    timeout=_BULK_TIMEOUT_S * max(1, len(items) // 8))
+        if not isinstance(reply, dict):
+            raise ValueError("batch handler did not return counts")
+        placed, failed, total = (reply.get(k) for k in ("placed", "failed", "total"))
+        if (any(type(x) is not int or x < 0 for x in (placed, failed, total))
+                or total != len(items) or placed + failed != total):
+            raise ValueError("incomplete or inconsistent batch counts")
+        if key == "buses": result.buses_emitted += placed
+        else: result.bus_entries_emitted += placed
+        if failed: raise ValueError(f"{failed} of {total} objects failed; {placed} placed")
+    except Exception as exc:
+        result.ok = False
+        result.notes.append(f"{command} for {sheet_name} failed: {exc}")
 
 
 def _emit_text_positions(

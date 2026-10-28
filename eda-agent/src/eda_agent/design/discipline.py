@@ -76,13 +76,16 @@ these rules before producing a plan; they bound your choices.
    decoupling stack, or a control line that would have to weave between
    five other components to stay block-local. This is a deviation from
    the default, not the default itself. Every block-local net starts as
-   wires; promoting one to a label requires a one-line justification in
-   `open_questions` or in the Net comment.
+   wires; promote one explicitly with `Net.force_label=true` and record
+   the one-line justification in the plan's `summary` or accompanying
+   design notes. Net has no comment field. Reserve `open_questions` for
+   unresolved decisions, rather than resolved representation rationale.
 
-   **Block membership** is expressed via `zones` (rule 11) or a `block`
-   field on each Part. The executor reads block membership and applies
-   (a)→(b)→(c) automatically; the planner's job is to assign each Part
-   to a block and let the executor pick the representation.
+   **Block membership** uses `Part.zone`: set it to the name of a Zone
+   declared in the plan's `zones` (rule 11), on the same sheet as the
+   Part. There is no Part `block` field. The executor reads those zone
+   assignments and applies (a)→(b)→(c) automatically. Leave `Part.zone`
+   unset when no explicit block grouping is needed.
 
    Buses are just named nets, one per signal: the same tier rule
    applies to each.
