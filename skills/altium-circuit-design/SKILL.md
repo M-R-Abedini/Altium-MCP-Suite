@@ -13,7 +13,7 @@ Use the `mcp-altium-suite` connection, displayed as **mcp altium suite**. Its le
 
 - `suite_status()` reports backend configuration; it does not prove that Altium or a particular design is ready.
 - Discover a capability with `suite_catalog(query="design_execute_plan", backend="eda", with_schema=true)`. Paginate with `limit`/`offset` when required.
-- Invoke the exact returned name: `suite_invoke(name="eda__design_execute_plan", arguments={...})`. Namespaces are `eda__`, `legacy__`, `libraries__`, and `cloud__`. Backend guidance may contain old unprefixed names: rediscover and translate them through the suite.
+- Invoke the exact returned name: `suite_invoke(name="eda__design_execute_plan", arguments={...})`. Discover the available namespaces, including `eda__`, `legacy__`, `libraries__`, `cloud__` and `supply__`. Backend guidance may contain old unprefixed names: rediscover and translate them through the suite.
 - Read the schema before an unfamiliar call. An exported tool name is not proof of successful execution. Inspect nested results, errors, failure counts and verification fields.
 
 For planning, discover and invoke `eda__design_get_discipline`: `schema` is the current DesignPlan contract and `requirement_schema` is the full DesignRequirement contract. A generic `requirement: object` in the tool catalog does not describe its nested fields. The returned guidance is project context; the user's scope remains authoritative. See [suite-workflow.md](references/suite-workflow.md) for tool choices and native limitations.
@@ -31,6 +31,8 @@ An unavailable authoritative pinout blocks dependent connections, not all work. 
 ## Resolve symbols and footprints together
 
 Prefer suitable existing verified models. Use cloud search when local inventory lacks a part; see [cloud-libraries.md](references/cloud-libraries.md). Keep source URLs, hashes, license/usage status and validation state with design evidence.
+
+Before committing an orderable part to a new schematic, discover `supply__search_isee_sisoog` for Iranian prototyping and `supply__search_jlcpcb_lcsc` for assembly availability. Record exact MPN/package, observation date, quantity coverage and JLCPCB Basic/Extended classification when sourced. Missing API credentials, restricted search, stale catalog data or unknown dynamic stock fields remain unresolved supply evidence; they do not mean zero stock. Continue independent electrical work when sourcing is unresolved. Supplier replacement suggestions need the same datasheet and pin/package review as any new part; never silently substitute by price or apparent footprint alone.
 
 For each exact package compare datasheet numbering/orientation against symbol pins, footprint pads and any custom mapping. Check exposed pads, multiunit/hidden power pins, pitch/body/courtyard and connector mating view. Pad count, provider badges, rendered symbols and matching part names do not establish a correct pin map.
 

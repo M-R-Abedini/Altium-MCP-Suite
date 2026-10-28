@@ -23,3 +23,11 @@ The [official plugin page](https://www.snapeda.com/plugins/) provides an Altium 
 ## Evidence attached to adopted models
 
 Record provider URL, exact MPN/package, date/revision, original artifact path/hash, license/terms status, selected symbol/footprint, datasheet page/revision, checks and unresolved differences. Describe actual states such as downloaded/unverified, structurally checked, pin/package checked and native-placement checked. These are evidence labels, not certifications; provider badges do not replace circuit-specific review.
+
+## Component sourcing alongside library selection
+
+Discover the `supply__` schemas before selecting an orderable part. Use `supply__search_isee_sisoog` for Iranian-market observations and `supply__search_jlcpcb_lcsc` for JLCPCB assembly listings. An exact JLCPCB `Cxxxx` code is more reliable than an MPN search whose public page may require dynamic API access. Distinguish Basic, Extended, promotional Extended and unknown; absent stock counts or price tiers must stay unknown. LCSC distribution stock does not establish JLCPCB assembly stock.
+
+ISee's robots policy restricts automated keyword/filter and internal API routes. The adapter supports an authorized dated local catalog or an exact public product URL; otherwise it returns an explicit search handoff. Keep Toman and IRR labels intact. Recheck the destination seller before purchase. Do not treat an unavailable provider or old local snapshot as an out-of-stock result.
+
+`supply__search_global_distributors` uses configured Nexar, DigiKey, Mouser and OEMsecrets account access. Keep credentials in private configuration/environment, never in tool arguments or design evidence. `supply__audit_bom_availability` aggregates exact MPNs and reports observation gaps, lifecycle warnings and sourced Basic-part candidates. Supplier alternatives remain unverified until authoritative pin/package/electrical checks pass. See [supply adapter details](../../../docs/SUPPLY_CHAIN.md) for configuration, caching and access limits.

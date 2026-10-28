@@ -84,6 +84,7 @@ Begin
                         DocInfo := '{"file_name":"' + EscapeJsonString(ExtractFileName(FileName)) + '"';
                         DocInfo := DocInfo + ',"file_path":"' + EscapeJsonString(FullPath) + '"';
                         DocInfo := DocInfo + ',"document_kind":"' + EscapeJsonString(Kind) + '"';
+                        DocInfo := DocInfo + ',"project_path":"' + EscapeJsonString(Project.DM_ProjectFullPath) + '"';
                         DocInfo := DocInfo + ',"loaded":' + LoadedStr + '}';
                         Data := Data + DocInfo;
                     End;

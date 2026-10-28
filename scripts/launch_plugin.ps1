@@ -66,7 +66,7 @@ while ($null -ne ($line = [Console]::ReadLine())) {
                 $response.result = @{
                     protocolVersion = $protocol
                     capabilities = @{ tools = @{} }
-                    serverInfo = @{ name = 'mcp altium suite'; version = '0.2.0' }
+                    serverInfo = @{ name = 'mcp altium suite'; version = '0.3.0' }
                     instructions = 'Runtime setup is incomplete. Use the bundled altium-suite-setup skill; this status server does not inspect Altium or designs.'
                 }
             }

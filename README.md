@@ -101,3 +101,19 @@ See [the contributing guide](CONTRIBUTING.md) for development setup, tests, tran
 ## License
 
 Suite glue: MIT. EDA backend: Apache-2.0; legacy backend: MIT; Rust library backend: GPL-3.0-or-later. See [license scope and exceptions](THIRD_PARTY_NOTICES.md) and [upstream snapshots](UPSTREAM.json).
+# Free desktop product preview (0.3.0)
+
+The [0.2.0 baseline release](https://github.com/M-R-Abedini/Altium-MCP-Suite/releases/tag/v0.2.0)
+is merged in `main`. The 0.3.0 development package adds free local disk
+checkpoints, electrical-value normalization, component supply adapters, a local
+Freerouting runner, explicit opt-in structural datasets, multi-client setup,
+and a Windows installer build pipeline. No suite account is required.
+
+Discover `suite`, `supply`, `route` and `telemetry` backends with
+`suite_catalog`; the advertised minimal MCP surface remains three meta-tools.
+Start with [native edit safety](docs/PRODUCT_SAFETY.md),
+[supply intelligence](docs/SUPPLY_CHAIN.md), [routing limits](docs/AUTOROUTE.md),
+[optional datasets](docs/TELEMETRY.md), and [installation](docs/INSTALLER.md).
+These documents distinguish working public/offline features from API access
+requirements and unfinished native exchange; SES generation does not establish
+Altium import or a DRC-clean board. Collection is disabled by default.

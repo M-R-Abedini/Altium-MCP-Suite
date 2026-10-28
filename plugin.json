@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "mcp-altium-suite",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Local Altium circuit design, library inspection and cloud sourcing with a unified MCP and engineering skills.",
   "author": {"name": "M-R-Abedini", "url": "https://github.com/M-R-Abedini"},
   "homepage": "https://github.com/M-R-Abedini/Altium-MCP-Suite",

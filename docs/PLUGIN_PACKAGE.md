@@ -42,7 +42,7 @@ The builder creates:
 
 ```text
 dist/
-  mcp-altium-suite-0.2.0.zip
+  mcp-altium-suite-0.3.0.zip
   artifacts.json
   marketplace/
     .agents/plugins/marketplace.json
@@ -110,6 +110,13 @@ executable/configuration, restrictions and explicit timeouts. It does not
 edit designs. EDA and legacy worker source paths resolve against the current
 installed plugin on each launch, so upgrading the package upgrades its code.
 Private state stays outside the versioned cache.
+
+Adoption can still depend on the selected old interpreter/library executable.
+To make dependencies independent of the old checkout while retaining the same
+native workspace, run `py -3.12 "$pluginRoot\scripts\plugin_runtime.py" detach`.
+This creates a private regular-wheel Python environment and private library
+worker/configuration before switching state, retaining the old files for
+recovery. See [multi-client and installer setup](INSTALLER.md).
 
 Before switching an existing client, retain its configuration backup and
 verify the plugin's doctor and protocol checks. Then disable the old manual
