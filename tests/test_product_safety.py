@@ -141,6 +141,20 @@ def test_document_scope_and_project_definition_are_snapshotted(tmp_path):
         asyncio.run(service.before('obj_run_process', {}))
 
 
+@pytest.mark.parametrize('arguments,files', [
+    ({'library_path': 'relative.SchLib'}, None),
+    ({'scope': 'doc:relative.SchDoc'}, None),
+    ({}, ['relative.SchDoc']),
+])
+def test_relative_targets_fail_before_native_preflight(tmp_path, arguments, files):
+    async def never_read(name, args):
+        raise AssertionError('Unresolved target must not reach native code')
+    service = SafetyService(tmp_path / 'data', never_read)
+    with pytest.raises(ValueError, match='absolute'):
+        asyncio.run(service.before('obj_run_process', arguments, files))
+    assert not (tmp_path / 'data').exists()
+
+
 def test_preflight_snapshots_active_free_library_and_explicit_targets(tmp_path):
     source = tmp_path / 'free.SchLib'; source.write_bytes(b'library')
     calls = []

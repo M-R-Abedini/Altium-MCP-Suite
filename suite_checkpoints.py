@@ -259,20 +259,30 @@ class SafetyService:
         """
         import asyncio
         files = set()
+        if checkpoint_files is not None:
+            if not isinstance(checkpoint_files, list) or not all(
+                    isinstance(path, str) and Path(path).is_absolute()
+                    and Path(path).suffix.casefold() in DESIGN_SUFFIXES for path in checkpoint_files):
+                raise ValueError('checkpoint_files must contain absolute Altium design/library paths')
 
-        def collect(value):
+        def collect(value, key=''):
             if isinstance(value, str):
+                document_scope = value.startswith('doc:')
                 if value.startswith('doc:'):
                     value = value[4:]
                 path = Path(value)
+                if (path.suffix.casefold() in DESIGN_SUFFIXES and not path.is_absolute()
+                        and (document_scope or key.casefold() in {'path', 'file_path', 'document_path',
+                             'board_path', 'project_path', 'library_path', 'output_path', 'checkpoint_files'})):
+                    raise ValueError('Native checkpoint targets must be absolute; resolve the intended design path before editing')
                 if path.is_absolute() and path.suffix.casefold() in DESIGN_SUFFIXES:
                     files.add(str(path))
             elif isinstance(value, dict):
-                for item in value.values():
-                    collect(item)
+                for item_key, item in value.items():
+                    collect(item, item_key)
             elif isinstance(value, list):
                 for item in value:
-                    collect(item)
+                    collect(item, key)
 
         collect(arguments)
         if checkpoint_files:
