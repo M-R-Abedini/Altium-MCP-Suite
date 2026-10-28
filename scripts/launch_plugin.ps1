@@ -35,7 +35,7 @@ if (Test-Path -LiteralPath $statePath -PathType Leaf) {
         # No pipeline or string-built command: JSON protocol/stdin are relayed to
         # Python, and errors remain on stderr. The Python process drains workers.
         $ErrorActionPreference = 'Continue'
-        & ([string]$state.python) -u (Join-Path $PSScriptRoot 'plugin_runtime.py') --data-dir $DataDir --plugin-root $pluginRoot serve
+        & ([string]$state.python) -B -u (Join-Path $PSScriptRoot 'plugin_runtime.py') --data-dir $DataDir --plugin-root $pluginRoot serve
         exit $LASTEXITCODE
     } catch {
         $setupIssue = $_.Exception.Message

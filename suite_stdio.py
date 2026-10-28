@@ -149,7 +149,13 @@ class Worker:
             environment = dict(os.environ)
             environment.update(self.spec.env)
             environment['PYTHONDONTWRITEBYTECODE'] = '1'
-            parameters = StdioServerParameters(command=self.spec.command, args=self.spec.args,
+            arguments = list(self.spec.args)
+            # Embedded CPython's ._pth isolation ignores PYTHON* environment
+            # variables. -B must take effect before site/.pth bootstrap imports.
+            executable = Path(self.spec.command).stem.casefold()
+            if executable in {'python', 'python3', 'python3.12', 'pythonw', 'pypy3'} and '-B' not in arguments:
+                arguments.insert(0, '-B')
+            parameters = StdioServerParameters(command=self.spec.command, args=arguments,
                                                env=environment, cwd=self.spec.cwd)
             async with stdio_client(parameters, errlog=sys.stderr) as streams:
                 async with ClientSession(*streams, read_timeout_seconds=timedelta(seconds=self.spec.timeout_seconds)) as session:

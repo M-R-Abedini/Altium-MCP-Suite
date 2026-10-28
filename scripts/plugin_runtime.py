@@ -128,7 +128,7 @@ def probe_python(python):
               'exec("import win32api,comtypes" if sys.platform == "win32" else ""); '
               'print(json.dumps({"python":list(sys.version_info[:3]),'
               '"packages":{n:m.version(n) for n in ["mcp","jsonschema","pydantic","psutil","Pillow","networkx","numpy","olefile"]}}))')
-    completed = subprocess.run([str(python), '-I', '-c', script], capture_output=True,
+    completed = subprocess.run([str(python), '-I', '-B', '-c', script], capture_output=True,
                                text=True, timeout=45, check=False)
     if completed.returncode:
         raise ValueError('Selected Python lacks required runtime dependencies; run bootstrap or install requirements-runtime.txt')
@@ -474,7 +474,7 @@ def main(argv=None):
             state, manifest = launch_configuration(data, args.plugin_root)
             env = dict(os.environ, ALTIUM_SUITE_CLOUD_CACHE=state['cloud_cache'],
                        ALTIUM_SUITE_PLUGIN_DATA=str(data), PYTHONDONTWRITEBYTECODE='1')
-            completed = subprocess.run([state['python'], '-u', str(args.plugin_root / 'suite_stdio.py'),
+            completed = subprocess.run([state['python'], '-B', '-u', str(args.plugin_root / 'suite_stdio.py'),
                                         '--toolset', 'minimal', '--backend-config', str(manifest)],
                                        cwd=args.plugin_root, env=env, check=False)
             return completed.returncode

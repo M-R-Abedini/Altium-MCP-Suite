@@ -43,7 +43,7 @@ def launcher_definition(destination, python, data_directory):
     root, python, data = (Path(p).resolve() for p in (destination, python, data_directory))
     if not (root / 'scripts/plugin_runtime.py').is_file() or not python.is_file():
         raise ValueError('Install the suite launcher and Python before configuring clients')
-    return {'command': str(python), 'args': [str(root / 'scripts/plugin_runtime.py'),
+    return {'command': str(python), 'args': ['-B', str(root / 'scripts/plugin_runtime.py'),
             '--data-dir', str(data), '--plugin-root', str(root), 'serve'],
             'env': {'ALTIUM_SUITE_PLUGIN_DATA': str(data), 'PYTHONDONTWRITEBYTECODE': '1'}}
 

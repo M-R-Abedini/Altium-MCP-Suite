@@ -123,7 +123,7 @@ wizard lets the user select Altium and one AI client; it does not launch native
 scripts or save designs. CLI equivalent:
 
 ```powershell
-.\python\python.exe suite_hub.py setup-bundled --altium-exe "C:\Program Files\Altium\AD26\X2.EXE" --client cursor
+.\python\python.exe -B suite_hub.py setup-bundled --altium-exe "C:\Program Files\Altium\AD26\X2.EXE" --client cursor
 ```
 
 Existing coordinator identity and tool restrictions survive installer setup.
@@ -138,6 +138,13 @@ artifacts. It does not publish a release automatically or claim code signing.
 The product installer is unsigned unless separately signed by the publisher.
 
 ## Sources reviewed 2026-10-28
+
+The embedded interpreter's `._pth` mode ignores `PYTHON*` environment variables
+and may execute site bootstrap hooks before a Python entry script starts.
+Supported launchers, configured clients, dependency probes and Python workers
+therefore pass `-B` explicitly. Use `python.exe -B ...` for manual bundled-runtime
+commands too; changing `sys.dont_write_bytecode` inside a script alone is too late
+to protect those startup hooks.
 
 - [Claude Code MCP scopes](https://code.claude.com/docs/en/mcp)
 - [Claude Desktop local servers](https://modelcontextprotocol.io/docs/develop/connect-local-servers)

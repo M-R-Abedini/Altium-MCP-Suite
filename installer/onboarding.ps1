@@ -49,14 +49,14 @@ $suiteButton.Add_Click({
     $suiteButton.Enabled = $false
     try {
         if (-not (Test-Path -LiteralPath $suitePath.Text -PathType Leaf)) { throw 'Select an existing Altium X2.EXE.' }
-        $suiteResult = & $suitePython $suiteHub setup-bundled --altium-exe $suitePath.Text --client $suiteClients.SelectedItem 2>&1
+        $suiteResult = & $suitePython -B $suiteHub setup-bundled --altium-exe $suitePath.Text --client $suiteClients.SelectedItem 2>&1
         $suiteOutput.Text = ($suiteResult | Out-String)
         if ($LASTEXITCODE -ne 0) { $suiteOutput.Text += "`r`nSetup failed. No readiness claim is made. Review the message above." }
     } catch { $suiteOutput.Text = $_.Exception.Message }
     finally { $suiteButton.Enabled = $true }
 })
 try {
-    $suiteDetected = (& $suitePython $suiteHub discover-altium | ConvertFrom-Json).installations
+    $suiteDetected = (& $suitePython -B $suiteHub discover-altium | ConvertFrom-Json).installations
     if ($suiteDetected.Count -eq 1) { $suitePath.Text = $suiteDetected[0].executable }
 } catch { }
 [void]$suiteForm.ShowDialog()

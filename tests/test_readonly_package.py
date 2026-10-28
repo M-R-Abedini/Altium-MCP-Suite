@@ -116,6 +116,31 @@ asyncio.run(main())
     assert snapshot(package) == before and not list(package.rglob('__pycache__'))
 
 
+def test_isolated_runtime_probe_blocks_startup_hook_bytecode(tmp_path):
+    """-I ignores PYTHON* env; -B must protect imports before the script body."""
+    import venv
+    from scripts import plugin_runtime
+    environment = tmp_path / 'private runtime'
+    venv.EnvBuilder(with_pip=False).create(environment)
+    python = environment / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
+    site = environment / ('Lib/site-packages' if os.name == 'nt' else
+                           f'lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages')
+    site.mkdir(parents=True, exist_ok=True)
+    package = tmp_path / 'readonly package'; package.mkdir()
+    marker = tmp_path / 'startup-executed.txt'
+    (package / 'startup_probe.py').write_text(
+        'from pathlib import Path\nPath(' + repr(str(marker)) + ').write_text("started")\n', encoding='utf-8')
+    (site / 'readonly-test.pth').write_text('import sys; sys.path.insert(0, ' + repr(str(package))
+                                          + '); import startup_probe\n', encoding='utf-8')
+    before = snapshot(package)
+    # A private minimal venv deliberately lacks MCP dependencies. The import
+    # failure is expected, but the real Python startup hook must execute safely.
+    with pytest.raises(ValueError, match='lacks required runtime dependencies'):
+        plugin_runtime.probe_python(python)
+    assert marker.read_text() == 'started'
+    assert snapshot(package) == before and not list(package.rglob('__pycache__'))
+
+
 @pytest.mark.skipif(sys.platform != 'win32', reason='Real Windows PowerShell launcher')
 def test_configured_powershell_launch_propagates_readonly_and_private_data(tmp_path):
     from scripts import plugin_runtime
