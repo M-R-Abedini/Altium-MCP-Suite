@@ -183,7 +183,8 @@ def test_normal_serve_only_starts_current_gateway_without_installing(tmp_path, m
     result = runtime.main(['--data-dir', str(data), '--plugin-root', str(package), 'serve'])
     assert result == 0 and len(calls) == 1
     command, options = calls[0]
-    assert command[:3] == [sys.executable, '-u', str(package / 'suite_stdio.py')]
+    assert Path(command[0]).samefile(sys.executable)
+    assert command[1:3] == ['-u', str(package / 'suite_stdio.py')]
     assert command[3:6] == ['--toolset', 'minimal', '--backend-config']
     assert options['cwd'] == package
     assert options['env']['ALTIUM_SUITE_CLOUD_CACHE'] == runtime.checked_state(data)[0]['cloud_cache']

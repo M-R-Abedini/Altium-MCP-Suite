@@ -130,12 +130,31 @@ def test_no_hardcoded_boundary_literals_elsewhere():
     for path in (GENERIC.parent).glob("*.pas"):
         if path.name == "Altium_MCP.pas":
             continue
-        code = _decommented(path.read_text(encoding="utf-8", errors="replace"))
-        for i, line in enumerate(code.splitlines(), 1):
-            if "2147483647" in line:
-                offenders.append(f"{path.name}:{i}")
+        code = path.read_text(encoding="utf-8", errors="replace")
+        offenders.extend(f"{path.name}:{line}" for line in _numeric_boundary_lines(code))
     assert not offenders, (
         f"32-bit boundary literals outside the constant: {offenders}")
+
+
+def _numeric_boundary_lines(text):
+    # DelphiScript's rejected numeric constant is different from the legal
+    # text used to check a number lexically before a potentially throwing parse.
+    tokens = r"'(?:''|[^'])*'|\{.*?\}|\(\*.*?\*\)|//[^\r\n]*"
+    visible = re.sub(tokens, lambda match: re.sub(r"[^\r\n]", " ", match.group()),
+                     text, flags=re.S)
+    return [line_number for line_number, line in enumerate(visible.splitlines(), 1)
+            if re.search(r"\b2147483647\b", line)]
+
+
+@pytest.mark.parametrize("text, expected", [
+    ("const Bad = 2147483647;", [1]),
+    ("Bound := '2147483647';", []),
+    ("Message := 'it''s 2147483647';", []),
+    ("// 2147483647\n{ 2147483647 }\n(* 2147483647 *)", []),
+    ("Bound := '2147483647';\nValue := 2147483647;", [2]),
+])
+def test_boundary_check_distinguishes_numeric_tokens_from_text(text, expected):
+    assert _numeric_boundary_lines(text) == expected
 
 
 def test_note_is_a_supported_object_type():
