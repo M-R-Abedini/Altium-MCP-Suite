@@ -15,6 +15,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+sys.dont_write_bytecode = True
 import uuid
 import tempfile
 
@@ -472,7 +473,7 @@ def main(argv=None):
         else:
             state, manifest = launch_configuration(data, args.plugin_root)
             env = dict(os.environ, ALTIUM_SUITE_CLOUD_CACHE=state['cloud_cache'],
-                       ALTIUM_SUITE_PLUGIN_DATA=str(data))
+                       ALTIUM_SUITE_PLUGIN_DATA=str(data), PYTHONDONTWRITEBYTECODE='1')
             completed = subprocess.run([state['python'], '-u', str(args.plugin_root / 'suite_stdio.py'),
                                         '--toolset', 'minimal', '--backend-config', str(manifest)],
                                        cwd=args.plugin_root, env=env, check=False)

@@ -23,6 +23,10 @@ Prior state remains in backups and the original environment is never deleted.
 Restart MCP clients after migration before archiving their old Python environment.
 Current worker source still resolves to the current plugin version on each launch.
 Fresh `bootstrap` also installs a regular wheel rather than an editable package.
+Supported hub/gateway entry points suppress bytecode writes before importing
+product modules. Plugin launches, configured clients and worker subprocesses
+also set `PYTHONDONTWRITEBYTECODE=1`, keeping generated caches out of package roots.
+Persistent checkpoints, sourcing caches and configuration stay in private data.
 
 ## Multi-client configuration
 

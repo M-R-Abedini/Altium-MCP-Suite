@@ -16,6 +16,7 @@ import json
 import os
 from pathlib import Path
 import sys
+sys.dont_write_bytecode = True  # Installed package roots are read-only; state has its own data directory.
 from typing import Any
 
 import jsonschema
@@ -147,6 +148,7 @@ class Worker:
         try:
             environment = dict(os.environ)
             environment.update(self.spec.env)
+            environment['PYTHONDONTWRITEBYTECODE'] = '1'
             parameters = StdioServerParameters(command=self.spec.command, args=self.spec.args,
                                                env=environment, cwd=self.spec.cwd)
             async with stdio_client(parameters, errlog=sys.stderr) as streams:

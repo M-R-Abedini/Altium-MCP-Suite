@@ -15,6 +15,8 @@ import json
 import os
 from pathlib import Path
 import sys
+sys.dont_write_bytecode = True
+os.environ['PYTHONDONTWRITEBYTECODE'] = '1'  # Include setup/probe subprocesses.
 
 from scripts import plugin_runtime
 

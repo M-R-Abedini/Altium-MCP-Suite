@@ -45,7 +45,7 @@ def launcher_definition(destination, python, data_directory):
         raise ValueError('Install the suite launcher and Python before configuring clients')
     return {'command': str(python), 'args': [str(root / 'scripts/plugin_runtime.py'),
             '--data-dir', str(data), '--plugin-root', str(root), 'serve'],
-            'env': {'ALTIUM_SUITE_PLUGIN_DATA': str(data)}}
+            'env': {'ALTIUM_SUITE_PLUGIN_DATA': str(data), 'PYTHONDONTWRITEBYTECODE': '1'}}
 
 
 def render_client(text, client, definition):
