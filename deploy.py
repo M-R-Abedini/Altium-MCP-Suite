@@ -17,6 +17,8 @@ import uuid
 
 ROOT = Path(__file__).resolve().parent
 ROOT_MODULES = ('suite_stdio.py', 'suite_cloud_libraries.py', 'configure_suite.py', 'setup.py', 'deploy.py',
+                'suite_units.py', 'suite_checkpoints.py', 'suite_supply_chain.py',
+                'suite_autoroute.py', 'suite_telemetry.py',
                 'eda_stdio.py', 'bridge_coordination.py', 'suite_config.py', 'script_projects.py',
                 'engine_identity.py', 'engine_queue.py', 'suite_reads.py')
 NOTICE_FILES = ('LICENSE', 'THIRD_PARTY_NOTICES.md', 'UPSTREAM.json', 'MODIFICATIONS.md',
@@ -26,6 +28,9 @@ NOTICE_FILES = ('LICENSE', 'THIRD_PARTY_NOTICES.md', 'UPSTREAM.json', 'MODIFICAT
 
 def deployment_files(root=ROOT):
     files = [root / name for name in (*ROOT_MODULES, *NOTICE_FILES, '.gitignore')]
+    for name in ('altium_installation.py', 'suite_hub.py'):
+        if (root / name).is_file():
+            files.append(root / name)
     for directory in ('eda-agent/src', 'eda-agent/scripts/altium', 'coffeenmusic/server'):
         for path in (root / directory).rglob('*'):
             relative = path.relative_to(root / directory)
@@ -45,6 +50,9 @@ def deployment_files(root=ROOT):
                  'docs/review/CLOUD_LIBRARIES_2026-10-27.md'):
         if (root / name).is_file():
             files.append(root / name)
+    if (root / 'installer').is_dir():
+        files.extend(path for path in (root / 'installer').rglob('*') if path.is_file()
+                     and '__pycache__' not in path.parts and path.suffix in {'.py', '.iss', '.md', '.json', '.ps1'})
     if not all(path.is_file() for path in files):
         raise RuntimeError('Deployment is missing an entry point or shared module')
     return sorted(files)

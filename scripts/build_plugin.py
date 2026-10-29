@@ -23,6 +23,8 @@ ROOT = Path(__file__).resolve().parents[1]
 ROOT_FILES = (
     'plugin.json', 'mcp.json', 'requirements-runtime.txt', 'constraints-windows-py312.txt',
     'suite_stdio.py', 'suite_cloud_libraries.py', 'configure_suite.py', 'setup.py', 'deploy.py',
+    'suite_units.py', 'suite_checkpoints.py', 'suite_supply_chain.py', 'suite_autoroute.py',
+    'suite_telemetry.py', 'suite_hub.py', 'altium_installation.py',
     'eda_stdio.py', 'bridge_coordination.py', 'suite_config.py', 'script_projects.py',
     'engine_identity.py', 'engine_queue.py', 'suite_reads.py', 'README.md',
     'LICENSE', 'THIRD_PARTY_NOTICES.md', 'UPSTREAM.json', 'MODIFICATIONS.md',
@@ -35,6 +37,7 @@ ROOT_FILES = (
     'altium-designer-mcp/LICENCE', 'altium-designer-mcp/README.md',
 )
 TREE_RULES = {
+    'installer': {'.py', '.iss', '.ps1', '.md'},
     'eda-agent/src': {'.py', '.html', '.css', '.js'},
     'eda-agent/scripts/altium': {'.pas', '.dfm', '.prjscr'},
     'coffeenmusic/server': {'.py', '.pas', '.dfm', '.prjscr', '.txt'},
@@ -208,6 +211,7 @@ async def smoke(plugin_root, python=sys.executable):
         config = scratch / 'backends.json'
         config.write_text('{"backends":{}}', encoding='utf-8')
         env = dict(os.environ, ALTIUM_SUITE_CLOUD_CACHE=str(scratch / 'cloud'),
+                   ALTIUM_SUITE_PLUGIN_DATA=str(scratch / 'private'),
                    ALTIUM_EXE=str(scratch / 'absent/X2.EXE'),
                    ALTIUM_MCP_RUNTIME=str(scratch / 'runtime'),
                    EDA_AGENT_WORKSPACE=str(scratch / 'workspace'))

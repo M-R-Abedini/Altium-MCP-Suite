@@ -15,10 +15,72 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+sys.dont_write_bytecode = True
 import uuid
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 STATE_SCHEMA = 1
+
+
+def install_runtime(python, root):
+    """Install a regular wheel, never an editable dependency on a disposable cache."""
+    root = Path(root).resolve()
+    lines = []
+    for line in (root / 'requirements-runtime.txt').read_text(encoding='utf-8').splitlines():
+        if line.strip() == '-e ./eda-agent':
+            lines.append((root / 'eda-agent').as_uri())
+        elif line.startswith('-c '):
+            # pip parses option lines with POSIX shlex even on Windows.
+            lines.append('-c "' + (root / line[3:].strip()).as_posix() + '"')
+        else:
+            lines.append(line)
+    with tempfile.TemporaryDirectory(prefix='altium-runtime-install-') as scratch:
+        requirements = Path(scratch) / 'requirements.txt'
+        requirements.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+        subprocess.run([str(python), '-m', 'pip', 'install', '-r', str(requirements)],
+                       cwd=root, check=True, stdout=sys.stderr)
+
+
+def detach(data, plugin_root=ROOT, *, probe=True):
+    """Materialize independent dependencies while preserving the native workspace.
+
+    The old environment and state remain usable until all replacements validate.
+    Each launch still resolves Python source from the currently selected plugin.
+    """
+    if sys.platform != 'win32' or sys.version_info[:2] != (3, 12):
+        raise ValueError('Detach must run on Windows using Python 3.12')
+    state, template = checked_state(data)
+    validate_template(template)
+    identifier = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ') + '-' + uuid.uuid4().hex[:8]
+    private = data / 'runtimes' / identifier
+    python = private / 'python/Scripts/python.exe'
+    private.mkdir(parents=True, exist_ok=False)
+    subprocess.run([sys.executable, '-m', 'venv', str(private / 'python')], check=True, stdout=sys.stderr)
+    install_runtime(python, plugin_root)
+    library = template['backends']['libraries']
+    binary = private / 'libraries/altium-designer-mcp.exe'
+    binary.parent.mkdir(parents=True)
+    shutil.copy2(library['command'], binary)
+    config = private / 'libraries/config.json'
+    library_settings = read_object(library['args'][0])
+    audit = library_settings.get('logging', {}).get('audit_log_path')
+    if audit and not Path(audit).is_absolute():
+        # The Rust process resolves relative audit paths from its working dir.
+        library_settings['logging']['audit_log_path'] = str((Path(library.get('cwd') or plugin_root) / audit).resolve())
+    atomic_json(config, library_settings)
+    for name in ('eda', 'legacy'):
+        template['backends'][name]['command'] = str(python)
+    template = remap_template(template, plugin_root)
+    library = template['backends']['libraries']
+    library['command'], library['args'] = str(binary), [str(config)]
+    library['cwd'] = str(binary.parent)
+    if probe:
+        probe_python(python)
+    validate_template(template)
+    state.update(python=str(python), mode='self-contained', configured_at_utc=datetime.now(timezone.utc).isoformat())
+    persist(data, state, template)
+    return doctor(data, plugin_root, probe=probe)
 
 
 def data_directory(explicit=None):
@@ -66,7 +128,7 @@ def probe_python(python):
               'exec("import win32api,comtypes" if sys.platform == "win32" else ""); '
               'print(json.dumps({"python":list(sys.version_info[:3]),'
               '"packages":{n:m.version(n) for n in ["mcp","jsonschema","pydantic","psutil","Pillow","networkx","numpy","olefile"]}}))')
-    completed = subprocess.run([str(python), '-I', '-c', script], capture_output=True,
+    completed = subprocess.run([str(python), '-I', '-B', '-c', script], capture_output=True,
                                text=True, timeout=45, check=False)
     if completed.returncode:
         raise ValueError('Selected Python lacks required runtime dependencies; run bootstrap or install requirements-runtime.txt')
@@ -333,8 +395,7 @@ def bootstrap(args, data, plugin_root=ROOT):
     data.mkdir(parents=True, exist_ok=True)
     if not python.exists():
         subprocess.run([sys.executable, '-m', 'venv', str(environment)], check=True)
-    subprocess.run([str(python), '-m', 'pip', 'install', '-r', str(root / 'requirements-runtime.txt')],
-                   cwd=root, check=True, stdout=sys.stderr)
+    install_runtime(python, root)
     if args.build_libraries:
         env = dict(os.environ, CARGO_TARGET_DIR=str(data / 'rust-build'))
         subprocess.run(['cargo', 'build', '--release', '--locked'], cwd=root / 'altium-designer-mcp',
@@ -368,6 +429,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--data-dir', type=Path)
     parser.add_argument('--plugin-root', type=Path, default=ROOT)
+    parser.add_argument('--client', choices=('codex', 'claude-desktop', 'claude-code', 'cursor', 'windsurf', 'vscode', 'all'),
+                        help='Configure clients after successful setup (otherwise no client files change)')
     sub = parser.add_subparsers(dest='operation', required=True)
     sub.add_parser('doctor')
     adopt_parser = sub.add_parser('adopt')
@@ -384,6 +447,10 @@ def main(argv=None):
     fresh.add_argument('--runtime-dir', type=Path)
     fresh.add_argument('--workspace', type=Path)
     sub.add_parser('serve')
+    sub.add_parser('detach', help='Replace adopted dependencies with a private independent environment')
+    clients = sub.add_parser('configure-clients')
+    clients.add_argument('--apply', action='store_true')
+    clients.add_argument('--config', type=Path)
     args = parser.parse_args(argv)
     data = data_directory(args.data_dir)
     try:
@@ -393,13 +460,30 @@ def main(argv=None):
             output = bootstrap(args, data, args.plugin_root)
         elif args.operation == 'doctor':
             output = doctor(data, args.plugin_root)
+        elif args.operation == 'detach':
+            output = detach(data, args.plugin_root)
+        elif args.operation == 'configure-clients':
+            if not args.client:
+                raise ValueError('configure-clients requires --client')
+            sys.path.insert(0, str(args.plugin_root))
+            from configure_suite import configure_clients
+            state, _ = checked_state(data)
+            output = configure_clients(args.client, args.plugin_root, state['python'], data,
+                                       apply=args.apply, config=args.config)
         else:
             state, manifest = launch_configuration(data, args.plugin_root)
-            env = dict(os.environ, ALTIUM_SUITE_CLOUD_CACHE=state['cloud_cache'])
-            completed = subprocess.run([state['python'], '-u', str(args.plugin_root / 'suite_stdio.py'),
+            env = dict(os.environ, ALTIUM_SUITE_CLOUD_CACHE=state['cloud_cache'],
+                       ALTIUM_SUITE_PLUGIN_DATA=str(data), PYTHONDONTWRITEBYTECODE='1')
+            completed = subprocess.run([state['python'], '-B', '-u', str(args.plugin_root / 'suite_stdio.py'),
                                         '--toolset', 'minimal', '--backend-config', str(manifest)],
                                        cwd=args.plugin_root, env=env, check=False)
             return completed.returncode
+        if args.client and args.operation in {'adopt', 'bootstrap', 'detach'}:
+            if output.get('ready', output.get('configured', False)):
+                sys.path.insert(0, str(args.plugin_root))
+                from configure_suite import configure_clients
+                state, _ = checked_state(data)
+                output['client_configuration'] = configure_clients(args.client, args.plugin_root, state['python'], data, apply=True)
         print(json.dumps(output, indent=2))
         return 1 if args.operation in {'doctor', 'bootstrap'} and not output['ready'] else 0
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:

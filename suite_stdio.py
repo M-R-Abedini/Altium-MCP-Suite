@@ -16,6 +16,7 @@ import json
 import os
 from pathlib import Path
 import sys
+sys.dont_write_bytecode = True  # Installed package roots are read-only; state has its own data directory.
 from typing import Any
 
 import jsonschema
@@ -32,7 +33,11 @@ editing, and cloud library discovery. Call suite_catalog with a query and
 with_schema=true, then suite_invoke with its exact namespaced tool name and
 arguments. eda__ tools drive the coordinated EDA engine; legacy__ tools retain
 the one-shot Altium operations; libraries__ tools edit library files; cloud__
-tools discover and stage external libraries. Discover before declaring a
+tools discover and stage external libraries. supply__ tools audit sourced stock/pricing (unknown is not
+out-of-stock); route__ runs local DSN routing with explicit native-exchange
+limits. suite__ manages disk checkpoints; telemetry__status reports optional
+local collection which is off by default. Opaque script/menu writes require
+explicit checkpoint_files on suite_invoke. Discover before declaring a
 capability absent. Inspect the intended project/document before edits: PcbDoc,
 SchDoc, PcbLib and SchLib tools target different documents. Prefer batch design
 operations. Cloud models require datasheet/pin/package verification before use.
@@ -143,7 +148,14 @@ class Worker:
         try:
             environment = dict(os.environ)
             environment.update(self.spec.env)
-            parameters = StdioServerParameters(command=self.spec.command, args=self.spec.args,
+            environment['PYTHONDONTWRITEBYTECODE'] = '1'
+            arguments = list(self.spec.args)
+            # Embedded CPython's ._pth isolation ignores PYTHON* environment
+            # variables. -B must take effect before site/.pth bootstrap imports.
+            executable = Path(self.spec.command).stem.casefold()
+            if executable in {'python', 'python3', 'python3.12', 'pythonw', 'pypy3'} and '-B' not in arguments:
+                arguments.insert(0, '-B')
+            parameters = StdioServerParameters(command=self.spec.command, args=arguments,
                                                env=environment, cwd=self.spec.cwd)
             async with stdio_client(parameters, errlog=sys.stderr) as streams:
                 async with ClientSession(*streams, read_timeout_seconds=timedelta(seconds=self.spec.timeout_seconds)) as session:
@@ -190,19 +202,24 @@ class Worker:
 
 
 class Suite:
-    def __init__(self, specs: list[BackendSpec], *, toolset="minimal", cloud=None):
+    def __init__(self, specs: list[BackendSpec], *, toolset="minimal", cloud=None, components=None):
         self.workers = {spec.name: Worker(spec) for spec in specs}
         self.toolset = toolset
         self.cloud = cloud
+        self.components = dict(components or {})
+        if cloud is not None:
+            self.components['cloud'] = cloud
+        self.safety = None
+        self.telemetry = None
+        self._native_call_lock = asyncio.Lock()
         self._catalogs: dict[str, list[types.Tool]] = {}
         self._validators: dict[tuple[str, str], Any] = {}
-        self._catalog_locks = {name: asyncio.Lock() for name in (*self.workers, "cloud")}
+        self._catalog_locks = {name: asyncio.Lock() for name in (*self.workers, *self.components)}
 
     @property
     def backend_names(self):
         names = list(self.workers)
-        if self.cloud is not None:
-            names.append("cloud")
+        names.extend(self.components)
         return names
 
     async def tools(self, backend: str) -> list[types.Tool]:
@@ -211,8 +228,8 @@ class Suite:
         async with self._catalog_locks[backend]:
             if backend in self._catalogs:
                 return self._catalogs[backend]
-            if backend == "cloud":
-                native = [types.Tool.model_validate(raw) for raw in await asyncio.to_thread(self.cloud.list_tools)]
+            if backend in self.components:
+                native = [types.Tool.model_validate(raw) for raw in await asyncio.to_thread(self.components[backend].list_tools)]
             else:
                 worker = self.workers[backend]
                 if not worker.spec.enabled:
@@ -268,7 +285,7 @@ class Suite:
                 "next_offset": offset + limit if offset + limit < len(items) else None,
                 "complete": not errors, "backend_errors": errors}
 
-    async def invoke(self, name: str, arguments: dict | None = None, *, meta=None, progress_callback=None):
+    async def invoke(self, name: str, arguments: dict | None = None, *, meta=None, progress_callback=None, checkpoint_files=None):
         if not isinstance(name, str) or "__" not in name:
             raise ValueError("Use the exact namespaced name returned by suite_catalog")
         backend, original = name.split("__", 1)
@@ -291,16 +308,123 @@ class Suite:
         error = jsonschema.exceptions.best_match(validator.iter_errors(arguments))
         if error is not None:
             raise error
-        if backend == "cloud":
-            return result(await asyncio.to_thread(self.cloud.call_tool, original, arguments))
+        if backend in self.components:
+            component = self.components[backend]
+            if hasattr(component, 'call_tool_async'):
+                value = await component.call_tool_async(original, arguments)
+            else:
+                value = await asyncio.to_thread(component.call_tool, original, arguments)
+            return result(value, error=isinstance(value, dict) and value.get('ok') is False)
         worker = self.workers[backend]
         # The EDA meta-invoker must not bypass a migrated per-tool restriction.
         if backend == "eda" and original == "tool_invoke":
             nested = arguments.get("name")
             if not isinstance(nested, str) or not worker.spec.allows(nested):
                 raise ValueError(f"Unknown or disabled EDA tool: {nested}")
-        return await worker.request("call_tool", name=original, arguments=arguments,
+            # Dispatch the actual target through the same validation/safety
+            # path. EDA's own invoker rejects recursive meta-tool calls.
+            if nested in {'tool_invoke', 'tool_catalog'}:
+                raise ValueError('Nested EDA meta-tools are not invocable')
+            return await self.invoke('eda__' + nested, arguments.get('arguments'), meta=meta,
+                                     progress_callback=progress_callback, checkpoint_files=checkpoint_files)
+        if backend in {'eda', 'legacy'}:
+            if self.safety is not None or self.telemetry is not None:
+                async with self._native_call_lock:
+                    return await self._invoke_worker(backend, original, arguments, meta, progress_callback, checkpoint_files)
+            return await self._invoke_worker(backend, original, arguments, meta, progress_callback, checkpoint_files)
+        return await worker.request('call_tool', name=original, arguments=arguments,
                                     meta=meta, progress_callback=progress_callback)
+
+    async def _invoke_worker(self, backend, original, arguments, meta, progress_callback, checkpoint_files=None):
+        worker = self.workers[backend]
+        warnings, checkpoint, telemetry_result = [], None, None
+        from suite_checkpoints import is_mutation
+        mutating = is_mutation(original, arguments)
+        if backend in {'eda', 'legacy'}:
+            from suite_units import normalize_arguments
+            arguments, warnings = normalize_arguments(arguments)
+            if self.safety is not None:
+                if mutating:
+                    checkpoint = await self.safety.before(original, arguments, checkpoint_files)
+        response = await worker.request("call_tool", name=original, arguments=arguments,
+                                        meta=meta, progress_callback=progress_callback)
+        if self.telemetry is not None and self.telemetry.enabled():
+            try:
+                telemetry_result = await self.telemetry.observe(backend + '__' + original, arguments, response,
+                                                               self.native_read, mutating=mutating)
+            except Exception as exc:
+                # Optional collection cannot turn a completed editor mutation
+                # into an apparent failure/retry. Never log raw design data.
+                telemetry_result = {'collected': False, 'reason': 'capture_failed', 'failure_type': type(exc).__name__}
+        if warnings or checkpoint or telemetry_result:
+            retained = dict(response.meta or {})
+            info = dict(retained.get('altium_suite') or {})
+            if warnings:
+                info['normalization_warnings'] = warnings
+            if checkpoint:
+                info['checkpoint'] = {'id': checkpoint['checkpoint_id'], 'snapshot_kind': 'disk_only',
+                                      'unsaved_memory_captured': False, 'warnings': checkpoint['warnings']}
+            if telemetry_result:
+                info['telemetry'] = telemetry_result
+            retained['altium_suite'] = info
+            response = response.model_copy(update={'meta': retained})
+        return response
+
+    async def native_read(self, name, arguments):
+        """Internal safety reads retain the migrated per-tool restrictions."""
+        if 'eda' not in self.workers or not self.workers['eda'].spec.allows(name):
+            raise RuntimeError(f'Preflight requires enabled eda__{name}')
+        response = await self.workers['eda'].request('call_tool', name=name, arguments=arguments)
+        if response.isError:
+            raise RuntimeError(f'Native preflight failed: {name}')
+        value = response.structuredContent
+        if value is None:
+            for content in response.content:
+                if content.type == 'text':
+                    try:
+                        value = json.loads(content.text)
+                        break
+                    except ValueError:
+                        continue
+        if isinstance(value, dict) and set(value) == {'result'}:
+            value = value['result']
+        if value is None:
+            raise RuntimeError(f'Native preflight returned no structured data: {name}')
+        return value
+
+    async def active_bom(self):
+        """Read exact MPN parameters in two bulk calls, never guess from value."""
+        focused = await self.native_read('proj_get_focused', {})
+        project = focused.get('project_path') if isinstance(focused, dict) else None
+        if not project:
+            raise ValueError('No focused project; supply audit requires an explicit BOM')
+        bom = await self.native_read('proj_get_bom', {'project_path': project, 'limit': 501})
+        parts = bom.get('components') if isinstance(bom, dict) else None
+        if not isinstance(parts, list) or len(parts) >= 501 or bom.get('truncated'):
+            raise ValueError('Active BOM is unavailable or exceeds 500 components; provide a scoped explicit BOM')
+        if not parts:
+            raise ValueError('Active BOM is empty; no availability readiness can be established')
+        refs = [part['designator'] for part in parts]
+        details = await self.native_read('proj_get_component_info_many',
+                    {'project_path': project, 'designators': refs, 'with_pin_nets': False, 'with_parameters': True})
+        if details.get('not_found') or len(details.get('components', [])) != len(set(refs)):
+            raise ValueError('BOM parameter lookup was incomplete; provide an explicit BOM')
+        by_ref = {part['designator']: part for part in details['components']}
+        rows = []
+        for part in parts:
+            parameters = by_ref[part['designator']].get('parameters') or {}
+            values = {key.casefold().replace(' ', '').replace('_', ''): str(value).strip()
+                      for key, value in parameters.items()}
+            mpn = next((values[key] for key in ('manufacturerpartnumber', 'mpn', 'mfrpartnumber') if values.get(key)), '')
+            row = {'reference': part['designator'], 'mpn': mpn, 'quantity': 1}
+            if values.get('manufacturer'):
+                row['manufacturer'] = values['manufacturer']
+            import re
+            code = values.get('lcscpartnumber') or values.get('lcsccode')
+            if code and re.fullmatch(r'C[0-9]+', code):
+                row['lcsc_code'] = code
+            rows.append(row)
+        return rows
 
     def status(self):
         backends = {name: {"enabled": worker.spec.enabled, "running": worker.running,
@@ -310,9 +434,9 @@ class Suite:
                            "queued_requests": worker.queue.qsize(),
                            "tool_restrictions": bool(worker.spec.disabled_tools or worker.spec.enabled_tools is not None)}
                     for name, worker in self.workers.items()}
-        if self.cloud is not None:
-            backends["cloud"] = {"enabled": True, "in_process": True,
-                                 "catalog_loaded": "cloud" in self._catalogs}
+        for name in self.components:
+            backends[name] = {"enabled": True, "in_process": True,
+                              "catalog_loaded": name in self._catalogs}
         return {"server": SERVER_NAME, "toolset": self.toolset, "backends": backends,
                 "architecture": "one client endpoint; lazy coordinated internal workers",
                 "native_editor_probed": False}
@@ -325,14 +449,17 @@ META_TOOLS = [
     types.Tool(name="suite_catalog", description="Discover all Altium Suite capabilities by query/backend. Request with_schema=true before unfamiliar calls. Does not execute design operations.",
                inputSchema={"type": "object", "properties": {
                    "query": {"type": "string", "default": ""},
-                   "backend": {"type": ["string", "null"], "enum": ["eda", "legacy", "libraries", "cloud", None]},
+                   "backend": {"type": ["string", "null"], "enum": ["eda", "legacy", "libraries", "cloud", "suite", "supply", "route", "telemetry", None]},
                    "with_schema": {"type": "boolean", "default": False},
                    "limit": {"type": "integer", "minimum": 1, "maximum": 100, "default": 30},
                    "offset": {"type": "integer", "minimum": 0, "default": 0}}, "additionalProperties": False},
                annotations=types.ToolAnnotations(readOnlyHint=True, openWorldHint=False)),
     types.Tool(name="suite_invoke", description="Run an exact namespaced tool discovered through suite_catalog, using its arguments schema. Preserves native errors, structured results and images. Can modify designs/library files depending on selected tool.",
                inputSchema={"type": "object", "properties": {"name": {"type": "string"},
-                   "arguments": {"type": ["object", "null"], "default": None}},
+                   "arguments": {"type": ["object", "null"], "default": None},
+                   "checkpoint_files": {"type": "array", "maxItems": 1000,
+                                        "items": {"type": "string"},
+                                        "description": "Explicit absolute design/library targets for opaque scripts or menu commands. Not forwarded to workers."}},
                    "required": ["name"], "additionalProperties": False},
                annotations=types.ToolAnnotations(readOnlyHint=False, destructiveHint=True, openWorldHint=True)),
     types.Tool(name="suite_status", description="Inspect suite backend configuration/load status without starting a worker or probing the editor. No secrets or command environment values are returned.",
@@ -349,7 +476,7 @@ def create_server(suite: Suite) -> Server:
         finally:
             await suite.close()
 
-    server = Server(SERVER_NAME, version="1.0.0", instructions=INSTRUCTIONS, lifespan=lifespan)
+    server = Server(SERVER_NAME, version="0.3.0", instructions=INSTRUCTIONS, lifespan=lifespan)
 
     @server.list_tools()
     async def list_tools():
@@ -371,8 +498,10 @@ def create_server(suite: Suite) -> Server:
             return result(suite.status())
         if name == "suite_invoke":
             target, params = arguments["name"], arguments.get("arguments")
+            checkpoint_files = arguments.get('checkpoint_files')
         else:
             target, params = name, arguments
+            checkpoint_files = None
         request = server.request_context
         progress_token = request.meta.progressToken if request.meta is not None else None
 
@@ -382,7 +511,8 @@ def create_server(suite: Suite) -> Server:
 
         return await suite.invoke(target, params,
                                   meta=request.meta.model_dump(by_alias=True, exclude_none=True) if request.meta else None,
-                                  progress_callback=progress if progress_token is not None else None)
+                                  progress_callback=progress if progress_token is not None else None,
+                                  checkpoint_files=checkpoint_files)
 
     @server.list_prompts()
     async def list_prompts():
@@ -431,6 +561,33 @@ async def serve(options):
             if exc.name != "suite_cloud_libraries":
                 raise
     suite = Suite(load_specs(options.backend_config), toolset=options.toolset, cloud=cloud)
+    if not options.no_product:
+        from scripts.plugin_runtime import data_directory
+        from suite_checkpoints import SafetyService
+        data = data_directory()
+        safety = SafetyService(data, suite.native_read)
+        suite.safety = safety
+        suite.components['suite'] = safety
+        # Optional product modules are imported only when packaged. A missing
+        # transitive dependency must still fail visibly.
+        for namespace, module_name, class_name in (
+                ('supply', 'suite_supply_chain', 'SupplyChain'),
+                ('route', 'suite_autoroute', 'AutorouteService'),
+                ('telemetry', 'suite_telemetry', 'TelemetryCollector')):
+            try:
+                module = importlib.import_module(module_name)
+            except ModuleNotFoundError as exc:
+                if exc.name != module_name:
+                    raise
+                continue
+            options = {'data_dir': data}
+            if namespace == 'supply':
+                options['bom_reader'] = suite.active_bom
+            component = getattr(module, class_name)(**options)
+            suite.components[namespace] = component
+            if namespace == 'telemetry':
+                suite.telemetry = component
+        suite._catalog_locks.update({name: asyncio.Lock() for name in suite.components})
     server = create_server(suite)
     async with stdio_server() as streams:
         await server.run(*streams, server.create_initialization_options())
@@ -441,6 +598,7 @@ def main():
     parser.add_argument("--toolset", choices=("minimal", "full"), default="minimal")
     parser.add_argument("--backend-config", type=Path)
     parser.add_argument("--no-cloud", action="store_true", help="Do not load the optional cloud library module")
+    parser.add_argument("--no-product", action="store_true", help="Disable product adapters/checkpoints for isolated transport diagnostics")
     options = parser.parse_args()
     asyncio.run(serve(options))
 

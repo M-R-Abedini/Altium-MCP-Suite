@@ -31,10 +31,11 @@ if (Test-Path -LiteralPath $statePath -PathType Leaf) {
         }
         $env:PYTHONIOENCODING = 'utf-8'
         $env:PYTHONUTF8 = '1'
+        $env:PYTHONDONTWRITEBYTECODE = '1'
         # No pipeline or string-built command: JSON protocol/stdin are relayed to
         # Python, and errors remain on stderr. The Python process drains workers.
         $ErrorActionPreference = 'Continue'
-        & ([string]$state.python) -u (Join-Path $PSScriptRoot 'plugin_runtime.py') --data-dir $DataDir --plugin-root $pluginRoot serve
+        & ([string]$state.python) -B -u (Join-Path $PSScriptRoot 'plugin_runtime.py') --data-dir $DataDir --plugin-root $pluginRoot serve
         exit $LASTEXITCODE
     } catch {
         $setupIssue = $_.Exception.Message
@@ -66,7 +67,7 @@ while ($null -ne ($line = [Console]::ReadLine())) {
                 $response.result = @{
                     protocolVersion = $protocol
                     capabilities = @{ tools = @{} }
-                    serverInfo = @{ name = 'mcp altium suite'; version = '0.2.0' }
+                    serverInfo = @{ name = 'mcp altium suite'; version = '0.3.0' }
                     instructions = 'Runtime setup is incomplete. Use the bundled altium-suite-setup skill; this status server does not inspect Altium or designs.'
                 }
             }

@@ -114,3 +114,14 @@ Upstream authorship and license files are retained. `UPSTREAM.json` records the 
 - New root configuration, setup and coordination modules: shared engine lock, guarded recovery, restored EDA control after legacy calls, portable per-user runtime, content-addressed script projects, regression tests and setup documentation.
 
 The Rust library-server source is preserved from its recorded upstream snapshot. No claim is made that every tool or Altium version has been exercised. Original upstream development examples and test fixtures are retained as upstream material; their machine-specific example paths are not this project's local configuration.
+# 2026-10-28 — Free desktop product preview
+
+PR #13 was merged as baseline 0.2.0 before this work. Added electrical value
+normalization, conservative gateway disk checkpoints and restore guards,
+read-only sourcing/cache/adapters, local Freerouting orchestration, opt-in
+structural dataset APIs, multi-client setup and self-contained runtime
+migration, and an offline Windows installer build pipeline. Native document
+listing now includes the owning project path for checkpoint coverage; native
+script identity bumped accordingly. Upstream notices/licenses remain intact.
+Native SES exchange and automatic Global Projects preference persistence are
+capability gaps documented explicitly; no invented registry/API contracts.

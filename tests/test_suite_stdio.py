@@ -215,7 +215,7 @@ def test_protocol_prompt_discovery_does_not_fetch_tool_schemas(tmp_path):
 
     async def check():
         params = StdioServerParameters(command=sys.executable, args=[str(ROOT / "suite_stdio.py"),
-            "--backend-config", str(config), "--toolset", "minimal", "--no-cloud"])
+            "--backend-config", str(config), "--toolset", "minimal", "--no-cloud", "--no-product"])
         async with stdio_client(params) as streams:
             async with ClientSession(*streams, read_timeout_seconds=timedelta(seconds=20)) as client:
                 await client.initialize()
@@ -243,7 +243,7 @@ def test_protocol_initialize_discover_forward_and_prompt(tmp_path, toolset):
 
     async def check():
         params = StdioServerParameters(command=sys.executable, args=[str(ROOT / "suite_stdio.py"),
-            "--backend-config", str(config), "--toolset", toolset, "--no-cloud"])
+            "--backend-config", str(config), "--toolset", toolset, "--no-cloud", "--no-product"])
         async with stdio_client(params) as streams:
             async with ClientSession(*streams, read_timeout_seconds=timedelta(seconds=20)) as client:
                 initialized = await client.initialize()

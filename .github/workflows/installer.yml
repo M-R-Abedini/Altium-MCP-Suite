@@ -1,0 +1,53 @@
+name: Windows offline installer
+on:
+  workflow_dispatch:
+    inputs:
+      python_embed_url:
+        description: 'Reviewed Python.org Windows x64 CPython 3.12 embeddable ZIP URL'
+        required: true
+        type: string
+      python_embed_sha256:
+        description: 'Independently verified SHA-256 of that exact runtime ZIP'
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582
+        with:
+          toolchain: '1.95.0'
+      - name: Download explicitly reviewed runtime
+        shell: pwsh
+        env:
+          EMBED_URL: ${{ inputs.python_embed_url }}
+          EMBED_SHA256: ${{ inputs.python_embed_sha256 }}
+        run: |
+          $runtimeUri = [Uri]$env:EMBED_URL
+          if ($runtimeUri.Scheme -ne 'https' -or $runtimeUri.Host -ne 'www.python.org' -or $runtimeUri.AbsolutePath -notmatch '^/ftp/python/[0-9.]+/python-3\.12\.[0-9]+-embed-amd64\.zip$') { throw 'Only the exact official Python 3.12 x64 runtime URL is accepted.' }
+          if ($env:EMBED_SHA256 -notmatch '^[a-fA-F0-9]{64}$') { throw 'A valid reviewed SHA-256 is required.' }
+          Invoke-WebRequest -Uri $runtimeUri.AbsoluteUri -OutFile runtime.zip
+          if ((Get-FileHash -LiteralPath runtime.zip -Algorithm SHA256).Hash -ne $env:EMBED_SHA256) { throw 'Runtime integrity check failed.' }
+      - name: Build wheel runtime, Rust binary and vendored Corresponding Source
+        shell: pwsh
+        env:
+          EMBED_SHA256: ${{ inputs.python_embed_sha256 }}
+        run: |
+          $innoCompiler = @('C:\Program Files (x86)\Inno Setup 6\ISCC.exe', 'C:\Program Files\Inno Setup 7\ISCC.exe') | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+          if (-not $innoCompiler) { throw 'Runner image lacks Inno Setup; install a reviewed compiler before retrying.' }
+          python installer/build_installer.py --python-embed runtime.zip --python-embed-sha256 $env:EMBED_SHA256 --iscc $innoCompiler --output dist/windows-installer
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AltiumMCPSuite-Setup-x64-and-source
+          path: |
+            dist/windows-installer/AltiumMCPSuite-Setup-x64.exe
+            dist/windows-installer/altium-designer-mcp-corresponding-source.zip
+            dist/windows-installer/SHA256SUMS.txt
+            dist/windows-installer/installer-artifacts.json

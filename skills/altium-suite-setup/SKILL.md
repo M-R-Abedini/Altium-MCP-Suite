@@ -17,4 +17,16 @@ Setup authorization permits the configuration/dependency work requested; do not 
 
 After setup, reconnect the plugin and verify its actual tools: discover `eda__app_context` through `suite_catalog`, then use `suite_invoke` for a read-only native check if Altium is open and that check is in scope. Test a library reader on an explicit permitted sample. Report which checks actually ran and any unavailable prerequisites; do not infer full readiness from installation or metadata alone.
 
+If adoption refers to an obsolete checkout, use `detach` to build independent
+dependencies in the private data directory before archiving the old folder.
+Retain the native runtime/workspace identity and tool restrictions. Setup has
+`--client` support for other AI clients; configure only clients requested by the
+user and preserve unrelated settings. See [installer/client support](../../docs/INSTALLER.md).
+
+The free core requires no account. Optional structural datasets default off;
+do not enable them as a setup side effect. For checkpoints and engineering unit
+normalization read [native edit safeguards](../../docs/PRODUCT_SAFETY.md).
+For router setup read [native exchange limitations](../../docs/AUTOROUTE.md):
+a generated SES is not proof of Altium import, complete routing or clean DRC.
+
 For circuit work use the bundled `altium-circuit-design` skill. Library provider accounts/API access are separate from plugin installation. Normal plugin startup never installs packages, launches Altium, or rewrites the chosen native workspace.

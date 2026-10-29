@@ -826,6 +826,7 @@ def register_application_tools(mcp):
             - file_path: Full file path
             - document_kind: Type of document (SCH, PCB, etc.)
             - loaded: True if the doc is resident in the editor server.
+            - project_path: Owning project definition path (for backup scope).
               False means it's a project member on disk whose editor
               state hasn't been opened yet.
         """
