@@ -75,16 +75,13 @@ python -m venv .venv
 
 ينشئ الإعداد مدخلاً واحدًا <span dir="ltr"><code>mcp-altium-suite</code></span> في <span dir="ltr"><code>mcp.local.json</code></span> أو <span dir="ltr"><code>codex.local.toml</code></span>. ادمجه في إعدادات العميل وأعد الاتصال. تبقى إعدادات المحركات الخاصة في <span dir="ltr"><code>suite-backends.local.json</code></span>. افتح مشروعك، واكتشف <span dir="ltr"><code>app_context</code></span> بواسطة <span dir="ltr"><code>suite_catalog</code></span> ثم استدعِ الاسم <span dir="ltr"><code>eda__app_context</code></span> عبر <span dir="ltr"><code>suite_invoke</code></span>.
 
-الوضع الافتراضي <span dir="ltr"><code>--toolset minimal</code></span> يعرض فقط <span dir="ltr"><code>suite_catalog</code></span> و <span dir="ltr"><code>suite_invoke</code></span> و <span dir="ltr"><code>suite_status</code></span>. اكتشف المخطط باستخدام <span dir="ltr"><code>with_schema=true</code></span>؛ تبدأ الأسماء بـ <span dir="ltr"><code>eda__</code></span> أو <span dir="ltr"><code>legacy__</code></span> أو <span dir="ltr"><code>libraries__</code></span> أو <span dir="ltr"><code>cloud__</code></span>. تبقى العمليات متاحة وتُتحقق المدخلات قبل الإرسال. يعرض <span dir="ltr"><code>--toolset full</code></span> جميع الأدوات، ويولد <span dir="ltr"><code>--separate-servers</code></span> الاتصالات القديمة. [الاتصال الموحد والترحيل](review/UNIFIED_SUITE_2026-10-27.md).
+الوضع الافتراضي <span dir="ltr"><code>--toolset minimal</code></span> يعرض فقط <span dir="ltr"><code>suite_catalog</code></span> و <span dir="ltr"><code>suite_invoke</code></span> و <span dir="ltr"><code>suite_status</code></span>. اكتشف المخطط باستخدام <span dir="ltr"><code>with_schema=true</code></span>؛ تبدأ الأسماء بـ <span dir="ltr"><code>eda__</code></span> أو <span dir="ltr"><code>legacy__</code></span> أو <span dir="ltr"><code>libraries__</code></span> أو <span dir="ltr"><code>cloud__</code></span>. تبقى العمليات متاحة وتُتحقق المدخلات قبل الإرسال. يعرض <span dir="ltr"><code>--toolset full</code></span> جميع الأدوات، ويقبل <span dir="ltr"><code>--separate-servers</code></span> للترحيل مع اتصال موحد. [الاتصال الموحد والترحيل](review/UNIFIED_SUITE_2026-10-27.md).
 
 </div>
 
 <div dir="ltr">
 
 ```powershell
-Push-Location altium-designer-mcp
-cargo build --release --locked
-Pop-Location
 .\.venv\Scripts\python.exe setup.py --altium-exe "C:\Program Files\Altium\AD26\X2.EXE" --library-dir "D:\MyProject\Libraries"
 ```
 
@@ -92,7 +89,7 @@ Pop-Location
 
 <div dir="rtl">
 
-بناء محرك المكتبات من المصدر يحتاج نسخة <span dir="ltr"><code>Rust</code></span> المحددة وأدوات <span dir="ltr"><code>Visual Studio C++</code></span>؛ يمكن استخدام ملف تنفيذي موجود عبر <span dir="ltr"><code>--library-binary</code></span>. للمجلدات المتعددة كرر <span dir="ltr"><code>--library-dir</code></span>. يحتفظ الإعداد بالمسارات السابقة ويضيف مخبأ السحابة الخاص. تراخيص البرنامج وحسابات مزودي المكتبات غير مشمولة.
+تعمل أدوات المكتبات عبر شيفرة Python مستقلة دون مترجم أو ملف تنفيذي خارجي. كرر `--library-dir` للمجلدات المطلوبة. تراخيص Altium وحسابات مزودي المكتبات غير مشمولة.
 
 ## الأسئلة والمساهمة
 
@@ -100,6 +97,6 @@ Pop-Location
 
 ## الترخيص
 
-كود التنسيق بترخيص <span dir="ltr"><code>MIT</code></span>؛ جسر <span dir="ltr"><code>EDA</code></span> بترخيص <span dir="ltr"><code>Apache-2.0</code></span>، والجسر القديم بترخيص <span dir="ltr"><code>MIT</code></span>، وخادم مكتبات <span dir="ltr"><code>Rust</code></span> بترخيص <span dir="ltr"><code>GPL-3.0-or-later</code></span>. راجع [نطاق التراخيص والاستثناءات](../THIRD_PARTY_NOTICES.md) و[نسخ المصادر الأصلية](../UPSTREAM.json).
+شيفرة التنسيق والمكتبات والتوافق القديم بترخيص MIT؛ خلفية EDA بترخيص Apache-2.0. راجع [نطاق التراخيص](../THIRD_PARTY_NOTICES.md) و[المصادر الأصلية](../UPSTREAM.json).
 
 </div>

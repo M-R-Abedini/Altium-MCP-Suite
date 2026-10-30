@@ -26,6 +26,7 @@ from tests.conftest import wait_until
 from eda_agent.bridge.altium_bridge import AltiumBridge, CommandRequest
 from eda_agent.bridge.exceptions import (
     AltiumCommandError,
+    AltiumProtocolError,
     AltiumTimeoutError,
 )
 from eda_agent.config import AltiumConfig
@@ -215,21 +216,31 @@ class TestEncodingEdgeCases:
         finally:
             sim.stop()
 
-    def test_cjk_round_trips_via_utf8(self, e2e_bridge):
-        """CJK characters round-trip cleanly under UTF-8.
+    def test_cjk_is_rejected_before_publishing(self, tmp_path, monkeypatch):
+        """UTF-8 JSON cannot make the single-byte Pascal parser lossless."""
+        bridge = make_bare_bridge(tmp_path)
+        published = []
+        original_publish = Path.replace
 
-        Old behaviour: Latin-1 encoding would have caused a UnicodeEncodeError
-        on the write side and a bridge timeout. The new envelope is UTF-8
-        on the Python side and \\uXXXX-escaped from Pascal, so any Unicode
-        codepoint in a parameter value comes back intact.
-        """
+        def record_publish(source, target):
+            published.append(target)
+            return original_publish(source, target)
+
+        monkeypatch.setattr(Path, "replace", record_publish)
         cjk = "\u4f60\u597d\u4e16\u754c"
-        result = e2e_bridge.send_command("project.set_parameter", {
-            "name": "CJKParam",
-            "value": cjk,
-        }, timeout=5.0)
-        assert result["success"] is True
-        assert result["value"] == cjk
+        with pytest.raises(AltiumCommandError) as caught:
+            bridge.send_command("project.set_parameter", {
+                "name": "CJKParam",
+                "value": cjk,
+            }, timeout=5.0)
+        assert caught.value.code == "INVALID_PARAMETER"
+        assert caught.value.details == {
+            "field": "params.value",
+            "codepoints": "U+4F60, U+597D, U+4E16, U+754C",
+            "request_sent": False,
+        }
+        assert published == []
+        assert not list(tmp_path.glob("request_*"))
 
     def test_null_byte_causes_timeout(self, e2e_bridge):
         """Null bytes still crash JSON encoders, bridge times out cleanly.
@@ -312,7 +323,7 @@ class TestRecovery:
             bridge._poll_response(request_id, timeout=1.0)
 
     def test_response_array_instead_of_object(self, tmp_path):
-        """Valid JSON array (not object), bridge does not crash."""
+        """A complete non-envelope JSON value is a typed protocol failure."""
         workspace = Path(tmp_path)
         bridge = make_bare_bridge(workspace, timeout=1.0)
 
@@ -320,11 +331,13 @@ class TestRecovery:
         response_path = workspace / f"response_{request_id}.json"
         response_path.write_text("[1, 2, 3]", encoding="utf-8")
 
-        with pytest.raises((AltiumTimeoutError, AttributeError, TypeError)):
+        with pytest.raises(AltiumProtocolError) as caught:
             bridge._poll_response(request_id, timeout=1.0)
+        assert caught.value.code == "MALFORMED_RESPONSE"
+        assert caught.value.details == {"expected_id": request_id}
 
     def test_response_missing_fields(self, tmp_path):
-        """Correct id but missing success/data/error, defaults applied."""
+        """A matching id alone cannot supply a trustworthy command outcome."""
         workspace = Path(tmp_path)
         bridge = make_bare_bridge(workspace, timeout=2.0)
 
@@ -332,10 +345,10 @@ class TestRecovery:
         response_path = workspace / f"response_{request_id}.json"
         response_path.write_text(json.dumps({"id": request_id}), encoding="utf-8")
 
-        resp = bridge._poll_response(request_id, timeout=2.0)
-        assert resp.id == request_id
-        assert resp.success is False
-        assert resp.data is None
+        with pytest.raises(AltiumProtocolError) as caught:
+            bridge._poll_response(request_id, timeout=2.0)
+        assert caught.value.code == "MALFORMED_RESPONSE"
+        assert caught.value.details == {"expected_id": request_id}
 
     def test_empty_response_file_times_out(self, tmp_path):
         """Empty response file, bridge retries until timeout."""

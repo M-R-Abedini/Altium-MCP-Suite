@@ -28,11 +28,13 @@ def test_reload_tracks_old_and_new_without_replacing_sources(runtime):
     main.write_bytes(main.read_bytes() + b'\n{ regression reload }\n')
     second = suite_config.prepare_runtime()
     assert first['eda'] != second['eda']
-    assert first['legacy'] == second['legacy']
+    assert first['legacy'] == first['eda']
+    assert second['legacy'] == second['eda']
     assert (first['eda'].parent / 'Main.pas').read_bytes() == original
-    assert {first['eda'], second['eda'], first['legacy']} == registry.refresh_catalog(folder)
+    assert {first['eda'], second['eda']} == registry.refresh_catalog(folder)
     assert second['eda'].name == 'AltiumMCP-EDA.PrjScr'
-    assert second['legacy'].name == 'AltiumMCP-Legacy.PrjScr'
+    assert second['legacy'].name == 'AltiumMCP-EDA.PrjScr'
+    assert not list((folder / 'scripts').glob('legacy-*'))
     bound = (second['eda'].parent / 'Main.pas').read_text()
     assert str(second['eda']).replace("'", "''") in bound
     assert '__ALTIUM_MCP_SCRIPT_' not in bound
@@ -53,7 +55,8 @@ def test_native_workspace_is_embedded_and_changes_generation(runtime, monkeypatc
     second_work=folder/'second workspace'
     monkeypatch.setenv('EDA_AGENT_WORKSPACE',str(second_work))
     second=suite_config.prepare_runtime()
-    assert first['eda']!=second['eda'] and first['legacy']==second['legacy']
+    assert first['eda']!=second['eda']
+    assert first['legacy']==first['eda'] and second['legacy']==second['eda']
     source=(second['eda'].parent/'Main.pas').read_text()
     assert str(second_work).replace("'","''") in source
 
@@ -184,3 +187,18 @@ def test_native_cleanup_finishes_before_readiness():
     assert startup.index('CleanupOrphanRequests(0)') < startup.index('CleanupManagedScriptProjects(0)')
     assert startup.index('CleanupManagedScriptProjects(0)') < startup.index('Running := True')
     assert startup.index('CleanupManagedScriptProjects(0)') < startup.index("WriteFileContent(WorkspaceDir + 'bridge-ready.json'")
+
+
+def test_snippet_overlay_reuses_one_project_and_content_addressed_sources(runtime):
+    folder, _ = runtime
+    base = suite_config.prepare_runtime()
+    snippet = "SandboxLog('read'); ResultText := IntToStr(GetWorkspace.DM_ProjectCount);"
+    first = suite_config.prepare_runtime(script_body=snippet)
+    assert first['eda'] != base['eda'] and first['legacy'] == first['eda']
+    assert suite_config.prepare_runtime(script_body=snippet) == first
+    unit = (first['eda'].parent / 'LegacySandbox.pas').read_text()
+    assert snippet in unit
+    assert 'LegacySandbox.pas' in first['eda'].read_text()
+    assert 'Procedure Run;' not in unit
+    assert not list((folder / 'scripts').glob('legacy-*'))
+    assert (base['eda'].parent / 'LegacySandbox.pas').read_text() != unit

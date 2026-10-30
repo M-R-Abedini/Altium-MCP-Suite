@@ -14,7 +14,7 @@ Const
     // returns, mismatch means Altium is running a stale compiled script
     // (DelphiScript caches compiled units until the script project is
     // reopened or Altium is restarted).
-    SCRIPT_VERSION = '2026.10.28.product1';
+    SCRIPT_VERSION = '2026.10.29.single-transport1';
     SUITE_SCRIPT_PROJECT = '__ALTIUM_MCP_SCRIPT_PROJECT__';
     SUITE_SCRIPT_CATALOG = '__ALTIUM_MCP_SCRIPT_CATALOG__';
     SUITE_SCRIPT_WORKSPACE = '__ALTIUM_MCP_WORKSPACE__';
@@ -1518,7 +1518,13 @@ Begin
                 + 'inside a .PcbLib, use the lib_ tools instead.'
     Else If (ErrorCode = 'NO_SCHDOC') Or (ErrorCode = 'NO_SCHEMATIC') Then
         Result := 'This tool acts on an open .SchDoc sheet. To edit a '
-                + 'symbol inside a .SchLib, use the lib_ tools instead.';
+                + 'symbol inside a .SchLib, use the lib_ tools instead.'
+    Else If ErrorCode = 'WRONG_DOCUMENT' Then
+        Result := 'Use app_set_active_document to focus the requested '
+                + '.SchDoc or .PcbDoc before retrying.'
+    Else If ErrorCode = 'WRONG_PCB' Then
+        Result := 'Use app_list_documents to verify board_path, or '
+                + 'app_set_active_document to focus the target .PcbDoc.';
 End;
 
 Function BuildErrorResponseDetailed(RequestId : String; ErrorCode : String;

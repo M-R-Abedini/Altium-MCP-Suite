@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "eda-agent"
 version = "0.5.0"
-description = "MCP server for EDA tool automation, currently supports Altium Designer. Around 400 tools for schematic, PCB, and library ops via DelphiScript bridge."
+description = "MCP server for EDA tool automation, currently supports Altium Designer. Around 500 tools for schematic, PCB, and library ops via DelphiScript bridge."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
@@ -111,6 +111,8 @@ exclude = [
 "scripts/altium/StatusForm.pas" = "eda_agent/scripts/StatusForm.pas"
 "scripts/altium/StatusForm.dfm" = "eda_agent/scripts/StatusForm.dfm"
 "scripts/altium/Dispatcher.pas" = "eda_agent/scripts/Dispatcher.pas"
+"scripts/altium/LegacyCompat.pas" = "eda_agent/scripts/LegacyCompat.pas"
+"scripts/altium/LegacySandbox.pas" = "eda_agent/scripts/LegacySandbox.pas"
 "scripts/altium/SelfTest.pas" = "eda_agent/scripts/SelfTest.pas"
 "scripts/altium/Altium_API.PrjScr" = "eda_agent/scripts/Altium_API.PrjScr"
 

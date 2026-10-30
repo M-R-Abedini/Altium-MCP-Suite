@@ -50,6 +50,9 @@ def dispatch_locked(self, command, params, timeout):
         # for session-bound final shutdown evidence, without relaunching.
         stop_eda()
         return {'success': True, 'engine_release_confirmed': True}
+    if command == 'suite.execute_script':
+        from suite_script_overlay import execute_overlay
+        return execute_overlay(self, original, params, timeout)
     health = ensure_eda(self, original)
     if command == 'suite.capture_snapshot':
         import time
@@ -93,6 +96,32 @@ async def coordinated_async(self, command, params=None, timeout=None):
 AltiumBridge._execute_command = coordinated
 AltiumBridge.send_command_async = coordinated_async
 AltiumBridge.suite_shared_reads = True
-from eda_agent.server import main
+from eda_agent.server import main, mcp
+
+@mcp.tool()
+async def _suite_legacy_execute(command: str, params: dict) -> dict:
+    """Internal compatibility adapter; only the suite legacy namespace exposes it."""
+    import json
+    from coffeenmusic.server.batch_safety import validate_legacy_json_text
+    from eda_agent.bridge import get_bridge
+    validate_legacy_json_text(params)
+    bridge = get_bridge()
+    if command == 'run_altium_script':
+        return await bridge.send_command_async('suite.execute_script', params,
+            timeout=float(params.get('timeout_seconds', 120)))
+    data = await bridge.send_command_async('legacy.' + command,
+        {'arguments': params, 'pretty_params': json.dumps(params, indent=2)})
+    # Business results already have their historical shape; only the common
+    # EDA transport envelope is translated here.
+    return {'success': True, 'result': data}
+
+# Keep private compatibility commands callable only by the gateway's direct
+# adapter while preserving the 457-tool public EDA discovery contract.
+_public_list_tools = mcp.list_tools
+async def _suite_public_tools():
+    return [tool for tool in await _public_list_tools() if not tool.name.startswith('_suite_')]
+mcp.list_tools = _suite_public_tools
+mcp._mcp_server.list_tools()(_suite_public_tools)
+
 if __name__ == '__main__':
     main()

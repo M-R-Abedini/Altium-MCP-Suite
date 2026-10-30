@@ -162,7 +162,11 @@ async def verified_save(bridge, project_path=None, *, include_libraries=False):
     saved = await bridge.send_command_async('project.save', params)
     if not saved.get('success'):
         return saved
-    path = Path(saved['project_path'])
+    target = saved.get('project_path')
+    if not isinstance(target, str) or not target or not Path(target).is_absolute():
+        return dict(saved, success=False, verified=False,
+                    error='Native save did not identify an absolute project_path; disk verification was not attempted')
+    path = Path(target)
     native = await bridge.send_command_async('project.get_variants', {'project_path': str(path)})
     documents = await bridge.send_command_async('project.get_documents', {'project_path': str(path)})
     file = ProjectFile(path.read_bytes())

@@ -98,8 +98,8 @@ _CATEGORY_BY_PREFIX = (
 # because one unanswered call ends the run just as surely.
 _SIMULATOR_TOOLS = frozenset({
     "app_context", "app_detach", "app_get_active_document",
-    "app_get_version",
-    "app_list_documents", "app_set_active_document",
+    "app_get_report", "app_get_version",
+    "app_list_documents", "app_ping", "app_set_active_document",
     "audit_find_missing_decoupling",
     "audit_find_pin_net_name_mismatches",
     "audit_find_unconnected_ic_pins", "design_lint_report",
@@ -126,7 +126,7 @@ _SIMULATOR_TOOLS = frozenset({
     "proj_get_bom", "proj_get_component_info", "proj_get_focused",
     "proj_get_nets", "proj_get_parameters", "proj_get_stats",
     "proj_list_documents", "proj_open", "proj_remove_document",
-    "proj_run_output", "proj_save", "proj_set_parameter",
+    "proj_run_output", "proj_set_parameter",
 })
 # "parts" queries part providers (registries, local KiCad libraries)
 # and never touches the Altium bridge, so it works with no Altium

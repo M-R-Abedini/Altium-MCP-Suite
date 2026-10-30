@@ -126,7 +126,10 @@ End;
 
 Function ByteToHex4(B : Integer) : String;
 Begin
-    Result := '00' + HexNibble((B Shr 4) And $F) + HexNibble(B And $F);
+    // Interface strings can contain UTF-16 code units, not only ANSI bytes.
+    // Keep all four nibbles, including each half of a surrogate pair.
+    Result := HexNibble((B Shr 12) And $F) + HexNibble((B Shr 8) And $F)
+            + HexNibble((B Shr 4) And $F) + HexNibble(B And $F);
 End;
 
 Function EscapeJsonString(S : String) : String;
@@ -173,11 +176,8 @@ Begin
         Exit;
     End;
 
-    // Slow path: char-by-char with \u00XX for any non-ASCII byte. Non-ASCII
-    // input is treated as Latin-1 / CP1252 (Pascal's native single-byte
-    // encoding); the escape produces valid JSON consumable as UTF-8 by any
-    // reader. This is the single mechanism that lets us drop the Latin-1
-    // read kludge on the Python side, output is always pure ASCII.
+    // Escape each native character/code unit as \uXXXX. This also preserves
+    // Unicode interface strings and surrogate pairs; the wire stays ASCII.
     For I := 1 To Length(Tmp) Do
     Begin
         Ch := Copy(Tmp, I, 1);

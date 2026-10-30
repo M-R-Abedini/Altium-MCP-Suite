@@ -9,9 +9,11 @@ from __future__ import annotations
 import argparse
 import asyncio
 from contextlib import asynccontextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import timedelta
 import importlib
+import inspect
 import json
 import os
 from pathlib import Path
@@ -31,8 +33,8 @@ SERVER_NAME = "mcp altium suite"
 INSTRUCTIONS = """One endpoint provides Altium design, native operations, library file
 editing, and cloud library discovery. Call suite_catalog with a query and
 with_schema=true, then suite_invoke with its exact namespaced tool name and
-arguments. eda__ tools drive the coordinated EDA engine; legacy__ tools retain
-the one-shot Altium operations; libraries__ tools edit library files; cloud__
+arguments. eda__ tools drive the coordinated EDA engine; legacy__ compatibility
+tools use that same EDA transport; libraries__ tools edit library files; cloud__
 tools discover and stage external libraries. supply__ tools audit sourced stock/pricing (unknown is not
 out-of-stock); route__ runs local DSN routing with explicit native-exchange
 limits. suite__ manages disk checkpoints; telemetry__status reports optional
@@ -77,9 +79,9 @@ def load_specs(path: Path | None = None) -> list[BackendSpec]:
             BackendSpec("eda", sys.executable,
                         [str(ROOT / "eda_stdio.py"), "--toolset", "full", "--no-dashboard"], shared),
             BackendSpec("legacy", sys.executable,
-                        [str(ROOT / "coffeenmusic/server/codex_stdio.py")], shared),
-            BackendSpec("libraries", str(ROOT / "altium-designer-mcp/target/release/altium-designer-mcp.exe"),
-                        [str(ROOT / "libraries.local.json")]),
+                        [str(ROOT / "suite_legacy_compat.py")], shared),
+            BackendSpec("libraries", sys.executable,
+                        [str(ROOT / "suite_libraries_native.py"), str(ROOT / "libraries.local.json")]),
         ]
     payload = json.loads(path.read_text(encoding="utf-8-sig"))
     if not isinstance(payload, dict) or not isinstance(payload.get("backends"), dict):
@@ -212,6 +214,10 @@ class Suite:
         self.safety = None
         self.telemetry = None
         self._native_call_lock = asyncio.Lock()
+        self._native_sequence_owner = ContextVar('suite_native_sequence_owner', default=None)
+        self._component_specs = {}
+        self._component_tasks = set()
+        self._call_context = ContextVar('suite_call_context', default={})
         self._catalogs: dict[str, list[types.Tool]] = {}
         self._validators: dict[tuple[str, str], Any] = {}
         self._catalog_locks = {name: asyncio.Lock() for name in (*self.workers, *self.components)}
@@ -222,6 +228,25 @@ class Suite:
         names.extend(self.components)
         return names
 
+    @asynccontextmanager
+    async def _native_sequence(self):
+        """Serialize complete compatibility operations, including read/modify/write.
+
+        Callbacks into EDA run in the same task and re-enter this guard. A
+        different child task inherits context variables, but never ownership.
+        The EDA worker retains its separate physical editor/engine lock.
+        """
+        task = asyncio.current_task()
+        if self._native_sequence_owner.get() is task:
+            yield
+            return
+        async with self._native_call_lock:
+            token = self._native_sequence_owner.set(task)
+            try:
+                yield
+            finally:
+                self._native_sequence_owner.reset(token)
+
     async def tools(self, backend: str) -> list[types.Tool]:
         if backend not in self.backend_names:
             raise ValueError(f"Unknown backend {backend!r}; choose {self.backend_names}")
@@ -229,7 +254,14 @@ class Suite:
             if backend in self._catalogs:
                 return self._catalogs[backend]
             if backend in self.components:
-                native = [types.Tool.model_validate(raw) for raw in await asyncio.to_thread(self.components[backend].list_tools)]
+                spec = self._component_specs.get(backend)
+                if spec is not None and not spec.enabled:
+                    return []
+                component = self.components[backend]
+                listing = await component.list_tools() if inspect.iscoroutinefunction(component.list_tools) else await asyncio.to_thread(component.list_tools)
+                native = [raw if isinstance(raw, types.Tool) else types.Tool.model_validate(raw) for raw in listing]
+                if spec is not None:
+                    native = [tool for tool in native if spec.allows(tool.name)]
             else:
                 worker = self.workers[backend]
                 if not worker.spec.enabled:
@@ -237,7 +269,8 @@ class Suite:
                 native, cursor, seen = [], None, set()
                 while True:
                     page = await worker.request("list_tools", cursor=cursor)
-                    native.extend(tool for tool in page.tools if worker.spec.allows(tool.name))
+                    native.extend(tool for tool in page.tools if worker.spec.allows(tool.name)
+                                  and not tool.name.startswith('_suite_'))
                     cursor = page.nextCursor
                     if not cursor:
                         break
@@ -310,11 +343,51 @@ class Suite:
             raise error
         if backend in self.components:
             component = self.components[backend]
-            if hasattr(component, 'call_tool_async'):
-                value = await component.call_tool_async(original, arguments)
-            else:
-                value = await asyncio.to_thread(component.call_tool, original, arguments)
-            return result(value, error=isinstance(value, dict) and value.get('ok') is False)
+            warnings = []
+            if backend == 'legacy':
+                from suite_units import normalize_arguments
+                arguments, warnings = normalize_arguments(arguments)
+            async def execute_component():
+                if hasattr(component, 'call_tool_async'):
+                    return await component.call_tool_async(original, arguments)
+                if inspect.iscoroutinefunction(component.call_tool):
+                    return await component.call_tool(original, arguments)
+                return await asyncio.to_thread(component.call_tool, original, arguments)
+            async def execute():
+                if backend == 'legacy':
+                    async with self._native_sequence():
+                        return await execute_component()
+                return await execute_component()
+            context = {'meta': meta, 'progress_callback': progress_callback,
+                       'checkpoint_files': checkpoint_files, 'original': original,
+                       'backend_metadata': []}
+            token = self._call_context.set(context)
+            try:
+                if backend in {'libraries', 'legacy'}:
+                    # A client cancellation must not release an in-flight file
+                    # mutation or native adapter sequence. Close drains it.
+                    task = asyncio.create_task(execute())
+                    self._component_tasks.add(task)
+                    task.add_done_callback(self._component_tasks.discard)
+                    value = await asyncio.shield(task)
+                else:
+                    value = await execute()
+            finally:
+                self._call_context.reset(token)
+            response = value if isinstance(value, types.CallToolResult) else result(value,
+                error=isinstance(value, dict) and (value.get('ok') is False or value.get('status') == 'error'))
+            retained = dict(response.meta or {})
+            info = dict(retained.get('altium_suite') or {})
+            for metadata in context['backend_metadata']:
+                retained.update({key: val for key, val in metadata.items() if key != 'altium_suite'})
+                info.update(metadata.get('altium_suite') or {})
+            if warnings:
+                info['normalization_warnings'] = list(info.get('normalization_warnings') or []) + warnings
+            if info:
+                retained['altium_suite'] = info
+            if retained:
+                response = response.model_copy(update={'meta': retained})
+            return response
         worker = self.workers[backend]
         # The EDA meta-invoker must not bypass a migrated per-tool restriction.
         if backend == "eda" and original == "tool_invoke":
@@ -328,10 +401,8 @@ class Suite:
             return await self.invoke('eda__' + nested, arguments.get('arguments'), meta=meta,
                                      progress_callback=progress_callback, checkpoint_files=checkpoint_files)
         if backend in {'eda', 'legacy'}:
-            if self.safety is not None or self.telemetry is not None:
-                async with self._native_call_lock:
-                    return await self._invoke_worker(backend, original, arguments, meta, progress_callback, checkpoint_files)
-            return await self._invoke_worker(backend, original, arguments, meta, progress_callback, checkpoint_files)
+            async with self._native_sequence():
+                return await self._invoke_worker(backend, original, arguments, meta, progress_callback, checkpoint_files)
         return await worker.request('call_tool', name=original, arguments=arguments,
                                     meta=meta, progress_callback=progress_callback)
 
@@ -374,7 +445,8 @@ class Suite:
         """Internal safety reads retain the migrated per-tool restrictions."""
         if 'eda' not in self.workers or not self.workers['eda'].spec.allows(name):
             raise RuntimeError(f'Preflight requires enabled eda__{name}')
-        response = await self.workers['eda'].request('call_tool', name=name, arguments=arguments)
+        async with self._native_sequence():
+            response = await self.workers['eda'].request('call_tool', name=name, arguments=arguments)
         if response.isError:
             raise RuntimeError(f'Native preflight failed: {name}')
         value = response.structuredContent
@@ -391,6 +463,69 @@ class Suite:
         if value is None:
             raise RuntimeError(f'Native preflight returned no structured data: {name}')
         return value
+
+    async def compatibility_dispatch(self, name, arguments):
+        """One native EDA actor; internal unique handlers remain undiscoverable."""
+        context = self._call_context.get()
+        if name.startswith('_suite_'):
+            if 'eda' not in self.workers or not self.workers['eda'].spec.enabled:
+                raise ValueError('The unified EDA backend is disabled')
+            async with self._native_sequence():
+                checkpoint = None
+                from suite_checkpoints import is_mutation
+                original = context.get('original', name)
+                if self.safety is not None and is_mutation(original, arguments.get('params') or arguments):
+                    checkpoint = await self.safety.before(original, arguments.get('params') or arguments,
+                                                          context.get('checkpoint_files'))
+                response = await self.workers['eda'].request('call_tool', name=name, arguments=arguments,
+                            meta=context.get('meta'), progress_callback=context.get('progress_callback'))
+                if checkpoint:
+                    metadata = dict(response.meta or {})
+                    metadata['altium_suite'] = {'checkpoint': {'id': checkpoint['checkpoint_id'],
+                        'snapshot_kind': 'disk_only', 'unsaved_memory_captured': False,
+                        'warnings': checkpoint['warnings']}}
+                    response = response.model_copy(update={'meta': metadata})
+                if response.meta and 'backend_metadata' in context:
+                    context['backend_metadata'].append(response.meta)
+                return response
+        response = await self.invoke('eda__' + name, arguments, meta=context.get('meta'),
+                                 progress_callback=context.get('progress_callback'),
+                                 checkpoint_files=context.get('checkpoint_files'))
+        if response.meta and 'backend_metadata' in context:
+            context['backend_metadata'].append(response.meta)
+        return response
+
+    def install_native_backends(self, data):
+        """Adopt old configuration policy without launching obsolete workers."""
+        for namespace in ('libraries', 'legacy'):
+            worker = self.workers.pop(namespace, None)
+            if worker is None:
+                continue
+            spec = worker.spec
+            self._component_specs[namespace] = spec
+            if namespace == 'libraries':
+                from suite_libraries_native import NativeLibraries
+                if not spec.args and spec.enabled:
+                    raise ValueError('Library configuration path is required')
+                settings = {}
+                if spec.enabled:
+                    config = Path(spec.args[-1])
+                    if not config.is_absolute():
+                        config = Path(spec.cwd or ROOT) / config
+                    settings = json.loads(config.read_text(encoding='utf-8-sig'))
+                roots = settings.get('allowed_paths', [])
+                if not isinstance(roots, list) or not all(isinstance(p, str) and Path(p).is_absolute() for p in roots):
+                    raise ValueError('Native library allowed_paths must be absolute paths')
+                component = NativeLibraries(data_dir=data, allowed_paths=roots,
+                    native_dispatch=self.compatibility_dispatch, logging_config=settings.get('logging'))
+            else:
+                from suite_legacy_compat import LegacyCompat
+                component = LegacyCompat(self.compatibility_dispatch, config={
+                    'altium_exe': spec.env.get('ALTIUM_EXE', os.environ.get('ALTIUM_EXE', '')),
+                    'runtime_dir': spec.env.get('ALTIUM_MCP_RUNTIME', os.environ.get('ALTIUM_MCP_RUNTIME', str(data))),
+                    'script_path': spec.env.get('ALTIUM_MCP_EDA_SCRIPT', str(ROOT / 'eda-agent/scripts/altium/Altium_API.PrjScr'))})
+            self.components[namespace] = component
+            self._catalog_locks[namespace] = asyncio.Lock()
 
     async def active_bom(self):
         """Read exact MPN parameters in two bulk calls, never guess from value."""
@@ -437,11 +572,18 @@ class Suite:
         for name in self.components:
             backends[name] = {"enabled": True, "in_process": True,
                               "catalog_loaded": name in self._catalogs}
+            if name in self._component_specs:
+                spec = self._component_specs[name]
+                backends[name].update(enabled=spec.enabled,
+                    tool_restrictions=bool(spec.disabled_tools or spec.enabled_tools is not None),
+                    transport='unified_eda' if name == 'legacy' else 'original_python_ole')
         return {"server": SERVER_NAME, "toolset": self.toolset, "backends": backends,
                 "architecture": "one client endpoint; lazy coordinated internal workers",
                 "native_editor_probed": False}
 
     async def close(self):
+        if self._component_tasks:
+            await asyncio.gather(*tuple(self._component_tasks), return_exceptions=True)
         await asyncio.gather(*(worker.close() for worker in self.workers.values()))
 
 
@@ -476,7 +618,7 @@ def create_server(suite: Suite) -> Server:
         finally:
             await suite.close()
 
-    server = Server(SERVER_NAME, version="0.3.0", instructions=INSTRUCTIONS, lifespan=lifespan)
+    server = Server(SERVER_NAME, version="0.4.0", instructions=INSTRUCTIONS, lifespan=lifespan)
 
     @server.list_tools()
     async def list_tools():
@@ -565,6 +707,7 @@ async def serve(options):
         from scripts.plugin_runtime import data_directory
         from suite_checkpoints import SafetyService
         data = data_directory()
+        suite.install_native_backends(data)
         safety = SafetyService(data, suite.native_read)
         suite.safety = safety
         suite.components['suite'] = safety

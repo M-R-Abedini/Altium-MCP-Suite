@@ -12,10 +12,12 @@ import hashlib
 import io
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import sys
 import tempfile
+import tomllib
 import uuid
 import zipfile
 
@@ -25,29 +27,26 @@ ROOT_FILES = (
     'suite_stdio.py', 'suite_cloud_libraries.py', 'configure_suite.py', 'setup.py', 'deploy.py',
     'suite_units.py', 'suite_checkpoints.py', 'suite_supply_chain.py', 'suite_autoroute.py',
     'suite_telemetry.py', 'suite_hub.py', 'altium_installation.py',
+    'suite_libraries_native.py', 'suite_ole.py', 'suite_schlib_codec.py',
+    'suite_pcblib_codec.py', 'suite_pcb_primitives.py', 'suite_legacy_compat.py',
+    'suite_script_overlay.py', 'contracts/libraries-v0.3.0.json', 'contracts/legacy-tools.json',
+    'contracts/pcblib-default-board.json',
+    'contracts/windows-1252-best-fit.json',
     'eda_stdio.py', 'bridge_coordination.py', 'suite_config.py', 'script_projects.py',
     'engine_identity.py', 'engine_queue.py', 'suite_reads.py', 'README.md',
     'LICENSE', 'THIRD_PARTY_NOTICES.md', 'UPSTREAM.json', 'MODIFICATIONS.md',
     '.gitignore', 'CONTRIBUTING.md', 'CONNECTIVITY_VERIFICATION.md',
     'scripts/plugin_runtime.py', 'scripts/launch_plugin.ps1', 'scripts/build_plugin.py',
     'eda-agent/pyproject.toml', 'eda-agent/README.md', 'eda-agent/LICENSE', 'eda-agent/NOTICE',
-    'coffeenmusic/LICENSE', 'coffeenmusic/README.md',
-    'altium-designer-mcp/Cargo.toml', 'altium-designer-mcp/Cargo.lock',
-    'altium-designer-mcp/rust-toolchain.toml', 'altium-designer-mcp/rustfmt.toml',
-    'altium-designer-mcp/LICENCE', 'altium-designer-mcp/README.md',
+    'coffeenmusic/LICENSE', 'coffeenmusic/server/batch_safety.py',
+    'coffeenmusic/server/symbol_placement_rules.txt',
 )
 TREE_RULES = {
     'installer': {'.py', '.iss', '.ps1', '.md'},
     'eda-agent/src': {'.py', '.html', '.css', '.js'},
     'eda-agent/scripts/altium': {'.pas', '.dfm', '.prjscr'},
-    'coffeenmusic/server': {'.py', '.pas', '.dfm', '.prjscr', '.txt'},
     'skills': {'.md', '.yaml', '.yml', '.json', '.py', '.svg', '.png'},
     'docs': {'.md'},
-    'altium-designer-mcp/src': {'.rs', '.txt'},
-    'altium-designer-mcp/tests': {'.rs', '.py'},
-    'altium-designer-mcp/docs': {'.md'},
-    'altium-designer-mcp/config': {'.json'},
-    'altium-designer-mcp/scripts': {'.ps1', '.py', '.md', '.json', '.txt', '.pas', '.prjscr', '.schlib', '.pcblib', '.bmp'},
 }
 SKIP_PARTS = {'.git', '.venv', '__pycache__', '.pytest_cache', 'target', 'dist',
               'repair-backups', '.runtime', '.tmp'}
@@ -67,7 +66,7 @@ def _safe_source(path, root):
         return False
     if any(token in path.name.lower() for token in ('.local.', '.backup', '.bak', '.tmp')):
         return False
-    if 'tests' in relative.parts and relative.parts[0] != 'altium-designer-mcp':
+    if 'tests' in relative.parts:
         return False
     if path.is_symlink() or (hasattr(path, 'is_junction') and path.is_junction()):
         raise ValueError(f'Package input is a link: {relative}')
@@ -96,11 +95,64 @@ def package_inputs(root=ROOT):
                         continue  # Unreferenced generated build output is not source.
                 paths[path.relative_to(root).as_posix()] = path
     for needed in ('skills/altium-circuit-design/SKILL.md', 'skills/altium-suite-setup/SKILL.md',
-                   'docs/PLUGIN_PACKAGE.md', 'altium-designer-mcp/src/main.rs',
-                   'altium-designer-mcp/src/mcp/server.rs', 'coffeenmusic/server/symbol_placement_rules.txt'):
+                   'docs/PLUGIN_PACKAGE.md', 'suite_libraries_native.py', 'suite_legacy_compat.py',
+                   'contracts/libraries-v0.3.0.json', 'coffeenmusic/server/symbol_placement_rules.txt'):
         if needed not in paths:
             raise ValueError(f'Package is incomplete: {needed}')
     return dict(sorted(paths.items()))
+
+
+def audit_payload(payload):
+    """Fail closed if retired implementation artifacts re-enter a release."""
+    forbidden_suffixes = {'.rs', '.exe', '.dll', '.zip', '.crate', '.rlib'}
+    for name, data in payload.items():
+        path = Path(name)
+        if ('altium-designer-mcp' in path.parts or 'vendor' in path.parts
+                or path.suffix.lower() in forbidden_suffixes):
+            raise ValueError(f'Retired or binary implementation in plugin package: {name}')
+        if path.suffix.lower() in {'.py', '.pas'}:
+            for line in data.decode('utf-8-sig').splitlines():
+                if re.match(r'^\s*(?:#|//|\{|\*)?\s*SPDX-License-Identifier:\s*.*(?:AGPL|GPL|LGPL)-', line):
+                    raise ValueError(f'Incompatible implementation license: {name}')
+    manifest = json.loads(payload['plugin.json'])
+    if manifest.get('license') != 'MIT AND Apache-2.0':
+        raise ValueError('Unexpected plugin license closure')
+    upstream = json.loads(payload['UPSTREAM.json'])
+    if set(upstream) != {'eda-agent', 'coffeenmusic'}:
+        raise ValueError('Unexpected bundled upstream implementation')
+
+
+def native_wheel_members(root=ROOT):
+    """Verify that every native project member survives the installed EDA wheel."""
+    root = Path(root)
+    metadata = tomllib.loads((root / 'eda-agent/pyproject.toml').read_text(encoding='utf-8'))
+    included = metadata['tool']['hatch']['build']['targets']['wheel']['force-include']
+    project = root / 'eda-agent/scripts/altium/Altium_API.PrjScr'
+    names = [line.split('=', 1)[1].strip() for line in project.read_text(encoding='utf-8-sig').splitlines()
+             if line.strip().lower().startswith('documentpath=')]
+    names.append(project.name)
+    members = {}
+    for name in names:
+        source = 'scripts/altium/' + name
+        target = 'eda_agent/scripts/' + name
+        path = root / 'eda-agent' / source
+        if Path(name).name != name or not path.is_file() or included.get(source) != target:
+            raise ValueError(f'Native wheel closure is missing or remaps a project member: {name}')
+        members[target] = path
+    return members
+
+
+def verify_native_wheel(wheel, root=ROOT):
+    members = native_wheel_members(root)
+    with zipfile.ZipFile(wheel) as archive:
+        for target, source in members.items():
+            try:
+                data = archive.read(target)
+            except KeyError as error:
+                raise ValueError(f'Native wheel is missing {target}') from error
+            if data != source.read_bytes():
+                raise ValueError(f'Native wheel source differs: {target}')
+    return {'wheel': str(wheel), 'native_project_members_verified': len(members)}
 
 
 def package_payload(root=ROOT):
@@ -119,6 +171,8 @@ def package_payload(root=ROOT):
     onboarding = manifest.get('extensions', {}).get('com.openai', {}).get('onboardingSkill', '')
     if not onboarding.startswith('./') or '..' in Path(onboarding).parts or onboarding[2:] not in payload:
         raise ValueError('The declared onboarding skill must be inside the package')
+    audit_payload(payload)
+    native_wheel_members(root)
     contents = {'schema': 1, 'name': manifest['name'], 'version': manifest['version'],
                 'files': {name: {'sha256': hashlib.sha256(data).hexdigest(), 'size': len(data)}
                           for name, data in payload.items()},
@@ -237,9 +291,16 @@ async def smoke(plugin_root, python=sys.executable):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, default=ROOT / 'dist')
-    parser.add_argument('--smoke', action='store_true', help='exercise clean artifact MCP without Altium or Rust')
+    parser.add_argument('--check-wheel', type=Path, help='verify a built EDA wheel or directory against every native project member')
+    parser.add_argument('--smoke', action='store_true', help='exercise clean artifact MCP without Altium or external library executables')
     parser.add_argument('--check-reproducible', action='store_true')
     args = parser.parse_args(argv)
+    if args.check_wheel:
+        wheels = list(args.check_wheel.glob('eda_agent-*.whl')) if args.check_wheel.is_dir() else [args.check_wheel]
+        if len(wheels) != 1:
+            raise ValueError('Select exactly one built EDA wheel')
+        print(json.dumps(verify_native_wheel(wheels[0]), indent=2))
+        return
     result = build(ROOT, args.output, args.check_reproducible)
     if args.smoke:
         result['smoke'] = asyncio.run(smoke(result['plugin_root']))

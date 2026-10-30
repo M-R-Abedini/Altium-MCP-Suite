@@ -1297,10 +1297,12 @@ def register_project_tools(mcp):
         Document focus can change on reopen. Use variant_id from proj_list_variants.
         Pass "[No Variations]" to return to the base design.
         """
+        selector = variant_id or variant_name
+        if not selector.strip():
+            return {'success': False, 'error': 'Variant selector is required; use the UniqueId from proj_list_variants'}
         bridge = get_bridge()
         params = {"project_path": project_path} if project_path else {}
         listing = enrich_variants(await bridge.send_command_async("project.get_variants", params))
-        selector = variant_id or variant_name
         if selector == "[No Variations]":
             label, identity = "", ""
         else:
@@ -1497,8 +1499,10 @@ def register_project_tools(mcp):
         is the display label, otherwise name is used. No components are excluded
         initially. Use proj_set_variant_fitted for assembly differences.
         """
-        bridge = get_bridge()
         label = description or name
+        if not label.strip() or any(c in label for c in '\r\n|'):
+            return {'success': False, 'error': 'Variant display name must be nonempty and contain no newline or pipe'}
+        bridge = get_bridge()
         def mutate(file):
             return file.create(label)
         async def verify(path, uid):
@@ -1523,7 +1527,7 @@ def register_project_tools(mcp):
         every requested state through the native matrix and variation readers.
         """
         if not updates:
-            raise ValueError("updates must contain at least one component")
+            return {'success': False, 'error': 'updates must contain at least one component'}
         bridge = get_bridge()
         params = {"project_path": project_path} if project_path else {}
         listing = enrich_variants(await bridge.send_command_async("project.get_variants", params))

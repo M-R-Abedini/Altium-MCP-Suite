@@ -79,16 +79,13 @@ python -m venv .venv
 
 Merge the generated `mcp.local.json` (or `codex.local.toml`) into your MCP client config and restart its connections. Setup now emits one `mcp-altium-suite` connection, with display identity `mcp altium suite`, and a private `suite-backends.local.json` worker manifest. Open your project in Altium, discover `app_context` with `suite_catalog`, then invoke the returned `eda__app_context` name through `suite_invoke`.
 
-The default `--toolset minimal` advertises only `suite_catalog`, `suite_invoke` and `suite_status`. Discover an operation with `suite_catalog(query="...", backend="eda", with_schema=true)`, then call `suite_invoke(name="eda__...", arguments={...})`. Namespaces are `eda__`, `legacy__`, `libraries__` and `cloud__`. Schemas load on demand and arguments are validated before forwarding. `--toolset full` advertises every namespaced tool; `--separate-servers` explicitly generates the older connection layout. Existing EDA-only measurements in the [performance review](docs/review/PERFORMANCE_2026-10-08.md) are not unified-suite benchmarks.
+The default `--toolset minimal` advertises only `suite_catalog`, `suite_invoke` and `suite_status`. Discover an operation with `suite_catalog(query="...", backend="eda", with_schema=true)`, then call `suite_invoke(name="eda__...", arguments={...})`. Namespaces are `eda__`, `legacy__`, `libraries__`, `cloud__`, `suite__`, `supply__`, `route__` and `telemetry__`. Schemas load on demand and arguments are validated before forwarding. `--toolset full` advertises every namespaced tool; `--separate-servers` is accepted for migration but still produces the unified endpoint. Existing EDA-only measurements in the [performance review](docs/review/PERFORMANCE_2026-10-08.md) are not unified-suite benchmarks.
 
 ```powershell
-Push-Location altium-designer-mcp
-cargo build --release --locked
-Pop-Location
 .\.venv\Scripts\python.exe setup.py --altium-exe "C:\Program Files\Altium\AD26\X2.EXE" --library-dir "D:\MyProject\Libraries"
 ```
 
-The library worker needs the pinned Rust toolchain + VS C++ build tools when building from source. Repeat `--library-dir` for more directories, or use `--library-binary` for an existing executable. Setup adds only the suite's cloud staging root alongside the selected library roots. SnapMagic and SamacSys account/API access is not bundled.
+The 34 library operations run through original Python OLE2 codecs in the gateway. No Rust compiler or external library executable is needed. Repeat `--library-dir` for more directories. Setup adds only the suite's cloud staging root alongside the selected library roots. SnapMagic and SamacSys account/API access is not bundled.
 
 For an existing three-server Codex installation, deploy and test the new entrypoint first, then use `configure_suite.py --cloud-cache <absolute-cache-path>` to preview migration. Add `--apply` to back up and migrate the three connection tables while preserving unrelated settings. See [migration and rollback](docs/review/UNIFIED_SUITE_2026-10-27.md).
 
@@ -100,11 +97,11 @@ See [the contributing guide](CONTRIBUTING.md) for development setup, tests, tran
 
 ## License
 
-Suite glue: MIT. EDA backend: Apache-2.0; legacy backend: MIT; Rust library backend: GPL-3.0-or-later. See [license scope and exceptions](THIRD_PARTY_NOTICES.md) and [upstream snapshots](UPSTREAM.json).
-# Free desktop product preview (0.3.0)
+Suite coordination, native library codecs and legacy compatibility: MIT. EDA backend: Apache-2.0. See [license scope and exceptions](THIRD_PARTY_NOTICES.md) and [upstream snapshots](UPSTREAM.json).
+# Free desktop product baseline and native libraries (0.4.0)
 
 The [0.2.0 baseline release](https://github.com/M-R-Abedini/Altium-MCP-Suite/releases/tag/v0.2.0)
-is merged in `main`. The 0.3.0 development package adds free local disk
+and the annotated `v0.3.0` Free-Tier Desktop baseline are merged in `main`. The baseline adds free local disk
 checkpoints, electrical-value normalization, component supply adapters, a local
 Freerouting runner, explicit opt-in structural datasets, multi-client setup,
 and a Windows installer build pipeline. No suite account is required.
@@ -117,3 +114,8 @@ Start with [native edit safety](docs/PRODUCT_SAFETY.md),
 These documents distinguish working public/offline features from API access
 requirements and unfinished native exchange; SES generation does not establish
 Altium import or a DRC-clean board. Collection is disabled by default.
+
+The 0.4.0 development branch replaces the external library implementation with
+independent Python codecs and keeps all 34 public library schemas. The 37 legacy
+schemas remain compatibility aliases through the single EDA transport. Historical
+releases retain their original contents and licenses.

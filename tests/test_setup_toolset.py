@@ -48,9 +48,10 @@ def test_generated_clients_select_the_same_toolset(tmp_path, monkeypatch, mode):
     backends = json.loads((tmp_path / 'suite-backends.local.json').read_text())['backends']
     assert backends['eda']['args'] == [str(tmp_path / 'eda_stdio.py'), '--toolset', 'full', '--no-dashboard']
     assert backends['eda']['env'] == backends['legacy']['env']
+    assert backends['legacy']['args'] == [str(tmp_path / 'suite_legacy_compat.py')]
 
 
-def test_separate_connections_remain_explicit_compatibility_option(tmp_path, monkeypatch):
+def test_deprecated_separate_connections_migrate_to_one_gateway(tmp_path, monkeypatch):
     monkeypatch.setenv('ALTIUM_MCP_RUNTIME', str(tmp_path / 'runtime'))
     monkeypatch.setenv('EDA_AGENT_WORKSPACE', str(tmp_path / 'workspace'))
     executable = tmp_path / 'X2.EXE'; executable.touch()
@@ -59,9 +60,9 @@ def test_separate_connections_remain_explicit_compatibility_option(tmp_path, mon
     monkeypatch.setattr(sys, 'argv', ['setup.py', '--altium-exe', str(executable), '--separate-servers'])
     setup.main()
     config = json.loads((tmp_path / 'mcp.local.json').read_text())['mcpServers']
-    assert set(config) == {'eda-agent', 'altium'}
-    assert '--toolset' in config['eda-agent']['args']
-    assert not (tmp_path / 'suite-backends.local.json').exists()
+    assert set(config) == {'mcp-altium-suite'}
+    assert '--toolset' in config['mcp-altium-suite']['args']
+    assert (tmp_path / 'suite-backends.local.json').is_file()
 
 
 def test_setup_rerun_retains_existing_library_paths_and_options(tmp_path, monkeypatch):
@@ -84,4 +85,4 @@ def test_setup_rerun_retains_existing_library_paths_and_options(tmp_path, monkey
     assert saved['allowed_paths'] == [str(existing_root), str(extra_root), str(tmp_path / 'runtime' / 'cloud-libraries')]
     assert saved['logging'] == {'level': 'warn', 'audit_log_path': None}
     workers = json.loads((tmp_path / 'suite-backends.local.json').read_text())['backends']
-    assert workers['libraries']['args'] == [str(library_config)]
+    assert workers['libraries']['args'] == [str(tmp_path / 'suite_libraries_native.py'), str(library_config)]

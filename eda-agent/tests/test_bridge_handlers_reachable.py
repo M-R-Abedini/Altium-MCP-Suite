@@ -35,6 +35,15 @@ ROOT = Path(__file__).resolve().parents[1]
 PASCAL_DIR = ROOT / "scripts" / "altium"
 PY_DIR = ROOT / "src" / "eda_agent"
 
+
+def _python_files():
+    """The suite adapters are live callers outside the embedded EDA package."""
+    yield from PY_DIR.rglob('*.py')
+    for name in ('eda_stdio.py', 'suite_legacy_compat.py', 'suite_script_overlay.py'):
+        path = ROOT.parent / name
+        if path.exists():
+            yield path
+
 #: Modules whose command literals belong to a DIFFERENT bridge. This
 #: scan asks which Pascal handlers Python calls, and it accepts any
 #: dotted literal by its tail, so an EasyEDA command that happens to end
@@ -72,7 +81,6 @@ KNOWN_UNREACHABLE = {
     # Genuinely unexposed.
     "fillet_corners",
     "measure_distance",
-    "place_compile_mask",
 }
 
 #: The modules do NOT all dispatch the same way, and matching only one
@@ -81,10 +89,16 @@ KNOWN_UNREACHABLE = {
 #: function. Matching only ``'x': Result := Fn(`` missed all 29 audit
 #: handlers and reported them as absent.
 _DISPATCH_PATTERNS = (
-    re.compile(r"'([a-z_0-9]+)'\s*:\s*Result\s*:=\s*(\w+)\("),  # case -> fn
+    re.compile(r"'([a-z_0-9]+)'\s*:\s*(?:Result|Data)\s*:=\s*(\w+)\("),  # case -> fn
     re.compile(r"'([a-z_0-9]+)'\s*:\s*(Begin)"),                  # inline case
     re.compile(r"Action\s*=\s*'([a-z_0-9]+)'()"),                 # else-if chain
 )
+
+
+def _patterns_for(path):
+    # Dispatcher cases select categories, not actions. Its explicit Action
+    # special case still represents a real action (the script sandbox).
+    return _DISPATCH_PATTERNS[2:] if path.name == 'Dispatcher.pas' else _DISPATCH_PATTERNS
 
 
 def _dispatched_handlers() -> dict[str, tuple[str, str]]:
@@ -96,7 +110,7 @@ def _dispatched_handlers() -> dict[str, tuple[str, str]]:
         if path.name == "Altium_MCP.pas":
             continue
         text = path.read_text(encoding="utf-8", errors="replace")
-        for pattern in _DISPATCH_PATTERNS:
+        for pattern in _patterns_for(path):
             for m in pattern.finditer(text):
                 found.setdefault(
                     m.group(1), (path.name, m.group(2) or "inline"))
@@ -112,7 +126,7 @@ def _sent_command_tails() -> set[str]:
     handler as dead.
     """
     tails: set[str] = set()
-    for path in PY_DIR.rglob("*.py"):
+    for path in _python_files():
         if _is_other_bridge(path):
             continue
         try:
@@ -146,7 +160,7 @@ def _python_string_constants() -> set[str]:
     pattern that misses one idiom reports reachable handlers as dead.
     """
     out: set[str] = set()
-    for path in PY_DIR.rglob("*.py"):
+    for path in _python_files():
         if _is_other_bridge(path):
             continue
         try:
@@ -254,6 +268,10 @@ def _category_to_module() -> dict[str, str]:
         encoding="utf-8", errors="replace")
     routes = dict(re.findall(
         r"'(\w+)':\s*Result\s*:=\s*(Handle\w+Command)", text))
+    # The legacy category first selects the sandbox, then dispatches its
+    # ordinary actions through the same EDA project.
+    routes.update(re.findall(
+        r"'(\w+)':\s*Begin\s+If Action = '[^']+' Then Result := \w+\([^;]+?\)\s+Else Result := (Handle\w+Command)", text))
     assert routes, "could not parse the dispatcher's category routing"
 
     defined_in: dict[str, str] = {}
@@ -280,7 +298,7 @@ def _modules_dispatching() -> dict[str, set[str]]:
         if path.name == "Altium_MCP.pas":
             continue
         text = path.read_text(encoding="utf-8", errors="replace")
-        for pattern in _DISPATCH_PATTERNS:
+        for pattern in _patterns_for(path):
             for m in pattern.finditer(text):
                 out.setdefault(m.group(1), set()).add(path.name)
     return out
@@ -344,7 +362,7 @@ def _sent_commands() -> dict[str, str]:
     is the safe direction for every check built on this.
     """
     sent: dict[str, str] = {}
-    for path in PY_DIR.rglob("*.py"):
+    for path in _python_files():
         if _is_other_bridge(path):
             continue
         try:
@@ -382,8 +400,33 @@ def unhandled() -> dict[str, str]:
         f"vacuously")
 
     sent = _sent_commands()
+    intercepted = _intercepted_commands()
     return {cmd: where for cmd, where in sent.items()
-            if cmd.split(".", 1)[1] not in handlers}
+            if cmd not in intercepted and cmd.split(".", 1)[1] not in handlers}
+
+
+def _intercepted_commands():
+    """Read actual Python coordinator branches; these never reach Pascal."""
+    wrapper = ROOT.parent / 'eda_stdio.py'
+    if not wrapper.exists():
+        return set()
+    tree = ast.parse(wrapper.read_text(encoding='utf-8'))
+    dispatch = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'dispatch_locked')
+    commands = set()
+    for node in dispatch.body:
+        if not isinstance(node, ast.If) or not isinstance(node.test, ast.Compare):
+            continue
+        compare = node.test
+        if (isinstance(compare.left, ast.Name) and compare.left.id == 'command'
+                and len(compare.ops) == 1 and isinstance(compare.ops[0], ast.Eq)
+                and isinstance(compare.comparators[0], ast.Constant)
+                and any(isinstance(child, ast.Return) for statement in node.body for child in ast.walk(statement))):
+            commands.add(compare.comparators[0].value)
+    return commands
+
+
+def test_suite_interceptors_are_discovered_from_executable_coordinator_branches():
+    assert {'suite.capture_snapshot', 'suite.execute_script'} <= _intercepted_commands()
 
 
 def test_every_command_python_sends_has_a_handler(unhandled):
@@ -418,7 +461,7 @@ def test_every_scanned_source_file_actually_parses():
     mean what they claim.
     """
     broken = []
-    for path in PY_DIR.rglob("*.py"):
+    for path in _python_files():
         try:
             ast.parse(path.read_text(encoding="utf-8", errors="replace"))
         except SyntaxError as exc:

@@ -20,42 +20,20 @@ ROOT_MODULES = ('suite_stdio.py', 'suite_cloud_libraries.py', 'configure_suite.p
                 'suite_units.py', 'suite_checkpoints.py', 'suite_supply_chain.py',
                 'suite_autoroute.py', 'suite_telemetry.py',
                 'eda_stdio.py', 'bridge_coordination.py', 'suite_config.py', 'script_projects.py',
-                'engine_identity.py', 'engine_queue.py', 'suite_reads.py')
+                'engine_identity.py', 'engine_queue.py', 'suite_reads.py',
+                'suite_legacy_compat.py', 'suite_libraries_native.py', 'suite_schlib_codec.py',
+                'suite_script_overlay.py', 'suite_ole.py', 'suite_pcblib_codec.py', 'suite_pcb_primitives.py')
 NOTICE_FILES = ('LICENSE', 'THIRD_PARTY_NOTICES.md', 'UPSTREAM.json', 'MODIFICATIONS.md',
-                 'eda-agent/LICENSE', 'eda-agent/NOTICE', 'coffeenmusic/LICENSE',
-                 'altium-designer-mcp/LICENCE')
+                 'eda-agent/LICENSE', 'eda-agent/NOTICE', 'coffeenmusic/LICENSE')
 
 
 def deployment_files(root=ROOT):
-    files = [root / name for name in (*ROOT_MODULES, *NOTICE_FILES, '.gitignore')]
-    for name in ('altium_installation.py', 'suite_hub.py'):
-        if (root / name).is_file():
-            files.append(root / name)
-    for directory in ('eda-agent/src', 'eda-agent/scripts/altium', 'coffeenmusic/server'):
-        for path in (root / directory).rglob('*'):
-            relative = path.relative_to(root / directory)
-            if any(part in {'.venv', '__pycache__', 'tests'} for part in relative.parts):
-                continue
-            if path.suffix.lower() in {'.py', '.pas', '.dfm', '.prjscr', '.txt'}:
-                files.append(path)
-    skills = root / 'skills'
-    if skills.is_dir():
-        files.extend(path for path in skills.rglob('*') if path.is_file()
-                     and '__pycache__' not in path.parts and path.suffix in {'.md', '.yaml', '.py', '.json'})
-    for name in ('README.md', 'CONTRIBUTING.md', 'CONNECTIVITY_VERIFICATION.md',
-                 'plugin.json', 'mcp.json', 'requirements-runtime.txt',
-                 'constraints-windows-py312.txt', '.agents/plugins/marketplace.json',
-                 'scripts/plugin_runtime.py', 'scripts/launch_plugin.ps1', 'scripts/build_plugin.py',
-                 'docs/PLUGIN_PACKAGE.md', 'docs/review/UNIFIED_SUITE_2026-10-27.md',
-                 'docs/review/CLOUD_LIBRARIES_2026-10-27.md'):
-        if (root / name).is_file():
-            files.append(root / name)
-    if (root / 'installer').is_dir():
-        files.extend(path for path in (root / 'installer').rglob('*') if path.is_file()
-                     and '__pycache__' not in path.parts and path.suffix in {'.py', '.iss', '.md', '.json', '.ps1'})
-    if not all(path.is_file() for path in files):
-        raise RuntimeError('Deployment is missing an entry point or shared module')
-    return sorted(files)
+    # The plugin ZIP, direct deployment and installer share one audited source
+    # closure. Hand-maintained lists previously missed codec resources, EDA wheel
+    # metadata and web assets even though deployment itself reported success.
+    from scripts.build_plugin import package_inputs, package_payload
+    package_payload(root)  # Enforce the same license and native-wheel closure checks.
+    return list(package_inputs(root).values())
 
 
 async def smoke(destination, python=sys.executable, servers=('suite',)):
@@ -70,9 +48,9 @@ async def smoke(destination, python=sys.executable, servers=('suite',)):
         env['EDA_AGENT_POINTER_FILE'] = str(Path(scratch) / 'pointer.txt')
         env['EDA_AGENT_TOOLSET'] = 'full'
         env['EDA_AGENT_BACKEND'] = 'altium'
-        for name in servers:
-            entrypoints = {'suite': 'suite_stdio.py', 'eda': 'eda_stdio.py',
-                           'legacy': 'coffeenmusic/server/codex_stdio.py'}
+        # Historical selector aliases now verify the single intended gateway.
+        for name in dict.fromkeys('suite' if entry == 'legacy' else entry for entry in servers):
+            entrypoints = {'suite': 'suite_stdio.py', 'eda': 'eda_stdio.py'}
             script = destination / entrypoints[name]
             args = [str(script)] + (['--no-dashboard'] if name == 'eda' else [])
             params = StdioServerParameters(command=str(python), args=args, cwd=str(destination), env=env)

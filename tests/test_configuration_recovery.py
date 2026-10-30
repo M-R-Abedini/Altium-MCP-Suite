@@ -33,18 +33,18 @@ def test_settings_accept_bom_and_absence(tmp_path, monkeypatch):
 
 @pytest.mark.parametrize('count', [0, 2])
 def test_optimized_python_cannot_generate_an_invalid_script(tmp_path, count):
-    for directory in ('eda-agent/scripts/altium', 'coffeenmusic/server/AltiumScript'):
-        (tmp_path / directory).mkdir(parents=True)
-    template = tmp_path / 'coffeenmusic/server/AltiumScript/Altium_API.pas'
-    template.write_text('__ALTIUM_MCP_EXCHANGE_DIR__' * count)
+    directory = tmp_path / 'eda-agent/scripts/altium'
+    directory.mkdir(parents=True)
+    template = directory / 'Main.pas'
+    template.write_text('__ALTIUM_MCP_SCRIPT_PROJECT__' * count)
     program = ('import sys; from pathlib import Path; import suite_config; '
                'suite_config.ROOT = Path(sys.argv[1]); suite_config.prepare_runtime()')
     env = dict(os.environ, ALTIUM_MCP_RUNTIME=str(tmp_path / 'runtime'))
     result = subprocess.run([sys.executable, '-O', '-c', program, str(tmp_path)],
                             cwd=suite_config.ROOT, env=env, capture_output=True, text=True)
     assert result.returncode != 0
-    assert 'exactly one exchange-directory placeholder' in result.stderr
-    assert not list((tmp_path / 'runtime/scripts').glob('legacy-*/Altium_API.pas'))
+    assert 'exactly one __ALTIUM_MCP_SCRIPT_PROJECT__ placeholder' in result.stderr
+    assert not list((tmp_path / 'runtime/scripts').glob('eda-*/Main.pas'))
 
 
 @pytest.mark.parametrize('content', [b'{', b'[]', b'null', b'{}', b'\xff',

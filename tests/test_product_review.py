@@ -3,9 +3,6 @@ import json
 import importlib.util
 from pathlib import Path
 import sys
-import tomllib
-from types import SimpleNamespace
-import zipfile
 
 import pytest
 
@@ -77,43 +74,19 @@ def test_explicit_home_keeps_profile_tests_isolated(tmp_path, monkeypatch):
     assert clients.client_config_paths(home=home)["codex"] == home / ".codex/config.toml"
 
 
-def test_corresponding_source_vendor_paths_survive_archive_relocation(tmp_path, monkeypatch):
-    build_script = Path(__file__).resolve().parents[1] / "installer/build_installer.py"
-    spec = importlib.util.spec_from_file_location("independent_installer_review", build_script)
+def test_installer_has_no_external_library_build_or_source_archive_pipeline():
+    """The native service is in the shared package closure, not a separate binary."""
+    root = Path(__file__).resolve().parents[1]
+    spec = importlib.util.spec_from_file_location('native_installer_review', root / 'installer/build_installer.py')
     builder = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(builder)
-    crate = tmp_path / "original crate"
-    crate.mkdir()
-    (crate / "Cargo.lock").write_text("# fixture\nversion=4\n")
-    (crate / "LICENCE").write_text("Fixture license retained")
-    binary = tmp_path / "fixture.exe"
-    binary.write_bytes(b"Packaging fixture only")
-    output = tmp_path / "release"
-    output.mkdir()
-
-    def vendor_response(command, **kwargs):
-        # Cargo's source-replacement config retains the path argument given to
-        # cargo vendor. Model that documented output without fetching crates.
-        path_argument = command[-1]
-        vendor = Path(path_argument)
-        if not vendor.is_absolute():
-            vendor = Path(kwargs["cwd"]) / vendor
-        vendor.mkdir()
-        (vendor / "fixture-dependency").mkdir()
-        (vendor / "fixture-dependency/LICENSE").write_text("Fixture dependency license")
-        config = '[source.crates-io]\nreplace-with="vendored-sources"\n[source.vendored-sources]\ndirectory=' + json.dumps(path_argument) + '\n'
-        return SimpleNamespace(stdout=config, returncode=0)
-
-    monkeypatch.setattr(builder.subprocess, "run", vendor_response)
-    archive = builder.source_archive(crate, output, "cargo", tmp_path / "target", binary)
-    extracted = tmp_path / "different machine directory"
-    with zipfile.ZipFile(archive) as source:
-        source.extractall(extracted)
-    relocated = extracted / "altium-designer-mcp"
-    config = tomllib.loads((relocated / ".cargo/config.toml").read_text())
-    vendor_path = Path(config["source"]["vendored-sources"]["directory"])
-    assert not vendor_path.is_absolute()
-    assert (relocated / vendor_path / "fixture-dependency/LICENSE").read_text() == "Fixture dependency license"
+    assert not hasattr(builder, 'source_archive')
+    source = (root / 'installer/build_installer.py').read_text()
+    assert 'cargo' not in source.lower()
+    assert 'altium-designer-mcp' not in source
+    workflow = (root / '.github/workflows/installer.yml').read_text()
+    assert 'rust-toolchain' not in workflow
+    assert 'corresponding-source.zip' not in workflow
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows DPAPI is a native credential-storage API")

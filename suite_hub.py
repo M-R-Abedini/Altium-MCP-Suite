@@ -59,10 +59,9 @@ def save_registration(data: Path, token: str) -> dict:
 
 
 def bundled_setup(data: Path, root: Path, altium_exe: Path, *, runtime=None, workspace=None) -> dict:
-    """Adopt the installer-owned embedded interpreter and isolated Rust worker."""
+    """Adopt the installer-owned interpreter and in-process library service."""
     python = root / 'python/python.exe'
-    binary = root / 'libraries/altium-designer-mcp.exe'
-    for path, name in ((python, 'Bundled Python'), (binary, 'Bundled Rust worker'), (altium_exe, 'Altium')):
+    for path, name in ((python, 'Bundled Python'), (altium_exe, 'Altium')):
         plugin_runtime.existing_file(path, name)
     previous = None
     if (Path(data) / 'state.json').exists():
@@ -80,7 +79,7 @@ def bundled_setup(data: Path, root: Path, altium_exe: Path, *, runtime=None, wor
     plugin_runtime.validate_workspace(native, work)
     cloud = Path(data) / 'cloud-libraries'
     config = Path(data) / 'libraries.json'
-    settings = (plugin_runtime.read_object(previous['backends']['libraries']['args'][0]) if previous else
+    settings = (plugin_runtime.read_object(plugin_runtime.library_configuration_path(previous['backends']['libraries'])) if previous else
                 plugin_runtime.read_object(config) if config.exists() else {'allowed_paths': []})
     if not isinstance(settings.get('allowed_paths'), list) or not all(isinstance(p, str) and Path(p).is_absolute() for p in settings['allowed_paths']):
         raise ValueError('Existing library allowlist is invalid')
@@ -102,8 +101,8 @@ def bundled_setup(data: Path, root: Path, altium_exe: Path, *, runtime=None, wor
               'EDA_AGENT_WORKSPACE': str(work.resolve()), 'EDA_AGENT_NO_DASHBOARD': '1', 'EDA_AGENT_BACKEND': 'altium'}
     template = {'backends': {
         'eda': {'command': str(python), 'args': [str(root / 'eda_stdio.py'), '--toolset', 'full', '--no-dashboard'], 'env': common},
-        'legacy': {'command': str(python), 'args': [str(root / 'coffeenmusic/server/codex_stdio.py')], 'env': common},
-        'libraries': {'command': str(binary), 'args': [str(config)]}}}
+        'legacy': {'command': str(python), 'args': [str(root / 'suite_legacy_compat.py')], 'env': common},
+        'libraries': {'command': str(python), 'args': [str(root / 'suite_libraries_native.py'), str(config)]}}}
     if previous:
         for name, spec in template['backends'].items():
             old = previous['backends'][name]

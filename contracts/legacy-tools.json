@@ -1,0 +1,1165 @@
+{
+  "provenance": "Offline FastMCP schema capture from MIT coffeenmusic/server/main.py, no module import or native startup",
+  "tools": [
+    {
+      "name": "get_all_component_property_names",
+      "description": "\n    Get all available component property names (JSON keys) from all components\n    \n    Returns:\n        str: JSON array with all unique property names\n    ",
+      "inputSchema": {
+        "properties": {},
+        "title": "get_all_component_property_namesArguments",
+        "type": "object"
+      },
+      "outputSchema": {
+        "properties": {
+          "result": {
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "get_all_component_property_namesOutput",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_component_property_values",
+      "description": "\n    Get values of a specific property for all components\n    \n    Args:\n        property_name (str): The name of the property to get values for\n    \n    Returns:\n        str: JSON array with objects containing designator and property value\n    ",
+      "inputSchema": {
+        "properties": {
+          "property_name": {
+            "title": "Property Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "property_name"
+        ],
+        "title": "get_component_property_valuesArguments",
+        "type": "object"
+      },
+      "outputSchema": {
+        "properties": {
+          "result": {
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "get_component_property_valuesOutput",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_symbol_placement_rules",
+      "description": "\n    Get schematic symbol placement rules from a local configuration file\n    \n    Returns:\n        str: JSON object with rules for placing pins on schematic symbols\n    ",
+      "inputSchema": {
+        "properties": {},
+        "title": "get_symbol_placement_rulesArguments",
+        "type": "object"
+      },
+      "outputSchema": {
+        "properties": {
+          "result": {
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "get_symbol_placement_rulesOutput",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_library_symbol_reference",
+      "description": "\n    Get the currently open symbol from a schematic library to use as reference for creating a new symbol.\n    This tool should be used before creating a new symbol to understand the structure of existing symbols.\n    \n    Returns:\n        str: JSON object with the reference symbol data including pins, their types, positions, and orientations\n    ",
+      "inputSchema": {
+        "properties": {},
+        "title": "get_library_symbol_referenceArguments",
+        "type": "object"
+      },
+      "outputSchema": {
+        "properties": {
+          "result": {
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "get_library_symbol_referenceOutput",
+        "type": "object"
+      }
+    },
+    {
+      "name": "search_library_symbol",
+      "description": "\n    Search for a symbol by name in a schematic library (.SchLib) and navigate to it.\n    Supports partial name matching (case-insensitive). Returns all matches and navigates\n    to the best match (exact match preferred, otherwise first partial match).\n\n    This tool will automatically open the library file in Altium if a path is provided,\n    so no SchLib needs to be open beforehand.\n\n    Args:\n        symbol_name (str): Name or partial name of the symbol to search for\n        library_path (str): Full file path to the .SchLib file (e.g. \"C:\\Libraries\\MyParts.SchLib\").\n                           The tool will open this file in Altium if it is not already open.\n                           If empty, uses the currently open library.\n                           If no library is open and no path is provided, ask the user for the file path.\n\n    Returns:\n        str: JSON object with search results including matches, navigated symbol, and full symbol list\n    ",
+      "inputSchema": {
+        "properties": {
+          "symbol_name": {
+            "title": "Symbol Name",
+            "type": "string"
+          },
+          "library_path": {
+            "default": "",
+            "title": "Library Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol_name"
+        ],
+        "title": "search_library_symbolArguments",
+        "type": "object"
+      },
+      "outputSchema": {
+        "properties": {
+          "result": {
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "search_library_symbolOutput",
+        "type": "object"
+      }
+    },
+    {
+      "name": "create_schematic_symbol",
+      "description": "\n    Before executing, run get_symbol_placement_rules first.\n\n    For Altium API guidance while scripting, use the \"altium-script\" skill\n    (ensure_altium_script_skill reports whether it is installed).\n\n    Also look for a similar existing symbol to use as a style reference\n    before drawing: search a company/library .SchLib for a comparable part\n    (same category - op-amp, comparator, MCU, regulator, diode...) with\n    search_library_symbol, then dump it with get_symbol_primitives and\n    mirror its conventions (body style, pin lengths, pin name visibility,\n    grid spacing, glyph shapes). This produces symbols consistent with the\n    user's library. If no symbol library is available to reference, that is\n    fine - skip this step and proceed with the defaults below; do not treat\n    a missing reference as an error.\n\n    Create a new schematic symbol in the current library with the specified pins\n    Instructions: pins should be grouped together via function and only placed on\n                  the left and right side in 100 mil increments\n\n    Pin name inversion/overbar: To show an overbar on a pin name (for active-low signals),\n                  place a backslash after EACH character that should be overbarred.\n                  Examples: R\\E\\S\\E\\T\\ renders as RESET with overbar.\n                           C\\S\\/A0 renders as CS with overbar followed by /A0 without overbar.\n                  Do NOT use ~{...} or other notation — only the backslash-per-character format works in Altium.\n\n    Args:\n        symbol_name (str): Name of the symbol to create\n        description (str): Description of the schematic symbol\n        pins (list): List of pin data in format\n                    \"pin_number|pin_name|pin_type|pin_orientation|x|y[|owner_part_id[|length[|show_name[|show_designator]]]]\"\n                    Pin types: eElectricHiZ, eElectricInput, eElectricIO, eElectricOpenCollector,\n                               eElectricOpenEmitter, eElectricOutput, eElectricPassive, eElectricPower\n                    Pin orientations: eRotate0 (right), eRotate90 (down), eRotate180 (left), eRotate270 (up)\n                    X,Y coordinates in mils\n                    owner_part_id (optional): Part number the pin belongs to (1-based).\n                               Use 0 for pins shared across all parts (e.g. power/GND).\n                               Defaults to 1 if omitted. Only needed for multi-part symbols.\n                    length (optional): pin length in mils (default 300)\n                    show_name / show_designator (optional): 1 or 0 to show/hide\n                               the pin name / number (e.g. op-amp pins often hide names)\n        part_count (int): Number of parts in the symbol (default 1).\n                         Use >1 for multi-part symbols like quad op-amps or hex buffers.\n        graphics (list, optional): Explicit body graphics. When given, the\n                    default auto-sized body rectangle is NOT drawn - the\n                    graphics fully define the symbol body (triangles for\n                    op-amps, diode glyphs, etc.). Entry formats (coordinates\n                    in mils; part = owner part id, 1-based; width 0-3 =\n                    zero/small/medium/large; solid 1 or 0):\n                    - \"line|part|width|x1|y1|x2|y2\"\n                    - \"polyline|part|width|x1|y1|x2|y2|...\" (any number of vertices)\n                    - \"polygon|part|width|solid|x1|y1|x2|y2|...\" (closed/filled shape)\n                    - \"rectangle|part|width|solid|x1|y1|x2|y2\"\n                    - \"arc|part|width|cx|cy|radius|start_angle|end_angle\" (degrees CCW from 3 o'clock)\n                    - \"elliptical_arc|part|width|cx|cy|radius|secondary_radius|start_angle|end_angle\"\n                    - \"ellipse|part|width|solid|cx|cy|radius|secondary_radius\"\n                    - \"label|part|x|y|text\" (free text annotation)\n                    Tip: to reproduce an existing symbol's style, dump it first\n                    with get_symbol_primitives and mirror its primitives.\n\n    Returns:\n        str: JSON object with the result of the component creation\n    ",
+      "inputSchema": {
+        "properties": {
+          "symbol_name": {
+            "title": "Symbol Name",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "pins": {
+            "items": {},
+            "title": "Pins",
+            "type": "array"
+          },
+          "part_count": {
+            "default": 1,
+            "title": "Part Count",
+            "type": "integer"
+          },
+          "graphics": {
+            "default": null,
+            "items": {},
+            "title": "Graphics",
+            "type": "array"
+          }
+        },
+        "required": [
+          "symbol_name",
+          "description",
+          "pins"
+        ],
+        "title": "create_schematic_symbolArguments",
+        "type": "object"
+      },
+      "outputSchema": {
+        "properties": {
+          "result": {
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "create_schematic_symbolOutput",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_schematic_data",
+      "description": "\n    Get schematic data for components in Altium\n    \n    Args:\n        cmp_designators (list): List of designators of the components (e.g., [\"R1\", \"C5\", \"U3\"])\n    \n    Returns:\n        str: JSON object with schematic component data for requested designators\n    ",
+      "inputSchema": {
+        "properties": {
+          "cmp_designators": {
+            "items": {},
+            "title": "Cmp Designators",
+            "type": "array"
+          }
+        },
+        "required": [
+          "cmp_designators"
+        ],
+        "title": "get_schematic_dataArguments",
+        "type": "object"
+      },
+      "outputSchema": {
+        "properties": {
+          "result": {
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "get_schematic_dataOutput",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_pcb_layers",
+      "description": "\n    Get detailed information about all layers in the current Altium PCB\n    \n    Returns:\n        str: JSON object with detailed layer information including copper layers, \n             mechanical layers, and special layers with their properties\n    ",
+      "inputSchema": {
+        "properties": {},
+        "title": "get_pcb_layersArguments",
+        "type": "object"
+      },
+      "outputSchema": {
+        "properties": {
+          "result": {
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "get_pcb_layersOutput",
+        "type": "object"
+      }
+    },
+    {
+      "name": "set_pcb_layer_visibility",
+      "description": "\n    Set visibility for specified PCB layers\n    \n    Args:\n        layer_names (list): List of layer names to modify (e.g., [\"Top Layer\", \"Bottom Layer\", \"Mechanical 1\"])\n        visible (bool): Whether to show (True) or hide (False) the specified layers\n        \n    Returns:\n        str: JSON object with the result of the operation\n    ",
+      "inputSchema": {
+        "properties": {
+          "layer_names": {
+            "items": {},
+            "title": "Layer Names",
+            "type": "array"
+          },
+          "visible": {
+            "title": "Visible",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "layer_names",
+          "visible"
+        ],
+        "title": "set_pcb_layer_visibilityArguments",
+        "type": "object"
+      },
+      "outputSchema": {
+        "properties": {
+          "result": {
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "set_pcb_layer_visibilityOutput",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_component_data",
+      "description": "\n    Get all data for components in Altium\n    \n    Args:\n        cmp_designators (list): List of designators of the components (e.g., [\"R1\", \"C5\", \"U3\"])\n    \n    Returns:\n        str: JSON object with all component data for requested designators\n    ",
+      "inputSchema": {
+        "properties": {
+          "cmp_designators": {
+            "items": {},
+            "title": "Cmp Designators",
+            "type": "array"
+          }
+        },
+        "required": [
+          "cmp_designators"
+        ],
+        "title": "get_component_dataArguments",
+        "type": "object"
+      },
+      "outputSchema": {
+        "properties": {
+          "result": {
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "get_component_dataOutput",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_selected_components_coordinates",
+      "description": "\n    Get coordinates and positioning information for selected components in Altium layout\n    \n    Returns:\n        str: JSON array with positioning data (designator, x, y, rotation, width, height)\n    ",
+      "inputSchema": {
+        "properties": {},
+        "title": "get_selected_components_coordinatesArguments",
+        "type": "object"
+      },
+      "outputSchema": {
+        "properties": {
+          "result": {
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "get_selected_components_coordinatesOutput",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_all_designators",
+      "description": "\n    Get all component designators from the current Altium board\n    \n    Returns:\n        str: JSON array of all component designators on the current board\n    ",
+      "inputSchema": {
+        "properties": {},
+        "title": "get_all_designatorsArguments",
+        "type": "object"
+      },
+      "outputSchema": {
+        "properties": {
+          "result": {
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "get_all_designatorsOutput",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_component_pins",
+      "description": "\n    Get pin data for components in Altium\n\n    Args:\n        cmp_designators (list): List of designators of the components (e.g., [\"R1\", \"C5\", \"U3\"])\n\n    Returns:\n        str: JSON array, one entry per component with its placement info\n             (x/y in mils relative to the board origin, rotation in degrees\n             counterclockwise, layer) and a \"pins\" list. Per pin:\n             - x/y: absolute pad position (mils, relative to board origin)\n             - dx/dy: pad offset from the component origin in the footprint's\n               rotation-0 frame. To predict a pad position for a planned\n               placement: mirror dx (dx = -dx) if placing on the bottom layer,\n               rotate (dx, dy) counterclockwise by the planned rotation, then\n               add the planned component x/y.\n             - rotation: the pad's own rotation (NOT the component rotation)\n             - net, layer, width, height, shape\n    ",
+      "inputSchema": {
+        "properties": {
+          "cmp_designators": {
+            "items": {},
+            "title": "Cmp Designators",
+            "type": "array"
+          }
+        },
+        "required": [
+          "cmp_designators"
+        ],
+        "title": "get_component_pinsArguments",
+        "type": "object"
+      },
+      "outputSchema": {
+        "properties": {
+          "result": {
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "get_component_pinsOutput",
+        "type": "object"
+      }
+    },
+    {
+      "name": "run_altium_script",
+      "description": "\n    Run a DelphiScript snippet inside an isolated Altium sandbox and report\n    what happened, step by step.\n\n    Use this to develop and verify Altium API code before relying on it.\n    Altium has no headless test mode and its failure modes are hostile: a\n    runtime error leaves the script PAUSED IN THE DEBUGGER with no dialog,\n    after which every later script run silently does nothing until the\n    debugger is stopped (Ctrl+F3) or Altium is restarted. This tool detects\n    that state and reports exactly which statement died.\n\n    Each call uses a separate project. A crash still occupies Altium's shared\n    script engine; other tools remain blocked until completion or manual recovery.\n\n    Writing the script:\n    - Call SandboxLog('...') before each risky statement. The log is flushed\n      after every call, so the last logged line identifies what failed.\n    - Assign findings to the string variable ResultText - it is returned.\n    - DelphiScript has NO inline variable declarations. Reuse the provided\n      scratch variables: S1..S3 (String), I1..I3 and B1 (Integer),\n      Obj1..Obj5 (IDispatch), List1 (TStringList), IntMan, DbDoc.\n    - try/except does NOT catch runtime errors such as bad conversions or\n      invalid API calls, so it cannot be relied on to keep a script alive.\n    - The sandbox is standalone: helpers and constants from the production\n      units (TrimJSON, AddJSONProperty, ...) are NOT available; REPLACEALL is.\n    - Never register objects into a library document and never write to shared\n      or network library paths. Verify the target document kind first\n      (ObjectID 32 = schematic, 33 = symbol library).\n\n    For API guidance - interfaces, object models, worked examples - use the\n    \"altium-script\" skill. ensure_altium_script_skill reports whether that\n    skill is installed and can install it.\n\n    Args:\n        script (str): DelphiScript statements to execute (body only).\n        timeout_seconds (int): How long to wait for completion (default 120).\n\n    Returns:\n        str: JSON with success, the step log, the script's ResultText, and on\n             failure the last step reached plus whether Altium's script\n             executor is now wedged and needs recovery.\n    ",
+      "inputSchema": {
+        "properties": {
+          "script": {
+            "title": "Script",
+            "type": "string"
+          },
+          "timeout_seconds": {
+            "default": 120,
+            "title": "Timeout Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "script"
+        ],
+        "title": "run_altium_scriptArguments",
+        "type": "object"
+      },
+      "outputSchema": {
+        "properties": {
+          "result": {
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "run_altium_scriptOutput",
+        "type": "object"
+      }
+    },
+    {
+      "name": "ensure_altium_script_skill",
+      "description": "\n    Check whether the \"altium-script\" skill is installed, and optionally\n    install it.\n\n    That skill documents the Altium DelphiScript API - interfaces, object\n    models, worked examples, conventions, and how to discover undocumented\n    processes - and is the reference to consult before writing scripts for\n    run_altium_script or debugging Altium API calls.\n\n    Source: https://github.com/coffeenmusic/altium-scripts-skill\n\n    Installing writes into the user's skills directory, so it only happens when\n    install=True is passed explicitly. Skills load at client startup, so a\n    newly installed skill becomes available after restarting the client.\n\n    Args:\n        install (bool): Install the skill if missing (requires git on PATH).\n\n    Returns:\n        str: JSON with installed (bool), the path checked, and the next step.\n    ",
+      "inputSchema": {
+        "properties": {
+          "install": {
+            "default": false,
+            "title": "Install",
+            "type": "boolean"
+          }
+        },
+        "title": "ensure_altium_script_skillArguments",
+        "type": "object"
+      },
+      "outputSchema": {
+        "properties": {
+          "result": {
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "ensure_altium_script_skillOutput",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_footprint_primitives",
+      "description": "\n    Read the primitives of footprints in a PCB library (.PcbLib).\n\n    Modes:\n    - footprint_name omitted: inventory of every footprint with per-type\n      primitive counts (pads, tracks, arcs, fills, texts, regions, vias,\n      component_bodies)\n    - footprint_name given (exact, case-insensitive): full geometry dump -\n      pads (position, rotation, layer, sizes/shape per stack, hole size/\n      type/width/rotation, plating), tracks, arcs, fills, texts, regions\n      (outline vertices). Coordinates in mils; shapes and hole types as raw\n      Altium enum ints; layers as names. 3D component bodies are models,\n      not 2D primitives, and are excluded.\n    - footprint_name \"*\": full dump of every footprint\n\n    Use as the reference when recreating or validating footprints, and to\n    survey what a library requires.\n\n    Args:\n        library_path (str, optional): Full path to the .PcbLib. Omit to use\n            the currently focused PCB library (an already-open library is\n            only focused, never reloaded).\n        footprint_name (str, optional): Exact footprint name, or \"*\".\n\n    Returns:\n        str: JSON - inventory: {library_name, footprint_count, footprints:\n             [{name, description, <type counts>}]}; dump: primitives list\n             per footprint\n    ",
+      "inputSchema": {
+        "properties": {
+          "library_path": {
+            "default": "",
+            "title": "Library Path",
+            "type": "string"
+          },
+          "footprint_name": {
+            "default": "",
+            "title": "Footprint Name",
+            "type": "string"
+          }
+        },
+        "title": "get_footprint_primitivesArguments",
+        "type": "object"
+      },
+      "outputSchema": {
+        "properties": {
+          "result": {
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "get_footprint_primitivesOutput",
+        "type": "object"
+      }
+    },
+    {
+      "name": "create_footprints_batch",
+      "description": "\n    Create many PCB footprints in a single Altium script run.\n\n    The batch equivalent of create_pcb_footprint with far broader coverage:\n    through-hole and SMD pads (full pad stack, holes, slots, plating,\n    rotation), tracks, arcs, fills, texts, and regions on any layer.\n    Verified by exact round-trips of complete production footprint\n    libraries. Prefer this for bulk imports/migrations; use\n    get_footprint_primitives on an existing footprint to learn the exact\n    field conventions.\n\n    Args:\n        spec_file (str): Path to a plain-text spec file, one record per line\n            (coords in mils, layers as names, shapes/hole types as raw\n            Altium enum ints, booleans as 1/0):\n            FPLIB|<path to .PcbLib>   (optional first line: opens/focuses)\n            FOOTPRINT|<name>|<description>\n            PAD|name|x|y|rot|layer|plated|hole_size|hole_type|hole_width|hole_rot|top_x|top_y|top_shape[|corner_pct[|mode|mid_x|mid_y|mid_shape|bot_x|bot_y|bot_shape]]\n            TRACK|x1|y1|x2|y2|width|layer\n            ARC|cx|cy|radius|start_angle|end_angle|width|layer\n            FILL|x1|y1|x2|y2|rotation|layer\n            TEXT|x|y|size|width|rotation|layer|mirror|ttf|text\n            REGION|layer|kind|x1|y1|x2|y2|...\n\n    Returns:\n        str: JSON with created count, primitive_errors, failed names\n    ",
+      "inputSchema": {
+        "properties": {
+          "spec_file": {
+            "title": "Spec File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "spec_file"
+        ],
+        "title": "create_footprints_batchArguments",
+        "type": "object"
+      },
+      "outputSchema": {
+        "properties": {
+          "result": {
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "create_footprints_batchOutput",
+        "type": "object"
+      }
+    },
+    {
+      "name": "build_schematic",
+      "description": "\n    Build a wired schematic on a NEW sheet from a circuit description.\n\n    READ dev/SCHEMATIC_CONVENTIONS.md BEFORE CALLING. This tool places exactly\n    what it is given; it does not lay out or correct spacing. The conventions\n    file records the drafting rules that make the result readable, each one\n    learned by getting it wrong. The ones that most often produce a plausible\n    but wrong sheet:\n\n      * A pin's connection point is NOT Pin.Location - it is PinLength further\n        along the pin. Do not guess coordinates. Call with parts only first,\n        read the returned pin_map, then call again with wires routed from those\n        measured coordinates.\n      * Never run a riser in a pin's connection column; it drives through every\n        pin sharing that column.\n      * Give a shunt part one grid of wire between its pin and the node it taps,\n        rather than putting the junction on the pin.\n      * A net label that does not TOUCH its wire names nothing.\n      * A shunt part occupies the band below its rail. Do not route another net\n        through that band - the wire will pass through the symbol body.\n      * A ground port's \"GND\" label is always drawn (ShowNetName cannot hide it)\n        and occupies ~300 mil below the port. Keep wires out of that band.\n\n    Args:\n        parts: component dicts. Required keys: designator, symbol_library,\n            symbol, x, y (mils). Optional: design_item_id, orientation (0-3),\n            mirror (0/1), comment, description, footprint,\n            parameters ({name: value}).\n        wires: each a flat list of alternating x,y in mils, e.g.\n            [3900, 3000, 5300, 3000, 5300, 4900] - two segments, three points.\n        junctions: [{\"x\":..,\"y\":..}] - only where 3+ branches actually meet.\n        net_labels: [{\"x\":..,\"y\":..,\"orientation\":0,\"text\":\"LED+\"}] - the\n            coordinate must lie on a wire.\n        power_ports: [{\"x\":..,\"y\":..,\"orientation\":3,\"style\":5,\"text\":\"GND\",\n            \"show_net_name\":false}]. Harvest style/orientation from an existing\n            sheet rather than guessing: 5 = digital ground, 2 = supply bar.\n        notes: [{\"x\":..,\"y\":..,\"text\":\"..\"}] free text.\n\n    Returns:\n        JSON with the created sheet name, counts, and the pin map - every\n        placed pin's true connection point, for routing a follow-up call.\n    ",
+      "inputSchema": {
+        "properties": {
+          "parts": {
+            "items": {},
+            "title": "Parts",
+            "type": "array"
+          },
+          "wires": {
+            "default": null,
+            "items": {},
+            "title": "Wires",
+            "type": "array"
+          },
+          "junctions": {
+            "default": null,
+            "items": {},
+            "title": "Junctions",
+            "type": "array"
+          },
+          "net_labels": {
+            "default": null,
+            "items": {},
+            "title": "Net Labels",
+            "type": "array"
+          },
+          "power_ports": {
+            "default": null,
+            "items": {},
+            "title": "Power Ports",
+            "type": "array"
+          },
+          "notes": {
+            "default": null,
+            "items": {},
+            "title": "Notes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "parts"
+        ],
+        "title": "build_schematicArguments",
+        "type": "object"
+      },
+      "outputSchema": {
+        "properties": {
+          "result": {
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "build_schematicOutput",
+        "type": "object"
+      }
+    },
+    {
+      "name": "create_symbols_batch",
+      "description": "\n    Create many schematic symbols in a single Altium script run.\n\n    Use instead of repeated create_schematic_symbol calls when creating\n    more than a handful of symbols (bulk library imports/migrations): one\n    script launch instead of one per symbol, and pipe-delimited plain text\n    instead of JSON so field text (commas, brackets, spaces) is preserved\n    exactly. Verified by exact round-trips of a complete 284-symbol\n    production library.\n\n    Args:\n        spec_file (str): Path to a plain-text spec file, one record per line:\n            LIBRARY|<path to .SchLib>   (optional first line: opens/focuses;\n                                         an already-open library is only\n                                         focused, never reloaded)\n            SYMBOL|<name>|<description>|<part_count>\n            PIN|<same pipe fields as create_schematic_symbol pins>\n            GRAPHIC|<same entry format as create_schematic_symbol graphics>\n            Each SYMBOL line starts a new symbol; PIN/GRAPHIC lines belong\n            to the most recent SYMBOL.\n\n    Returns:\n        str: JSON object with created count and a failed name list\n    ",
+      "inputSchema": {
+        "properties": {
+          "spec_file": {
+            "title": "Spec File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "spec_file"
+        ],
+        "title": "create_symbols_batchArguments",
+        "type": "object"
+      },
+      "outputSchema": {
+        "properties": {
+          "result": {
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "create_symbols_batchOutput",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_symbol_primitives",
+      "description": "\n    Read the graphic primitives of symbols in a schematic library (.SchLib).\n\n    Two modes:\n    - symbol_name omitted: inventory of every symbol in the library with\n      per-type primitive counts (pins, rectangles, lines, polylines,\n      polygons, arcs, ellipses, beziers, labels, ...). Use this to survey\n      what drawing features a library's symbols require.\n    - symbol_name given (exact match, case-insensitive): full geometry dump\n      of that symbol - every primitive with coordinates in mils, plus pin\n      details (number, name, electrical type, orientation, length,\n      owner_part_id). Use this as the reference/spec when recreating or\n      validating a symbol.\n\n    Args:\n        library_path (str, optional): Full path to the .SchLib file to open.\n            Omit to use the schematic library currently focused in Altium.\n        symbol_name (str, optional): Exact symbol (LibReference) name to dump.\n\n    Returns:\n        str: JSON object - inventory mode: {library_name, symbol_count,\n             symbols: [{name, description, part_count, <type counts>}]};\n             dump mode: {library_name, symbol_name, description, part_count,\n             primitives: [...]}\n    ",
+      "inputSchema": {
+        "properties": {
+          "library_path": {
+            "default": "",
+            "title": "Library Path",
+            "type": "string"
+          },
+          "symbol_name": {
+            "default": "",
+            "title": "Symbol Name",
+            "type": "string"
+          }
+        },
+        "title": "get_symbol_primitivesArguments",
+        "type": "object"
+      },
+      "outputSchema": {
+        "properties": {
+          "result": {
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "get_symbol_primitivesOutput",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_all_nets",
+      "description": "\n    Return every unique net name in the active PCB document.\n\n    Returns\n    -------\n    str :\n        A JSON array of net names, e.g. [\"GND\", \"VCC33\", \"USB_D+\", ...]\n    ",
+      "inputSchema": {
+        "properties": {},
+        "title": "get_all_netsArguments",
+        "type": "object"
+      },
+      "outputSchema": {
+        "properties": {
+          "result": {
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "get_all_netsOutput",
+        "type": "object"
+      }
+    },
+    {
+      "name": "create_net_class",
+      "description": "\n    Create a new net class and add specified nets to it\n    \n    Args:\n        class_name (str): Name of the net class to create or modify\n        net_names (list): List of net names to add to the class\n    \n    Returns:\n        str: JSON object with the result of the operation\n    ",
+      "inputSchema": {
+        "properties": {
+          "class_name": {
+            "title": "Class Name",
+            "type": "string"
+          },
+          "net_names": {
+            "items": {},
+            "title": "Net Names",
+            "type": "array"
+          }
+        },
+        "required": [
+          "class_name",
+          "net_names"
+        ],
+        "title": "create_net_classArguments",
+        "type": "object"
+      },
+      "outputSchema": {
+        "properties": {
+          "result": {
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "create_net_classOutput",
+        "type": "object"
+      }
+    },
+    {
+      "name": "set_component_position",
+      "description": "\n    Set a component's absolute position in the PCB layout\n    \n    Args:\n        cmp_designator (str): Designator of the component to position (e.g., \"R1\", \"C5\", \"U3\")\n        x (float): Absolute X position in mils\n        y (float): Absolute Y position in mils\n        rotation (float): Rotation angle in degrees (0-360), use -1 to keep current rotation\n    \n    Returns:\n        str: JSON object with the result of the position operation\n    ",
+      "inputSchema": {
+        "properties": {
+          "cmp_designator": {
+            "title": "Cmp Designator",
+            "type": "string"
+          },
+          "x": {
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
+          },
+          "rotation": {
+            "default": -1,
+            "title": "Rotation",
+            "type": "number"
+          }
+        },
+        "required": [
+          "cmp_designator",
+          "x",
+          "y"
+        ],
+        "title": "set_component_positionArguments",
+        "type": "object"
+      },
+      "outputSchema": {
+        "properties": {
+          "result": {
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "set_component_positionOutput",
+        "type": "object"
+      }
+    },
+    {
+      "name": "move_components",
+      "description": "\n    Move components by RELATIVE offset from their current position (not absolute positioning)\n    \n    IMPORTANT: This moves components BY the offset amount, not TO a position.\n    For absolute positioning, use set_component_position instead.\n    \n    Args:\n        cmp_designators (list): List of designators of the components to move (e.g., [\"R1\", \"C5\", \"U3\"])\n        x_offset (float): X offset distance in mils (positive = right, negative = left)\n        y_offset (float): Y offset distance in mils (positive = up, negative = down)\n        rotation (float): New absolute rotation angle in degrees (0-360), if 0 the rotation is not changed\n    \n    Returns:\n        str: JSON object with the result of the move operation\n    ",
+      "inputSchema": {
+        "properties": {
+          "cmp_designators": {
+            "items": {},
+            "title": "Cmp Designators",
+            "type": "array"
+          },
+          "x_offset": {
+            "title": "X Offset",
+            "type": "number"
+          },
+          "y_offset": {
+            "title": "Y Offset",
+            "type": "number"
+          },
+          "rotation": {
+            "default": 0,
+            "title": "Rotation",
+            "type": "number"
+          }
+        },
+        "required": [
+          "cmp_designators",
+          "x_offset",
+          "y_offset"
+        ],
+        "title": "move_componentsArguments",
+        "type": "object"
+      },
+      "outputSchema": {
+        "properties": {
+          "result": {
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "move_componentsOutput",
+        "type": "object"
+      }
+    },
+    {
+      "name": "place_components",
+      "description": "\n    Place multiple components at absolute positions in a single Altium transaction.\n\n    This is the batch version of set_component_position - prefer it whenever\n    placing more than one component, since every tool call is a full round\n    trip into Altium. The whole batch is one undo step.\n\n    Coordinate conventions: x/y are in mils relative to the board origin;\n    rotation is in degrees counterclockwise.\n\n    Args:\n        placements (list): One dict per component:\n            - designator (str, required): e.g. \"R1\"\n            - x (float, required): absolute X position in mils\n            - y (float, required): absolute Y position in mils\n            - rotation (float, optional): absolute rotation in degrees (0-360).\n              Omit (or pass -1) to keep the current rotation.\n            - layer (str, optional): \"top\" or \"bottom\" to set the board side\n              (the footprint is mirrored when flipped). Omit to keep the\n              current side.\n\n    Example:\n        placements=[{\"designator\": \"R1\", \"x\": 1000, \"y\": 2000, \"rotation\": 90},\n                    {\"designator\": \"C5\", \"x\": 1050, \"y\": 2000, \"layer\": \"bottom\"}]\n\n    Returns:\n        str: JSON object with placed_count, missing_designators, and the final\n             x/y/rotation/layer of each placed component as Altium reports them\n    ",
+      "inputSchema": {
+        "properties": {
+          "placements": {
+            "items": {},
+            "title": "Placements",
+            "type": "array"
+          }
+        },
+        "required": [
+          "placements"
+        ],
+        "title": "place_componentsArguments",
+        "type": "object"
+      },
+      "outputSchema": {
+        "properties": {
+          "result": {
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "place_componentsOutput",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_net_connections",
+      "description": "\n    Get net connectivity and airline (unrouted connection) lengths for the\n    nets touching the given components.\n\n    Use this to plan or score a placement: it shows every pad on each net -\n    including pads of OTHER components outside the given set (e.g. an input\n    filter the cluster must connect to) - plus the net's minimum-spanning-tree\n    airline length in mils. Shorter airlines on critical nets (switching\n    loops, input/output capacitors) mean a better placement; non-critical\n    nets (enables, set resistors, feedback dividers) may be lengthened to\n    buy routing space. Plane nets like GND have many pads and a meaningless\n    airline - judge them by proximity to plane connections instead.\n\n    Args:\n        cmp_designators (list, optional): Components whose nets to analyze\n            (e.g. [\"U12\", \"R42\"]). Omit to use the current Altium selection.\n        max_pads_per_net (int): Nets with more pads than this (e.g. GND)\n            return only pads belonging to the given components, plus the\n            total pad_count. Their airline is also skipped. Default 40.\n\n    Returns:\n        str: JSON object with one entry per net: pad_count,\n             airline_mst_mils (None for large nets), and pads\n             [{designator, pin, x, y}, ...] in mils relative to the board\n             origin. Large nets set pads_truncated=true.\n    ",
+      "inputSchema": {
+        "properties": {
+          "cmp_designators": {
+            "default": null,
+            "items": {},
+            "title": "Cmp Designators",
+            "type": "array"
+          },
+          "max_pads_per_net": {
+            "default": 40,
+            "title": "Max Pads Per Net",
+            "type": "integer"
+          }
+        },
+        "title": "get_net_connectionsArguments",
+        "type": "object"
+      },
+      "outputSchema": {
+        "properties": {
+          "result": {
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "get_net_connectionsOutput",
+        "type": "object"
+      }
+    },
+    {
+      "name": "check_orientation",
+      "description": "\n    Advisory check: find 2-pad passives whose rotation could be improved.\n\n    For each 2-pad component in the target set, every orthogonal rotation\n    (0/90/180/270) is scored in place, summing one term per pad:\n    - routable nets (few pads): the net's total airline (MST) length with\n      this pad at the candidate position - so a pad that merely slides along\n      a pass-through flow (e.g. a bulk cap in a power chain) scores as\n      nearly free, while a genuine detour costs its real length\n    - plane nets (many pads, e.g. GND): distance to the nearest same-net\n      pad - a capacitor's ground-return loop is local, so proximity to the\n      IC's GND/thermal pad is what matters\n    A component is reported when a different rotation beats the current one\n    by at least min_improvement_mils.\n\n    This is advisory, not pass/fail: it measures geometry only and knows\n    nothing about net criticality. Suggestions matter for loop-critical\n    parts (capacitor ground returns, snubbers, input/output filters) and\n    should usually be ignored for parts whose orientation is electrically\n    arbitrary (pull-ups, strapping resistors, enables) or where a datasheet\n    layout recommendation says otherwise. Weigh suggestions with judgement\n    rather than applying them blindly. If a suggestion with\n    bbox_changes=true is applied (a 90-degree change alters the body\n    outline), re-run check_placement afterwards.\n\n    Args:\n        cmp_designators (list, optional): Components to check. Omit to use\n            the current Altium selection. Components with more or fewer than\n            2 pads are skipped.\n        min_improvement_mils (float): Only report components where the best\n            rotation improves the connection score by at least this many\n            mils (default 25).\n\n    Returns:\n        str: JSON object with checked_count and suggestions, each having\n             designator, current_rotation, suggested_rotation,\n             improvement_mils, bbox_changes, and a per-pad breakdown of\n             nearest same-net distances at the current vs suggested rotation.\n    ",
+      "inputSchema": {
+        "properties": {
+          "cmp_designators": {
+            "default": null,
+            "items": {},
+            "title": "Cmp Designators",
+            "type": "array"
+          },
+          "min_improvement_mils": {
+            "default": 25,
+            "title": "Min Improvement Mils",
+            "type": "number"
+          }
+        },
+        "title": "check_orientationArguments",
+        "type": "object"
+      },
+      "outputSchema": {
+        "properties": {
+          "result": {
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "check_orientationOutput",
+        "type": "object"
+      }
+    },
+    {
+      "name": "check_placement",
+      "description": "\n    Verify component placement: find overlaps and clearance violations.\n\n    Checks each target component against every other component on the same\n    side of the board. Bounding boxes (which include silkscreen) are used as\n    a fast prefilter; close pairs are then measured precisely with Altium's\n    primitive-to-primitive distance, so reported distances are true minimum\n    distances between any primitives (pads, silk, etc.) of the two parts.\n\n    Run this after placing components - a screenshot is not verification.\n\n    Args:\n        cmp_designators (list, optional): Components to check (e.g. [\"U12\", \"R42\"]).\n            Omit to check the components currently selected in Altium.\n        clearance_mils (float): Minimum allowed primitive-to-primitive distance\n            in mils (default 6). Pairs closer than this are reported.\n\n    Returns:\n        str: JSON object with checked_count, violation_count, and a violations\n             list. Each violation has a/b designators, type\n             (\"bounding_box_overlap\" = the parts' outlines intersect, or\n             \"clearance\" = distance below threshold), distance_mils (0 =\n             touching/overlapping copper or silk), overlap sizes when boxes\n             intersect, and the other part's x/y position. An empty violations\n             list means the placement is clean at the given clearance.\n    ",
+      "inputSchema": {
+        "properties": {
+          "cmp_designators": {
+            "default": null,
+            "items": {},
+            "title": "Cmp Designators",
+            "type": "array"
+          },
+          "clearance_mils": {
+            "default": 6,
+            "title": "Clearance Mils",
+            "type": "number"
+          }
+        },
+        "title": "check_placementArguments",
+        "type": "object"
+      },
+      "outputSchema": {
+        "properties": {
+          "result": {
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "check_placementOutput",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_screenshot",
+      "description": "\n    Take a screenshot of the Altium window, returned as viewable image content.\n\n    Args:\n        view_type (str): Type of view to capture - 'pcb' or 'sch'\n        zoom_to (list, optional): List of component designators (e.g. [\"U12\", \"R42\"]).\n            PCB view only: Altium zooms to the bounding box of these components\n            (plus a margin) before the capture, so the components fill the frame.\n            Omit to capture at the current zoom level.\n\n    Returns:\n        Image content of the captured window plus a JSON metadata text block\n        (window title, size, zoomed component count)\n    ",
+      "inputSchema": {
+        "properties": {
+          "view_type": {
+            "default": "pcb",
+            "title": "View Type",
+            "type": "string"
+          },
+          "zoom_to": {
+            "default": null,
+            "items": {},
+            "title": "Zoom To",
+            "type": "array"
+          }
+        },
+        "title": "get_screenshotArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "layout_duplicator",
+      "description": "\n    First step of layout duplication. Selects source components and returns data to match with destination components.\n    \n    Returns:\n        str: JSON object with source and destination component data for matching\n    ",
+      "inputSchema": {
+        "properties": {},
+        "title": "layout_duplicatorArguments",
+        "type": "object"
+      },
+      "outputSchema": {
+        "properties": {
+          "result": {
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "layout_duplicatorOutput",
+        "type": "object"
+      }
+    },
+    {
+      "name": "layout_duplicator_apply",
+      "description": "\n    Second step of layout duplication. Applies the layout of source components to destination components.\n    \n    Args:\n        source_designators (list): List of source component designators (e.g., [\"R1\", \"C5\", \"U3\"])\n        destination_designators (list): List of destination component designators (e.g., [\"R10\", \"C15\", \"U7\"])\n    \n    Returns:\n        str: JSON object with the result of the layout duplication\n    ",
+      "inputSchema": {
+        "properties": {
+          "source_designators": {
+            "items": {},
+            "title": "Source Designators",
+            "type": "array"
+          },
+          "destination_designators": {
+            "items": {},
+            "title": "Destination Designators",
+            "type": "array"
+          }
+        },
+        "required": [
+          "source_designators",
+          "destination_designators"
+        ],
+        "title": "layout_duplicator_applyArguments",
+        "type": "object"
+      },
+      "outputSchema": {
+        "properties": {
+          "result": {
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "layout_duplicator_applyOutput",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_pcb_rules",
+      "description": "\n    Get all design rules from the current Altium PCB\n    \n    Returns:\n        str: JSON array of PCB design rules with their properties\n    ",
+      "inputSchema": {
+        "properties": {},
+        "title": "get_pcb_rulesArguments",
+        "type": "object"
+      },
+      "outputSchema": {
+        "properties": {
+          "result": {
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "get_pcb_rulesOutput",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_pcb_layer_stackup",
+      "description": "\n    Get the detailed layer stackup information from the current Altium PCB including\n    copper thickness, dielectric materials, constants, and heights\n    \n    Returns:\n        str: JSON object with detailed layer stackup information\n    ",
+      "inputSchema": {
+        "properties": {},
+        "title": "get_pcb_layer_stackupArguments",
+        "type": "object"
+      },
+      "outputSchema": {
+        "properties": {
+          "result": {
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "get_pcb_layer_stackupOutput",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_output_job_containers",
+      "description": "\n    Get all available output job containers from a specified OutJob file\n    \n    Args:\n        outjob_path (str): Path to the OutJob file (optional, will use first open OutJob if not provided)\n    \n    Returns:\n        str: JSON array with all output job containers and their properties\n    ",
+      "inputSchema": {
+        "properties": {},
+        "title": "get_output_job_containersArguments",
+        "type": "object"
+      },
+      "outputSchema": {
+        "properties": {
+          "result": {
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "get_output_job_containersOutput",
+        "type": "object"
+      }
+    },
+    {
+      "name": "run_output_jobs",
+      "description": "\n    Run specified output job containers\n    \n    Args:\n        container_names (list): List of container names to run\n    \n    Returns:\n        str: JSON object with results of running the output jobs\n    ",
+      "inputSchema": {
+        "properties": {
+          "container_names": {
+            "items": {},
+            "title": "Container Names",
+            "type": "array"
+          }
+        },
+        "required": [
+          "container_names"
+        ],
+        "title": "run_output_jobsArguments",
+        "type": "object"
+      },
+      "outputSchema": {
+        "properties": {
+          "result": {
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "run_output_jobsOutput",
+        "type": "object"
+      }
+    },
+    {
+      "name": "create_pcb_footprint",
+      "description": "\n    Create a new PCB footprint in the currently active PcbLib document.\n    The PcbLib (e.g. Discrete.PcbLib) must be the focused document in Altium.\n\n    Pad format: each element is \"pad_number|x_mm|y_mm|width_mm|height_mm|shape\"\n                shape options: Rect (default), Round, Oval\n                Coordinates are in mm relative to component origin (0,0).\n                Pin 1 is indicated by a gap in the top-left silkscreen corner.\n\n    Courtyard & silkscreen are auto-generated from pad extents + 0.25 mm margin\n    unless courtyard_x_mm / courtyard_y_mm are provided explicitly (half-dimensions).\n\n    Args:\n        footprint_name (str): Footprint name as it will appear in the library\n        description (str): Description string\n        pads (list): List of pad definitions, e.g. [\"1|-0.9|0.55|1.0|0.8|Rect\", ...]\n        courtyard_x_mm (float): Half-width of courtyard in mm (0 = auto)\n        courtyard_y_mm (float): Half-height of courtyard in mm (0 = auto)\n\n    Returns:\n        str: JSON object with result\n    ",
+      "inputSchema": {
+        "properties": {
+          "footprint_name": {
+            "title": "Footprint Name",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "pads": {
+            "items": {},
+            "title": "Pads",
+            "type": "array"
+          },
+          "courtyard_x_mm": {
+            "default": 0,
+            "title": "Courtyard X Mm",
+            "type": "number"
+          },
+          "courtyard_y_mm": {
+            "default": 0,
+            "title": "Courtyard Y Mm",
+            "type": "number"
+          }
+        },
+        "required": [
+          "footprint_name",
+          "description",
+          "pads"
+        ],
+        "title": "create_pcb_footprintArguments",
+        "type": "object"
+      },
+      "outputSchema": {
+        "properties": {
+          "result": {
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "create_pcb_footprintOutput",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_server_status",
+      "description": "Get the current status of the Altium MCP server",
+      "inputSchema": {
+        "properties": {},
+        "title": "get_server_statusArguments",
+        "type": "object"
+      },
+      "outputSchema": {
+        "properties": {
+          "result": {
+            "title": "Result",
+            "type": "string"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "get_server_statusOutput",
+        "type": "object"
+      }
+    }
+  ]
+}

@@ -150,7 +150,9 @@ def test_configured_powershell_launch_propagates_readonly_and_private_data(tmp_p
     shutil.copyfile(ROOT / 'configure_suite.py', package / 'configure_suite.py')
     (package / 'eda_stdio.py').touch()
     (package / 'coffeenmusic/server').mkdir(parents=True)
-    (package / 'coffeenmusic/server/codex_stdio.py').touch()
+    (package / 'coffeenmusic/server/codex_stdio.py').touch()  # persisted old manifest
+    (package / 'suite_legacy_compat.py').touch()
+    (package / 'suite_libraries_native.py').touch()
     (package / 'readonly_dependency.py').write_text('VALUE=11\n')
     (package / 'suite_stdio.py').write_text('''import json,os,sys
 import readonly_dependency

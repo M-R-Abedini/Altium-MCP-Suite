@@ -45,8 +45,8 @@ def make_template(tmp_path):
 def make_root(path):
     path.mkdir(parents=True)
     (path / 'eda_stdio.py').touch()
-    (path / 'coffeenmusic/server').mkdir(parents=True)
-    (path / 'coffeenmusic/server/codex_stdio.py').touch()
+    (path / 'suite_legacy_compat.py').touch()
+    (path / 'suite_libraries_native.py').touch()
     return path
 
 
@@ -67,10 +67,12 @@ def test_adopt_preserves_settings_and_upgrade_uses_current_package(tmp_path):
     assert upgraded != first_manifest
     resolved = json.loads(upgraded.read_text())['backends']
     assert resolved['eda']['args'] == [str(second / 'eda_stdio.py'), '--toolset', 'full', '--no-dashboard']
-    assert resolved['legacy']['args'][0] == str(second / 'coffeenmusic/server/codex_stdio.py')
+    assert resolved['legacy']['args'][0] == str(second / 'suite_legacy_compat.py')
     assert resolved['eda']['env'] == dict(original['backends']['eda']['env'], EDA_AGENT_BACKEND='altium')
     assert resolved['eda']['disabled_tools'] == ['blocked']
-    assert resolved['libraries'] == original['backends']['libraries']
+    assert resolved['libraries']['command'] == original['backends']['eda']['command']
+    assert resolved['libraries']['args'] == [str(second / 'suite_libraries_native.py'), original['backends']['libraries']['args'][0]]
+    assert resolved['libraries']['timeout_seconds'] == original['backends']['libraries']['timeout_seconds']
     assert resolved['eda']['timeout_seconds'] == 123
     assert runtime.checked_state(data)[1] == original
 
@@ -299,3 +301,48 @@ asyncio.run(main())
         assert len(list((data / 'launch-manifests').glob('*.json'))) == 1
         assert not (tmp_path / 'native-runtime').exists()
     asyncio.run(check())
+
+
+def test_migration_never_requires_or_launches_retired_library_binary(tmp_path, monkeypatch):
+    path, template, _ = make_template(tmp_path)
+    template['backends']['libraries']['command'] = str(tmp_path / 'removed-old-binary.exe')
+    template['backends']['libraries'].update(disabled_tools=['remove_component'], cwd=str(tmp_path))
+    path.write_text(json.dumps(template))
+    data = tmp_path / 'private'
+    monkeypatch.setattr(runtime.subprocess, 'run', lambda *a, **k: pytest.fail('Migration launched a process'))
+    runtime.adopt(path, sys.executable, data, probe=False)
+    root = make_root(tmp_path / 'new package')
+    _, manifest = runtime.launch_configuration(data, root)
+    worker = json.loads(manifest.read_text())['backends']['libraries']
+    assert worker['command'] == sys.executable
+    assert worker['args'] == [str(root / 'suite_libraries_native.py'), template['backends']['libraries']['args'][0]]
+    assert worker['cwd'] == str(tmp_path)
+    assert worker['disabled_tools'] == ['remove_component']
+    assert runtime.checked_state(data)[1] == template
+
+
+def test_bootstrap_does_not_need_deprecated_binary_options(tmp_path, monkeypatch):
+    altium = tmp_path / 'X2.EXE'; altium.touch()
+    args = SimpleNamespace(altium_exe=altium, runtime_dir=tmp_path / 'runtime',
+                           workspace=tmp_path / 'workspace', library_dir=[])
+    def execute(command, **kwargs):
+        assert 'cargo' not in command and not any('altium-designer-mcp' in str(v) for v in command)
+        if command[1:3] == ['-m', 'venv']:
+            python = Path(command[3]) / 'Scripts/python.exe'; python.parent.mkdir(parents=True); python.touch()
+        return SimpleNamespace(returncode=0)
+    monkeypatch.setattr(runtime.sys, 'platform', 'win32')
+    monkeypatch.setattr(runtime.subprocess, 'run', execute)
+    monkeypatch.setattr(runtime, 'probe_python', lambda *a: {'python': [3, 12, 0]})
+    data = tmp_path / 'private'
+    assert runtime.bootstrap(args, data, ROOT)['ready']
+    worker = runtime.checked_state(data)[1]['backends']['libraries']
+    assert worker['args'] == [str(ROOT / 'suite_libraries_native.py'), str(data / 'libraries.json')]
+
+
+def test_native_manifest_roundtrip_and_legacy_wrapper_migration(tmp_path):
+    path, template, _ = make_template(tmp_path)
+    native_root = make_root(tmp_path / 'native package')
+    migrated = runtime.remap_template(template, native_root)
+    assert Path(migrated['backends']['legacy']['args'][0]).name == 'suite_legacy_compat.py'
+    assert runtime.validate_template(migrated)['allowed_paths']
+    assert 'codex_stdio.py' not in json.dumps(migrated)

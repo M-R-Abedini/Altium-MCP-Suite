@@ -1,13 +1,22 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "mcp-altium-suite",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Local Altium circuit design, library inspection and cloud sourcing with a unified MCP and engineering skills.",
-  "author": {"name": "M-R-Abedini", "url": "https://github.com/M-R-Abedini"},
+  "author": {
+    "name": "M-R-Abedini",
+    "url": "https://github.com/M-R-Abedini"
+  },
   "homepage": "https://github.com/M-R-Abedini/Altium-MCP-Suite",
   "repository": "https://github.com/M-R-Abedini/Altium-MCP-Suite",
-  "license": "MIT AND Apache-2.0 AND GPL-3.0-or-later",
-  "keywords": ["altium", "electronics", "schematic", "pcb", "mcp"],
+  "license": "MIT AND Apache-2.0",
+  "keywords": [
+    "altium",
+    "electronics",
+    "schematic",
+    "pcb",
+    "mcp"
+  ],
   "extensions": {
     "com.openai": {
       "requires_local_executor": true,
@@ -18,7 +27,10 @@
         "longDescription": "One local connection for Altium schematics, PCBs, library files and sourced cloud models. Includes circuit-design and guided setup skills. Windows and separately installed Altium Designer are required.",
         "developerName": "M-R-Abedini",
         "category": "Productivity",
-        "capabilities": ["Read", "Write"],
+        "capabilities": [
+          "Read",
+          "Write"
+        ],
         "websiteURL": "https://github.com/M-R-Abedini/Altium-MCP-Suite",
         "defaultPrompt": [
           "Set up MCP Altium Suite on this Windows computer.",

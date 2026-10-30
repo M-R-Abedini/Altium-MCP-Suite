@@ -21,6 +21,8 @@ FILES = [
     'Generic.pas',
     'Audit.pas',
     'StatusForm.pas',
+    'LegacyCompat.pas',
+    'LegacySandbox.pas',
     'Dispatcher.pas',
 ]
 

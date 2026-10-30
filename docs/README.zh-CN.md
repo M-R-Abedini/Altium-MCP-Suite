@@ -61,16 +61,13 @@ python -m venv .venv
 
 设置程序现在在 `mcp.local.json`（或 `codex.local.toml`）中只生成一个 `mcp-altium-suite` 连接。将其合并到客户端配置并重新连接。后端的私有配置保存在 `suite-backends.local.json`。在 Altium 打开项目后，用 `suite_catalog` 发现 `app_context`，再用 `suite_invoke` 调用确切名称 `eda__app_context`。
 
-默认 `--toolset minimal` 只公布 `suite_catalog`、`suite_invoke` 和 `suite_status`。用 `suite_catalog(backend="eda", query="...", with_schema=true)` 获取参数，再用 `suite_invoke(name="eda__...", arguments={...})` 执行。命名空间为 `eda__`、`legacy__`、`libraries__`、`cloud__`。所有操作仍可用，参数在转发前验证。`--toolset full` 公布全部工具；`--separate-servers` 显式生成旧版多连接配置。[统一连接及迁移](review/UNIFIED_SUITE_2026-10-27.md)。
+默认 `--toolset minimal` 只公布 `suite_catalog`、`suite_invoke` 和 `suite_status`。用 `suite_catalog(backend="eda", query="...", with_schema=true)` 获取参数，再用 `suite_invoke(name="eda__...", arguments={...})` 执行。命名空间为 `eda__`、`legacy__`、`libraries__`、`cloud__`。所有操作仍可用，参数在转发前验证。`--toolset full` 公布全部工具；`--separate-servers` 仅为迁移保留，仍生成统一连接。[统一连接及迁移](review/UNIFIED_SUITE_2026-10-27.md)。
 
 ```powershell
-Push-Location altium-designer-mcp
-cargo build --release --locked
-Pop-Location
 .\.venv\Scripts\python.exe setup.py --altium-exe "C:\Program Files\Altium\AD26\X2.EXE" --library-dir "D:\MyProject\Libraries"
 ```
 
-从源码构建库后端需要锁定版本的 Rust 工具链和 Visual Studio C++ 构建工具；已有可执行文件可用 `--library-binary` 指定。多个目录可重复 `--library-dir`。设置保留已有目录并加入专用云库缓存目录。Altium 许可证与供应商账户不包含在内。
+库操作使用独立 Python 编解码器，无需 Rust 编译器或外部库可执行文件。多个目录可重复 `--library-dir`。Altium 许可证与供应商账户不包含在内。
 
 ## 问题与贡献
 
@@ -78,4 +75,4 @@ Pop-Location
 
 ## 许可
 
-协调代码采用 MIT；EDA 后端采用 Apache-2.0，旧版后端采用 MIT，Rust 库后端采用 GPL-3.0-or-later。参见[许可范围与例外](../THIRD_PARTY_NOTICES.md)及[上游快照](../UPSTREAM.json)。
+协调代码、原生库编解码器与旧版兼容层采用 MIT；EDA 后端采用 Apache-2.0。参见[许可范围](../THIRD_PARTY_NOTICES.md)及[上游快照](../UPSTREAM.json)。

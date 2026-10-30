@@ -113,7 +113,7 @@ Upstream authorship and license files are retained. `UPSTREAM.json` records the 
 - `coffeenmusic/server/AltiumScript/Altium_API.pas`: exchange-directory template populated in generated runtime scripts; echo the request ID in responses.
 - New root configuration, setup and coordination modules: shared engine lock, guarded recovery, restored EDA control after legacy calls, portable per-user runtime, content-addressed script projects, regression tests and setup documentation.
 
-The Rust library-server source is preserved from its recorded upstream snapshot. No claim is made that every tool or Altium version has been exercised. Original upstream development examples and test fixtures are retained as upstream material; their machine-specific example paths are not this project's local configuration.
+Historical releases retained the external Rust library-server snapshot. In the 0.4.0 source tree that implementation, binary build and crate source archive were removed. Original Python library codecs implement the public interface contract using independently generated synthetic probes. Historical tags and their licensing remain unchanged. No claim is made that every Altium version has been exercised.
 # 2026-10-28 — Free desktop product preview
 
 PR #13 was merged as baseline 0.2.0 before this work. Added electrical value
@@ -125,3 +125,21 @@ listing now includes the owning project path for checkpoint coverage; native
 script identity bumped accordingly. Upstream notices/licenses remain intact.
 Native SES exchange and automatic Global Projects preference persistence are
 capability gaps documented explicitly; no invented registry/API contracts.
+
+
+## 0.4.0 native library and transport unification
+
+- Added original MIT Python OLE2, SchLib and PcbLib codecs and a 34-tool library service.
+- Retained 37 MIT legacy interfaces through EDA compatibility adapters and one native transport.
+- Removed the retired library source tree, Rust/crate build and source archive from package and installer closure.
+- Plugin distributions include only the needed MIT legacy helpers and Apache-2.0 EDA source, with notices.
+- CI runs complete root and EDA test suites and reproducible clean-package smoke checks.
+- Complete compatibility sequences preserve unit normalization, private runtime
+  configuration and checkpoint metadata. Concurrent relative moves and cancelled
+  operations have regression coverage.
+- Native JSON output preserves UTF-16 escape units; quoted CSV net names remain
+  intact, and class membership is checked rather than assuming a mutation succeeded.
+- Existing modal consent and cross-document hints are enforced at the native
+  boundary. Counts, simulator metadata and release documentation were synchronized
+  while running the complete EDA regression suite.
+- Verification results and coverage limits are recorded in `docs/STEP1_VERIFICATION.md`.

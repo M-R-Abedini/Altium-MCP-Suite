@@ -76,16 +76,13 @@ python -m venv .venv
 
 نصب اکنون یک ورودی <span dir="ltr"><code>mcp-altium-suite</code></span> در <span dir="ltr"><code>mcp.local.json</code></span> یا <span dir="ltr"><code>codex.local.toml</code></span> تولید می‌کند. آن را به تنظیمات کلاینت اضافه و اتصال را دوباره راه‌اندازی کنید. تنظیمات خصوصی موتورهای داخلی در <span dir="ltr"><code>suite-backends.local.json</code></span> می‌ماند. پروژه را در آلتیوم باز کنید، ابزار <span dir="ltr"><code>app_context</code></span> را با <span dir="ltr"><code>suite_catalog</code></span> پیدا کنید و نام دقیق <span dir="ltr"><code>eda__app_context</code></span> را از طریق <span dir="ltr"><code>suite_invoke</code></span> اجرا کنید.
 
-حالت پیش‌فرض <span dir="ltr"><code>--toolset minimal</code></span> فقط <span dir="ltr"><code>suite_catalog</code></span>، <span dir="ltr"><code>suite_invoke</code></span> و <span dir="ltr"><code>suite_status</code></span> را معرفی می‌کند. ابزار مورد نیاز را با گزینهٔ <span dir="ltr"><code>with_schema=true</code></span> کشف کنید؛ نام‌ها با <span dir="ltr"><code>eda__</code></span>، <span dir="ltr"><code>legacy__</code></span>، <span dir="ltr"><code>libraries__</code></span> و <span dir="ltr"><code>cloud__</code></span> مشخص می‌شوند. همهٔ عملیات باقی می‌مانند و ورودی‌ها پیش از ارسال اعتبارسنجی می‌شوند. <span dir="ltr"><code>--toolset full</code></span> فهرست کامل و <span dir="ltr"><code>--separate-servers</code></span> چیدمان قبلی اتصال‌ها را تولید می‌کند. [راهنمای اتصال واحد و مهاجرت](review/UNIFIED_SUITE_2026-10-27.md).
+حالت پیش‌فرض <span dir="ltr"><code>--toolset minimal</code></span> فقط <span dir="ltr"><code>suite_catalog</code></span>، <span dir="ltr"><code>suite_invoke</code></span> و <span dir="ltr"><code>suite_status</code></span> را معرفی می‌کند. ابزار مورد نیاز را با گزینهٔ <span dir="ltr"><code>with_schema=true</code></span> کشف کنید؛ نام‌ها با <span dir="ltr"><code>eda__</code></span>، <span dir="ltr"><code>legacy__</code></span>، <span dir="ltr"><code>libraries__</code></span> و <span dir="ltr"><code>cloud__</code></span> مشخص می‌شوند. همهٔ عملیات باقی می‌مانند و ورودی‌ها پیش از ارسال اعتبارسنجی می‌شوند. <span dir="ltr"><code>--toolset full</code></span> فهرست کامل و <span dir="ltr"><code>--separate-servers</code></span> برای مهاجرت پذیرفته می‌شود و همچنان اتصال واحد تولید می‌کند. [راهنمای اتصال واحد و مهاجرت](review/UNIFIED_SUITE_2026-10-27.md).
 
 </div>
 
 <div dir="ltr">
 
 ```powershell
-Push-Location altium-designer-mcp
-cargo build --release --locked
-Pop-Location
 .\.venv\Scripts\python.exe setup.py --altium-exe "C:\Program Files\Altium\AD26\X2.EXE" --library-dir "D:\MyProject\Libraries"
 ```
 
@@ -93,7 +90,7 @@ Pop-Location
 
 <div dir="rtl">
 
-ساخت موتور کتابخانه از منبع به نسخهٔ پین‌شدهٔ راست و ابزارهای ساخت <span dir="ltr"><code>Visual Studio C++</code></span> نیاز دارد؛ برای فایل اجرایی موجود از <span dir="ltr"><code>--library-binary</code></span> استفاده کنید. برای چند پوشه، <span dir="ltr"><code>--library-dir</code></span> را تکرار کنید. نصب مسیرهای قبلی را حفظ و cache اختصاصی ابر را اضافه می‌کند. حساب یا مجوز آلتیوم و سرویس‌های کتابخانه همراه بسته ارائه نمی‌شود.
+عملیات کتابخانه با کدک‌های مستقل پایتون اجرا می‌شوند و به کامپایلر یا فایل اجرایی خارجی نیاز ندارند. برای چند پوشه، `--library-dir` را تکرار کنید. حساب یا مجوز آلتیوم و سرویس‌های کتابخانه همراه بسته نیست.
 
 ## پرسش‌ها و مشارکت
 
@@ -101,6 +98,6 @@ Pop-Location
 
 ## مجوز
 
-کد هماهنگ‌کننده با <span dir="ltr"><code>MIT</code></span>؛ پل <span dir="ltr"><code>EDA</code></span> با <span dir="ltr"><code>Apache-2.0</code></span>، پل قدیمی با <span dir="ltr"><code>MIT</code></span> و سرور کتابخانهٔ <span dir="ltr"><code>Rust</code></span> با <span dir="ltr"><code>GPL-3.0-or-later</code></span> منتشر می‌شوند. [دامنهٔ مجوزها و استثناها](../THIRD_PARTY_NOTICES.md) و [نسخه‌های بالادستی](../UPSTREAM.json).
+کد هماهنگ‌کننده، کدک‌های کتابخانه و سازگاری قدیمی با MIT و بک‌اند EDA با Apache-2.0 منتشر می‌شوند. [دامنهٔ مجوزها](../THIRD_PARTY_NOTICES.md) و [نسخه‌های بالادستی](../UPSTREAM.json).
 
 </div>

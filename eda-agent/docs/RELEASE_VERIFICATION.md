@@ -1,4 +1,4 @@
-# Release verification: 2026.10.10.review6
+# Release verification: 2026.10.29.single-transport1
 
 Everything below is Pascal that FPC and the linter have checked and that
 **Altium's DelphiScript engine has never executed**. The two are not the
@@ -139,7 +139,7 @@ objects you can delete afterwards.
 app_ping
 ```
 
-Expect `altium_script_version` = `2026.10.10.review6`, `version_match` =
+Expect `altium_script_version` = `2026.10.29.single-transport1`, `version_match` =
 `true`, and `mcp_server_version` = `0.5.0`.
 
 Those are two different versions and they fail differently.
@@ -940,4 +940,4 @@ it. A library edit is real in memory and absent from disk until then.
   needs a live measurement.
 
 
-Local bridge update: SCRIPT_VERSION `2026.10.10.review6`. Name access is type-guarded; eNote is queryable/deletable; custom dimensions use UseCustomSheet; batch modification reads child-envelope data, handles single modern operations, and preserves child failures. Native validation and known save/library limitations are recorded in the root MODIFICATIONS.md. These checks supplement the historical upstream procedure above; they do not imply every upstream step has been rerun.
+Local bridge update: SCRIPT_VERSION `2026.10.29.single-transport1`. Name access is type-guarded; eNote is queryable/deletable; custom dimensions use UseCustomSheet; batch modification reads child-envelope data, handles single modern operations, and preserves child failures. Native validation and known save/library limitations are recorded in the root MODIFICATIONS.md. These checks supplement the historical upstream procedure above; they do not imply every upstream step has been rerun.

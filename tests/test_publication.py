@@ -92,8 +92,9 @@ def test_diagnostics_do_not_write_to_protocol_stdout():
 def test_runtime_is_per_user_and_templates_are_resolved(tmp_path, monkeypatch):
     monkeypatch.setenv('ALTIUM_MCP_RUNTIME', str(tmp_path / "user's runtime"))
     scripts = suite_config.prepare_runtime()
-    content = (scripts['legacy'].parent / 'Altium_API.pas').read_text(encoding='utf-8')
-    assert '__ALTIUM_MCP_EXCHANGE_DIR__' not in content
+    assert scripts['legacy'] == scripts['eda']
+    content = (scripts['eda'].parent / 'Main.pas').read_text(encoding='utf-8')
+    assert '__ALTIUM_MCP_SCRIPT_PROJECT__' not in content
     assert "user''s runtime" in content
     assert scripts == suite_config.prepare_runtime()
     for project in scripts.values():

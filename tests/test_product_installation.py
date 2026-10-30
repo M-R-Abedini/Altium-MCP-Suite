@@ -120,7 +120,7 @@ def test_detach_preserves_identity_restrictions_and_copies_dependencies(tmp_path
         assert after['backends'][name]['env']['EDA_AGENT_WORKSPACE'] == before['backends'][name]['env']['EDA_AGENT_WORKSPACE']
     library = after['backends']['libraries']
     assert Path(library['command']).is_relative_to(data)
-    assert json.loads(Path(library['args'][0]).read_text()) == json.loads((old / 'libraries.json').read_text())
+    assert json.loads(Path(runtime.library_configuration_path(library)).read_text()) == json.loads((old / 'libraries.json').read_text())
     assert list((data / 'backups').glob('*/state.json'))
 
 
@@ -198,23 +198,38 @@ def test_optional_registration_never_stores_plaintext(tmp_path, monkeypatch):
     assert 'secret-token' not in (tmp_path / 'auth.json').read_text()
 
 
-def test_rust_corresponding_source_vendor_config_is_relocatable(tmp_path, monkeypatch):
-    crate = tmp_path / 'crate'; crate.mkdir()
-    (crate / 'Cargo.lock').write_text('lock')
-    (crate / 'Cargo.toml').write_text('[package]\nname="example"\n')
-    binary = tmp_path / 'rust.exe'; binary.write_bytes(b'binary')
-    output = tmp_path / 'out'; output.mkdir()
-    def vendor(command, cwd, **kwargs):
-        assert command == ['cargo', 'vendor', '--locked', 'vendor']
-        destination = Path(cwd) / command[-1]; destination.mkdir()
-        (destination / 'dependency.txt').write_text('source')
-        os.utime(destination / 'dependency.txt', (1, 1))
-        return SimpleNamespace(stdout='[source.vendored-sources]\ndirectory = "vendor"\n')
-    monkeypatch.setattr(installer.subprocess, 'run', vendor)
-    archive = installer.source_archive(crate, output, 'cargo', tmp_path / 'target', binary)
-    with zipfile.ZipFile(archive) as zipped:
-        config = zipped.read('altium-designer-mcp/.cargo/config.toml').decode()
-        assert 'directory = "vendor"' in config and str(tmp_path) not in config
-        assert zipped.read('altium-designer-mcp/vendor/dependency.txt') == b'source'
-        provenance = json.loads(zipped.read('altium-designer-mcp/BINARY_PROVENANCE.json'))
-        assert provenance['binary_sha256'] == installer.digest(binary)
+def test_installer_contains_python_services_without_a_library_executable(tmp_path, monkeypatch):
+    package = tmp_path / 'package'
+    (package / 'scripts').mkdir(parents=True)
+    (package / 'eda-agent').mkdir()
+    (package / 'installer').mkdir()
+    for name in ('suite_hub.py', 'altium_installation.py', 'installer/onboarding.ps1'):
+        (package / name).write_text('test fixture')
+    (package / 'constraints-windows-py312.txt').touch()
+    (package / 'scripts/build_plugin.py').write_text("def package_payload(root):\n return {'plugin.json': b'{\"version\":\"1.0.0\"}', 'suite_libraries_native.py': b'original service'}\n")
+    (package / 'scripts/plugin_runtime.py').write_text("def probe_python(path):\n assert path.is_file()\n return {'python':[3,12,0]}\n")
+    archive = tmp_path / 'python.zip'
+    with zipfile.ZipFile(archive, 'w') as output:
+        output.writestr('python.exe', 'fixture')
+        output.writestr('python312.zip', 'fixture')
+    calls = []
+    def python_only(command, **kwargs):
+        calls.append(command)
+        assert command[0] == sys.executable
+        assert command[1:3] == ['-m', 'pip']
+        if command[3] == 'wheel':
+            (Path(command[-1]) / 'eda_agent-1.0.0-py3-none-any.whl').write_bytes(b'wheel')
+        return SimpleNamespace(returncode=0)
+    monkeypatch.setattr(installer, 'ROOT', package)
+    monkeypatch.setattr(installer.sys, 'platform', 'win32')
+    monkeypatch.setattr(installer.subprocess, 'run', python_only)
+    result = installer.prepare(SimpleNamespace(output=tmp_path / 'out', python_embed=archive,
+        python_embed_sha256=installer.digest(archive), prepare_only=True))
+    stage = Path(result['stage'])
+    assert (stage / 'suite_libraries_native.py').read_bytes() == b'original service'
+    assert len(calls) == 3
+    assert not (stage / 'libraries').exists()
+    assert not list((tmp_path / 'out').glob('*source*.zip'))
+    provenance = json.loads((stage / 'INSTALLER_PROVENANCE.json').read_text())
+    assert provenance['wheels']['eda_agent-1.0.0-py3-none-any.whl']
+    assert not any('rust' in key for key in provenance)

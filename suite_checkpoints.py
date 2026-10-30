@@ -29,6 +29,7 @@ OFFLINE_TOOLS = {
     'design_layout_schematic', 'design_apply_hierarchy', 'design_job_start',
     'design_job_result', 'design_load_fab_profile', 'design_synthesize_rules',
     'design_learn_from_layout', 'design_connect_bus',
+    'design_connectivity_snapshot', 'design_diff_connectivity',
 }
 
 

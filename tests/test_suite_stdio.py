@@ -118,7 +118,9 @@ def test_cancelled_queued_call_is_never_dispatched(tmp_path):
             assert (tmp_path / "marker.txt").read_text() == "started1"
             queued = asyncio.create_task(suite.invoke("eda__slow", {"value": 2}))
             await asyncio.sleep(.03)
-            assert suite.workers["eda"].queue.qsize() == 1
+            # Native admission waits before the worker queue so compatibility
+            # read/modify/write sequences cannot be interleaved.
+            assert not queued.done()
             queued.cancel()
             with pytest.raises(asyncio.CancelledError):
                 await queued

@@ -12,10 +12,9 @@ def main():
     parser.add_argument('--library-dir', action='append', default=[], type=Path)
     parser.add_argument('--toolset', choices=('full', 'minimal'), default='minimal',
                         help='minimal advertises suite discovery tools; every backend operation remains reachable')
-    parser.add_argument('--separate-servers', action='store_true',
-                        help='generate the older three-connection configuration instead of the unified suite')
+    parser.add_argument('--separate-servers', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('--library-binary', type=Path,
-                        help='use an existing altium-designer-mcp executable')
+                        help=argparse.SUPPRESS)
     args = parser.parse_args()
     if not args.altium_exe.is_file():
         parser.error('Altium X2.EXE does not exist at that path')
@@ -23,8 +22,6 @@ def main():
     for directory in args.library_dir:
         if not directory.is_dir():
             parser.error('Library directory does not exist: ' + str(directory))
-    if args.library_binary and not args.library_binary.is_file():
-        parser.error('Library server executable does not exist: ' + str(args.library_binary))
     settings = {'altium_exe': str(args.altium_exe.resolve())}
     (root / 'local-settings.json').write_text(json.dumps(settings, indent=2), encoding='utf-8')
     scripts = suite_config.configure_environment()
@@ -34,45 +31,42 @@ def main():
     cloud_cache.mkdir(parents=True, exist_ok=True)
     config = {'mcpServers': {
         'eda-agent': {'command': sys.executable, 'args': [str(root / 'eda_stdio.py'), '--toolset', args.toolset], 'env': shared_env},
-        'altium': {'command': sys.executable, 'args': [str(root / 'coffeenmusic/server/codex_stdio.py')], 'env': shared_env},
+        'altium': {'command': sys.executable, 'args': [str(root / 'suite_legacy_compat.py')], 'env': shared_env},
     }}
-    binary = args.library_binary or root / 'altium-designer-mcp/target/release/altium-designer-mcp.exe'
-    if args.library_dir or binary.is_file():
-        library_config = root / 'libraries.local.json'
-        library_settings = {}
-        if library_config.exists():
-            try:
-                library_settings = json.loads(library_config.read_text(encoding='utf-8-sig'))
-            except (OSError, ValueError) as error:
-                parser.error('Cannot read existing library configuration: ' + str(error))
-            if not isinstance(library_settings, dict) or not isinstance(library_settings.get('allowed_paths', []), list):
-                parser.error('Existing library configuration must contain an allowed_paths list')
-            if not all(isinstance(path, str) for path in library_settings.get('allowed_paths', [])):
-                parser.error('Existing allowed_paths must contain path strings')
-        allowed_paths = list(library_settings.get('allowed_paths', []))
-        for path in [str(p.resolve()) for p in args.library_dir] + [str(cloud_cache)]:
-            if path.casefold() not in {existing.casefold() for existing in allowed_paths}:
-                allowed_paths.append(path)
-        library_settings['allowed_paths'] = allowed_paths
-        library_config.write_text(json.dumps(library_settings, indent=2), encoding='utf-8')
-        config['mcpServers']['altium-libraries'] = {'command': str(binary), 'args': [str(library_config)]}
-    if not args.separate_servers:
-        backend_names = {'eda-agent': 'eda', 'altium': 'legacy', 'altium-libraries': 'libraries'}
-        backends = {}
-        for name, server in config['mcpServers'].items():
-            worker = dict(server, cwd=str(root), timeout_seconds=900)
-            if name == 'eda-agent':
-                worker['args'] = [str(root / 'eda_stdio.py'), '--toolset', 'full', '--no-dashboard']
-            backends[backend_names[name]] = worker
-        backend_config = root / 'suite-backends.local.json'
-        backend_config.write_text(json.dumps({'backends': backends}, indent=2), encoding='utf-8')
-        config = {'mcpServers': {'mcp-altium-suite': {
-            'command': sys.executable,
-            'args': [str(root / 'suite_stdio.py'), '--toolset', args.toolset,
-                     '--backend-config', str(backend_config)],
-            'env': dict(shared_env, ALTIUM_SUITE_CLOUD_CACHE=str(cloud_cache)),
-            'startup_timeout_sec': 60, 'tool_timeout_sec': 900,
-        }}}
+    library_config = root / 'libraries.local.json'
+    library_settings = {}
+    if library_config.exists():
+        try:
+            library_settings = json.loads(library_config.read_text(encoding='utf-8-sig'))
+        except (OSError, ValueError) as error:
+            parser.error('Cannot read existing library configuration: ' + str(error))
+        if not isinstance(library_settings, dict) or not isinstance(library_settings.get('allowed_paths', []), list):
+            parser.error('Existing library configuration must contain an allowed_paths list')
+        if not all(isinstance(path, str) for path in library_settings.get('allowed_paths', [])):
+            parser.error('Existing allowed_paths must contain path strings')
+    allowed_paths = list(library_settings.get('allowed_paths', []))
+    for path in [str(p.resolve()) for p in args.library_dir] + [str(cloud_cache)]:
+        if path.casefold() not in {existing.casefold() for existing in allowed_paths}:
+            allowed_paths.append(path)
+    library_settings['allowed_paths'] = allowed_paths
+    library_config.write_text(json.dumps(library_settings, indent=2), encoding='utf-8')
+    config['mcpServers']['altium-libraries'] = {'command': sys.executable, 'args': [str(root / 'suite_libraries_native.py'), str(library_config)]}
+    backend_names = {'eda-agent': 'eda', 'altium': 'legacy', 'altium-libraries': 'libraries'}
+    backends = {}
+    for name, server in config['mcpServers'].items():
+        worker = dict(server, cwd=str(root), timeout_seconds=900)
+        if name == 'eda-agent':
+            worker['args'] = [str(root / 'eda_stdio.py'), '--toolset', 'full', '--no-dashboard']
+        backends[backend_names[name]] = worker
+    backend_config = root / 'suite-backends.local.json'
+    backend_config.write_text(json.dumps({'backends': backends}, indent=2), encoding='utf-8')
+    config = {'mcpServers': {'mcp-altium-suite': {
+        'command': sys.executable,
+        'args': [str(root / 'suite_stdio.py'), '--toolset', args.toolset,
+                 '--backend-config', str(backend_config)],
+        'env': dict(shared_env, ALTIUM_SUITE_CLOUD_CACHE=str(cloud_cache)),
+        'startup_timeout_sec': 60, 'tool_timeout_sec': 900,
+    }}}
     (root / 'mcp.local.json').write_text(json.dumps(config, indent=2), encoding='utf-8')
     toml = []
     for name, server in config['mcpServers'].items():
@@ -88,8 +82,6 @@ def main():
     (root / 'codex.local.toml').write_text('\n'.join(toml), encoding='utf-8')
     print('Created local MCP client configuration. Merge it into your client settings; restart the MCP servers once.')
     print('Runtime scripts:', scripts['eda'], scripts['legacy'])
-    if args.library_dir and not binary.is_file():
-        print('Build the library worker with cargo build --release --locked before using library operations.')
 
 
 if __name__ == '__main__':

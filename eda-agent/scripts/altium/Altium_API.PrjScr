@@ -272,6 +272,12 @@ DocumentUniqueId=
 [Generic_ScriptingSystem]
 StartProcName=Dispatcher.pas>StartMCPServer
 
+[Document14]
+DocumentPath=LegacyCompat.pas
+
+[Document15]
+DocumentPath=LegacySandbox.pas
+
 [OutputGroup1]
 Name=Netlist Outputs
 Description=

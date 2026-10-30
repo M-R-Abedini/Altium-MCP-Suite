@@ -325,7 +325,8 @@ Var
     Iterator : IPCB_BoardIterator;
     ExistingClass : IPCB_ObjectClass;
     ClassExists : Boolean;
-    CommaPos, AddedCount : Integer;
+    CommaPos, AddedCount, NetIndex : Integer;
+    NetNames : TStringList;
 Begin
     Board := GetPCBBoardAnywhere(0);
     If Board = Nil Then
@@ -377,6 +378,12 @@ Begin
 
     // Add nets to the class
     AddedCount := 0;
+    NetNames := TStringList.Create;
+    Try
+    If Copy(NetsStr, 1, 1) = '"' Then
+        NetNames.CommaText := NetsStr
+    Else
+    Begin
     Remaining := NetsStr;
     While Remaining <> '' Do
     Begin
@@ -391,14 +398,24 @@ Begin
             NetName := Remaining;
             Remaining := '';
         End;
-        If NetName <> '' Then
+        If NetName <> '' Then NetNames.Add(NetName);
+    End;
+    End;
+    For NetIndex := 0 To NetNames.Count - 1 Do
+    Begin
+        NetName := NetNames[NetIndex];
+        If (NetName <> '') And (Not NetClass.IsMember(NetName)) Then
         Begin
             PCBServer.PreProcess;
+            // AddMemberByName is a procedure; verify membership instead
+            // of interpreting its undefined return value as a Boolean.
             NetClass.AddMemberByName(NetName);
+            If NetClass.IsMember(NetName) Then
+                Inc(AddedCount);
             PCBServer.PostProcess;
-            Inc(AddedCount);
         End;
     End;
+    Finally NetNames.Free; End;
 
     MarkDocDirtyByPath(Board.FileName);
     Result := BuildSuccessResponse(RequestId,
@@ -1224,7 +1241,8 @@ Var
     Board : IPCB_Board;
     Iterator : IPCB_BoardIterator;
     Comp : IPCB_Component;
-    BBox : TCoordRect;
+    BBox, LegacyBox : TCoordRect;
+    LegacyData, LegacyName, LegacyDescription : String;
     JsonItems, Designator, Footprint, LayerStr, CommentStr, SrcDesignator : String;
     First : Boolean;
     Count, HeightMils, BBoxX1, BBoxY1, BBoxX2, BBoxY2, BBoxW, BBoxH : Integer;
@@ -1273,6 +1291,24 @@ Begin
             BBoxH := BBoxY2 - BBoxY1;
         Except End;
 
+        { Compatibility metadata is measured in the same iterator pass. Legacy
+          coordinates are relative to the board's user origin, not absolute. }
+        LegacyBox := Comp.BoundingRectangleNoNameComment;
+        Try LegacyName := Comp.Identifier; Except LegacyName := ''; End;
+        Try LegacyDescription := Comp.SourceDescription; Except LegacyDescription := ''; End;
+        LegacyData := JsonObj(
+            JsonStr('designator', Designator) + ',' +
+            JsonStr('name', LegacyName) + ',' +
+            JsonStr('description', LegacyDescription) + ',' +
+            JsonStr('footprint', Footprint) + ',' +
+            JsonStr('layer', Layer2String(Comp.Layer)) + ',' +
+            JsonRaw('x', FloatToJsonStr(CoordToMils(Comp.x - Board.XOrigin))) + ',' +
+            JsonRaw('y', FloatToJsonStr(CoordToMils(Comp.y - Board.YOrigin))) + ',' +
+            JsonRaw('width', FloatToJsonStr(CoordToMils(LegacyBox.Right - LegacyBox.Left))) + ',' +
+            JsonRaw('height', FloatToJsonStr(CoordToMils(LegacyBox.Top - LegacyBox.Bottom))) + ',' +
+            JsonRaw('rotation', FloatToJsonStr(Comp.Rotation)) + ',' +
+            JsonBool('selected', Comp.Selected));
+
         JsonItems := JsonItems + '{"designator":"' + EscapeJsonString(Designator) + '",'
             + '"comment":"' + EscapeJsonString(CommentStr) + '",'
             + '"x":' + IntToStr(CoordToMils(Comp.x)) + ','
@@ -1282,6 +1318,7 @@ Begin
             + '"footprint":"' + EscapeJsonString(Footprint) + '",'
             + '"source_designator":"' + EscapeJsonString(SrcDesignator) + '",'
             + '"height_mils":' + IntToStr(HeightMils) + ','
+            + '"legacy_data":' + LegacyData + ','
             + '"bbox":{"x1":' + IntToStr(BBoxX1) + ',"y1":' + IntToStr(BBoxY1)
             + ',"x2":' + IntToStr(BBoxX2) + ',"y2":' + IntToStr(BBoxY2)
             + ',"width":' + IntToStr(BBoxW) + ',"height":' + IntToStr(BBoxH) + '}}';

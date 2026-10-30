@@ -925,8 +925,8 @@ def register_pcb_tools(mcp):
             desig = str(p.get("designator", "")).strip()
             if not desig:
                 continue
-            x_str = str(round(p["x"])) if p.get("x") is not None else ""
-            y_str = str(round(p["y"])) if p.get("y") is not None else ""
+            x_str = str(p["x"]) if p.get("x") is not None else ""
+            y_str = str(p["y"]) if p.get("y") is not None else ""
             rot_str = str(p["rotation"]) if p.get("rotation") is not None else ""
             layer = p.get("layer")
             if not layer and p.get("side") is not None:

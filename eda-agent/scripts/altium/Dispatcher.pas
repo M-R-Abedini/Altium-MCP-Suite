@@ -38,6 +38,10 @@ Begin
         'generic':     Result := HandleGenericCommand(Action, Params, RequestId);
         'pcb':         Result := HandlePCBCommand(Action, Params, RequestId);
         'audit':       Result := HandleAuditCommand(Action, Params, RequestId);
+        'legacy':      Begin
+                           If Action = 'run_altium_script' Then Result := LegacySandboxExecute(Params, RequestId)
+                           Else Result := HandleLegacyCommand(Action, Params, RequestId);
+                       End;
     Else
         Result := BuildErrorResponse(RequestId, 'UNKNOWN_COMMAND',
             'Unknown command category: ' + Category +

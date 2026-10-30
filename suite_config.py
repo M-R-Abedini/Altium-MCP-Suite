@@ -81,7 +81,7 @@ def altium_exe():
     return candidates[0]
 
 
-def prepare_runtime():
+def prepare_runtime(script_body=None):
     """Copy scripts to a content-addressed path so Altium recompiles changes.
 
     Generates only runtime files; never changes the machine-wide EDA workspace
@@ -90,8 +90,7 @@ def prepare_runtime():
     runtime = runtime_dir()
     exchange = runtime / 'legacy-exchange'
     exchange.mkdir(parents=True, exist_ok=True)
-    sources = {'eda': ROOT / 'eda-agent/scripts/altium',
-               'legacy': ROOT / 'coffeenmusic/server/AltiumScript'}
+    sources = {'eda': ROOT / 'eda-agent/scripts/altium'}
     projects = {}
     for kind, source in sources.items():
         files = sorted(p for p in source.iterdir() if p.suffix.lower() in {'.pas', '.dfm', '.prjscr'})
@@ -106,6 +105,9 @@ def prepare_runtime():
             if not references_mono:
                 files = [p for p in files if p.name.casefold() != 'altium_mcp.pas']
         contents = {path: path.read_bytes() for path in files}
+        if script_body is not None:
+            from suite_script_overlay import render_script_unit
+            contents[source / 'LegacySandbox.pas'] = render_script_unit(script_body).encode('utf-8')
         workspace = workspace_dir()
         digest = hashlib.sha256(('script-project-lifecycle-v1:' + str(exchange)).encode())
         if kind == 'eda':
@@ -130,12 +132,6 @@ def prepare_runtime():
                         raise RuntimeError(f'{path} must contain exactly one {token} placeholder.')
                     text = text.replace(token, str(value).replace("'", "''"))
                 data = text.encode('utf-8')
-            if kind == 'legacy' and path.name == 'Altium_API.pas':
-                text = data.decode('utf-8')
-                if text.count('__ALTIUM_MCP_EXCHANGE_DIR__') != 1:
-                    raise RuntimeError(f'{path} must contain exactly one exchange-directory placeholder; no legacy script was generated.')
-                literal = (str(exchange) + '\\').replace("'", "''")
-                data = text.replace('__ALTIUM_MCP_EXCHANGE_DIR__', literal).encode('utf-8')
             hashes[name] = hashlib.sha256(data).hexdigest()
             if target.exists():
                 continue
@@ -145,6 +141,8 @@ def prepare_runtime():
         register_project(project, kind, hashes)
         projects[kind] = project
     refresh_catalog(runtime)
+    # Kept as a migration/configuration alias; there is one native project.
+    projects['legacy'] = projects['eda']
     return projects
 
 

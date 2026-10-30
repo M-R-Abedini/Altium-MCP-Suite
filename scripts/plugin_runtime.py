@@ -58,23 +58,20 @@ def detach(data, plugin_root=ROOT, *, probe=True):
     private.mkdir(parents=True, exist_ok=False)
     subprocess.run([sys.executable, '-m', 'venv', str(private / 'python')], check=True, stdout=sys.stderr)
     install_runtime(python, plugin_root)
-    library = template['backends']['libraries']
-    binary = private / 'libraries/altium-designer-mcp.exe'
-    binary.parent.mkdir(parents=True)
-    shutil.copy2(library['command'], binary)
     config = private / 'libraries/config.json'
-    library_settings = read_object(library['args'][0])
+    library = template['backends']['libraries']
+    library_settings = read_object(library_configuration_path(library))
     audit = library_settings.get('logging', {}).get('audit_log_path')
     if audit and not Path(audit).is_absolute():
-        # The Rust process resolves relative audit paths from its working dir.
+        # Preserve the former worker's relative audit destination.
         library_settings['logging']['audit_log_path'] = str((Path(library.get('cwd') or plugin_root) / audit).resolve())
     atomic_json(config, library_settings)
     for name in ('eda', 'legacy'):
         template['backends'][name]['command'] = str(python)
     template = remap_template(template, plugin_root)
     library = template['backends']['libraries']
-    library['command'], library['args'] = str(binary), [str(config)]
-    library['cwd'] = str(binary.parent)
+    library['command'] = str(python)
+    library['args'] = [str(Path(plugin_root).resolve() / 'suite_libraries_native.py'), str(config)]
     if probe:
         probe_python(python)
     validate_template(template)
@@ -169,7 +166,10 @@ def validate_template(template):
     for name, spec in backends.items():
         if not isinstance(spec, dict) or set(spec) - allowed:
             raise ValueError(f'Invalid or unsupported backend settings: {name}')
-        existing_file(spec.get('command', ''), name + ' executable')
+        # A former library executable is a migration hint, never a prerequisite
+        # or an executable launched by this version.
+        if name != 'libraries':
+            existing_file(spec.get('command', ''), name + ' executable')
         if not isinstance(spec.get('args'), list) or not all(isinstance(x, str) for x in spec['args']):
             raise ValueError(f'{name} args must be a list of strings')
         if not isinstance(spec.get('env', {}), dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in spec.get('env', {}).items()):
@@ -184,9 +184,10 @@ def validate_template(template):
         for key in ('timeout_seconds', 'startup_timeout_seconds'):
             if key in spec and (isinstance(spec[key], bool) or not isinstance(spec[key], (float, int)) or not 0 < spec[key] <= 86400):
                 raise ValueError(f'{name} invalid {key}')
-    for name, filename in (('eda', 'eda_stdio.py'), ('legacy', 'codex_stdio.py')):
+    for name, filenames in (('eda', {'eda_stdio.py'}),
+                            ('legacy', {'codex_stdio.py', 'suite_legacy_compat.py'})):
         args = backends[name]['args']
-        if not args or Path(args[0]).name != filename:
+        if not args or Path(args[0]).name not in filenames:
             raise ValueError(f'{name}: only the coordinated suite wrapper can be adopted')
         if backends[name].get('env', {}).get('EDA_AGENT_BACKEND', 'altium') != 'altium':
             raise ValueError('This plugin requires the Altium backend')
@@ -203,14 +204,22 @@ def validate_template(template):
         if os.path.normcase(str(Path(values[0]).resolve())) != os.path.normcase(str(Path(values[1]).resolve())):
             raise ValueError(f'Native workers disagree on {key}; no configuration changed')
     library = backends['libraries']
-    if len(library['args']) != 1:
-        raise ValueError('The library worker needs exactly one configuration-file argument')
-    configuration = existing_file(library['args'][0], 'Library configuration')
+    configuration = existing_file(library_configuration_path(library), 'Library configuration')
     settings = read_object(configuration)
     if not isinstance(settings.get('allowed_paths'), list) or not all(isinstance(x, str) and Path(x).is_absolute() for x in settings['allowed_paths']):
         raise ValueError('Library allowed_paths must contain absolute path strings')
     validate_workspace(Path(envs[0]['ALTIUM_MCP_RUNTIME']), Path(envs[0]['EDA_AGENT_WORKSPACE']))
     return settings
+
+
+def library_configuration_path(spec):
+    """Accept persisted 0.3 manifests without requiring their retired executable."""
+    args = spec.get('args', [])
+    if len(args) == 1:
+        return args[0]
+    if len(args) == 2 and Path(args[0]).name == 'suite_libraries_native.py':
+        return args[1]
+    raise ValueError('The native library service needs its configuration-file argument')
 
 
 def validate_workspace(runtime, workspace):
@@ -231,7 +240,7 @@ def remap_template(template, plugin_root):
     value = json.loads(json.dumps(template))
     root = Path(plugin_root).resolve()
     for name, script in (('eda', root / 'eda_stdio.py'),
-                         ('legacy', root / 'coffeenmusic/server/codex_stdio.py')):
+                         ('legacy', root / 'suite_legacy_compat.py')):
         if not script.is_file():
             raise ValueError(f'Plugin package is missing its {name} wrapper')
         worker = value['backends'][name]
@@ -252,6 +261,12 @@ def remap_template(template, plugin_root):
                 args += ['--toolset', 'full']
             if '--no-dashboard' not in args:
                 args.append('--no-dashboard')
+    library = value['backends']['libraries']
+    configuration = library_configuration_path(library)
+    library['command'] = value['backends']['eda']['command']
+    library['args'] = [str(root / 'suite_libraries_native.py'), configuration]
+    # The gateway constructs NativeLibraries in process. The old cwd still
+    # determines relative logging paths in migrated library configurations.
     return value
 
 
@@ -362,15 +377,22 @@ def bootstrap(args, data, plugin_root=ROOT):
         raise ValueError('Bootstrap must run on Windows using Python 3.12')
     altium = existing_file(args.altium_exe, 'Altium executable')
     root = Path(plugin_root).resolve()
+    previous = None
+    if (data / 'state.json').exists():
+        _, previous = checked_state(data)
+        validate_template(previous)
+    prior_env = previous['backends']['eda']['env'] if previous else {}
     for relative in ('requirements-runtime.txt', 'constraints-windows-py312.txt',
                      'eda-agent/pyproject.toml', 'eda_stdio.py', 'suite_stdio.py',
-                     'coffeenmusic/server/codex_stdio.py'):
+                     'suite_legacy_compat.py'):
         existing_file(root / relative, 'Packaged ' + relative)
-    binary = data / 'rust-build/release/altium-designer-mcp.exe' if args.build_libraries else existing_file(args.library_binary, 'Library worker executable')
-    runtime = Path(args.runtime_dir) if args.runtime_dir else Path(os.environ.get('LOCALAPPDATA', Path.home() / 'AppData/Local')) / 'AltiumMCPSuite'
+    runtime = Path(args.runtime_dir or prior_env.get('ALTIUM_MCP_RUNTIME') or
+                   Path(os.environ.get('LOCALAPPDATA', Path.home() / 'AppData/Local')) / 'AltiumMCPSuite')
     identity = runtime / 'workspace-identity.json'
     if args.workspace:
         workspace = Path(args.workspace)
+    elif prior_env.get('EDA_AGENT_WORKSPACE'):
+        workspace = Path(prior_env['EDA_AGENT_WORKSPACE'])
     elif identity.is_file():
         raw = read_object(identity).get('workspace')
         if not isinstance(raw, str):
@@ -380,12 +402,18 @@ def bootstrap(args, data, plugin_root=ROOT):
         workspace = runtime / 'workspace'
     validate_workspace(runtime, workspace)
     runtime, workspace = runtime.resolve(), workspace.resolve()
+    if previous:
+        for key, selected in (('ALTIUM_MCP_RUNTIME', runtime), ('EDA_AGENT_WORKSPACE', workspace)):
+            if os.path.normcase(str(selected)) != os.path.normcase(str(Path(prior_env[key]).resolve())):
+                raise ValueError('Bootstrap cannot replace the existing native workspace identity')
     cloud = data / 'cloud-libraries'
     roots = [str(Path(path).resolve()) for path in args.library_dir]
     if not all(Path(path).is_dir() for path in roots):
         raise ValueError('Library directories must already exist')
     library_config = data / 'libraries.json'
-    library_settings = read_object(library_config) if library_config.is_file() else {'allowed_paths': []}
+    library_settings = (read_object(library_config) if library_config.is_file() else
+                        read_object(library_configuration_path(previous['backends']['libraries'])) if previous else
+                        {'allowed_paths': []})
     if not isinstance(library_settings.get('allowed_paths'), list) or not all(isinstance(path, str) and Path(path).is_absolute() for path in library_settings['allowed_paths']):
         raise ValueError('Existing library configuration has an invalid allowlist')
     existing_roots = library_settings['allowed_paths']
@@ -396,10 +424,6 @@ def bootstrap(args, data, plugin_root=ROOT):
     if not python.exists():
         subprocess.run([sys.executable, '-m', 'venv', str(environment)], check=True)
     install_runtime(python, root)
-    if args.build_libraries:
-        env = dict(os.environ, CARGO_TARGET_DIR=str(data / 'rust-build'))
-        subprocess.run(['cargo', 'build', '--release', '--locked'], cwd=root / 'altium-designer-mcp',
-                       env=env, check=True, stdout=sys.stderr)
     cloud.mkdir(parents=True, exist_ok=True)
     if library_config.exists():
         saved = data / 'backups' / (datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ') + '-' + uuid.uuid4().hex[:8]) / library_config.name
@@ -412,10 +436,18 @@ def bootstrap(args, data, plugin_root=ROOT):
     template = {'backends': {
         'eda': {'command': str(python), 'args': [str(root / 'eda_stdio.py'), '--toolset', 'full', '--no-dashboard'],
                 'env': common, 'timeout_seconds': 900},
-        'legacy': {'command': str(python), 'args': [str(root / 'coffeenmusic/server/codex_stdio.py')],
+        'legacy': {'command': str(python), 'args': [str(root / 'suite_legacy_compat.py')],
                    'env': common, 'timeout_seconds': 900},
-        'libraries': {'command': str(binary), 'args': [str(library_config)], 'timeout_seconds': 180},
+        'libraries': {'command': str(python), 'args': [str(root / 'suite_libraries_native.py'), str(library_config)], 'timeout_seconds': 180},
     }}
+    if previous:
+        for name, worker in template['backends'].items():
+            old = previous['backends'][name]
+            for key in ('enabled', 'enabled_tools', 'disabled_tools', 'timeout_seconds', 'startup_timeout_seconds'):
+                if key in old:
+                    worker[key] = old[key]
+            if name in {'eda', 'legacy'}:
+                worker['env'] = dict(old['env'], ALTIUM_EXE=str(altium))
     validate_template(template)
     probe_python(python)
     state = {'schema': STATE_SCHEMA, 'python': str(python), 'cloud_cache': str(cloud),
@@ -440,9 +472,8 @@ def main(argv=None):
     adopt_parser.add_argument('--cloud-cache', type=Path)
     fresh = sub.add_parser('bootstrap')
     fresh.add_argument('--altium-exe', type=Path, required=True)
-    choice = fresh.add_mutually_exclusive_group(required=True)
-    choice.add_argument('--library-binary', type=Path)
-    choice.add_argument('--build-libraries', action='store_true')
+    fresh.add_argument('--library-binary', type=Path, help=argparse.SUPPRESS)
+    fresh.add_argument('--build-libraries', action='store_true', help=argparse.SUPPRESS)
     fresh.add_argument('--library-dir', type=Path, action='append', default=[])
     fresh.add_argument('--runtime-dir', type=Path)
     fresh.add_argument('--workspace', type=Path)

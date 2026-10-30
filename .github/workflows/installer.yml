@@ -21,9 +21,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582
-        with:
-          toolchain: '1.95.0'
       - name: Download explicitly reviewed runtime
         shell: pwsh
         env:
@@ -35,7 +32,7 @@ jobs:
           if ($env:EMBED_SHA256 -notmatch '^[a-fA-F0-9]{64}$') { throw 'A valid reviewed SHA-256 is required.' }
           Invoke-WebRequest -Uri $runtimeUri.AbsoluteUri -OutFile runtime.zip
           if ((Get-FileHash -LiteralPath runtime.zip -Algorithm SHA256).Hash -ne $env:EMBED_SHA256) { throw 'Runtime integrity check failed.' }
-      - name: Build wheel runtime, Rust binary and vendored Corresponding Source
+      - name: Build Python wheel runtime and native library codecs
         shell: pwsh
         env:
           EMBED_SHA256: ${{ inputs.python_embed_sha256 }}
@@ -45,9 +42,8 @@ jobs:
           python installer/build_installer.py --python-embed runtime.zip --python-embed-sha256 $env:EMBED_SHA256 --iscc $innoCompiler --output dist/windows-installer
       - uses: actions/upload-artifact@v4
         with:
-          name: AltiumMCPSuite-Setup-x64-and-source
+          name: AltiumMCPSuite-Setup-x64
           path: |
             dist/windows-installer/AltiumMCPSuite-Setup-x64.exe
-            dist/windows-installer/altium-designer-mcp-corresponding-source.zip
             dist/windows-installer/SHA256SUMS.txt
             dist/windows-installer/installer-artifacts.json

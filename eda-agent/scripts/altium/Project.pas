@@ -3264,66 +3264,6 @@ Begin
 End;
 
 {..............................................................................}
-{ Create a new project variant                                                 }
-{ Params: name, description (optional), project_path (optional)               }
-{..............................................................................}
-
-Function Proj_CreateVariant(Params : String; RequestId : String) : String;
-Var
-    ProjectPath, VarName, VarDesc : String;
-    Workspace : IWorkspace;
-    Project : IProject;
-    PreCount, PostCount : Integer;
-Begin
-    VarName := ExtractJsonValue(Params, 'name');
-    VarDesc := ExtractJsonValue(Params, 'description');
-    ProjectPath := ExtractJsonValue(Params, 'project_path');
-
-    If VarName = '' Then
-    Begin
-        Result := BuildErrorResponse(RequestId, 'MISSING_PARAMS', 'name is required');
-        Exit;
-    End;
-
-    Workspace := GetWorkspace;
-    If Workspace = Nil Then Begin Result := BuildErrorResponse(RequestId, 'NO_WORKSPACE', 'No workspace'); Exit; End;
-
-    If ProjectPath <> '' Then Project := FindProjectByPath(Workspace, ProjectPath)
-    Else Project := Workspace.DM_FocusedProject;
-    If Project = Nil Then Begin Result := BuildErrorResponse(RequestId, 'NO_PROJECT', 'No project found'); Exit; End;
-
-    { The DM API is read-only for variants (no DM_AddProjectVariant); the
-      WorkspaceManager:VariantManagement process is the only script lever and
-      it is unreliable. So we attempt it, then VERIFY via the variant count and
-      report the real outcome -- never a blind success (a false success here
-      masked that no variant was actually created). }
-    PreCount := -1;
-    Try PreCount := Project.DM_ProjectVariantCount; Except End;
-
-    ResetParameters;
-    AddStringParameter('Action', 'AddVariant');
-    AddStringParameter('VariantName', VarName);
-    If VarDesc <> '' Then
-        AddStringParameter('VariantDescription', VarDesc);
-    RunProcess('WorkspaceManager:VariantManagement');
-
-    Try Project.DM_Compile; Except End;
-    PostCount := -1;
-    Try PostCount := Project.DM_ProjectVariantCount; Except End;
-
-    If (PreCount >= 0) And (PostCount > PreCount) Then
-        Result := BuildSuccessResponse(RequestId,
-            '{"success":true,"name":"' + EscapeJsonString(VarName) + '","description":"'
-            + EscapeJsonString(VarDesc) + '","variant_count":' + IntToStr(PostCount) + '}')
-    Else
-        Result := BuildErrorResponse(RequestId, 'CREATE_UNCONFIRMED',
-            'Variant creation could not be confirmed (count ' + IntToStr(PreCount)
-            + ' -> ' + IntToStr(PostCount) + '). Script-based variant creation via '
-            + 'WorkspaceManager:VariantManagement is unreliable; create the variant '
-            + 'in the Variant Management dialog.');
-End;
-
-{..............................................................................}
 { List all currently open projects in the workspace                            }
 {..............................................................................}
 
@@ -4090,6 +4030,12 @@ Var
     FocusedDoc : IDocument;
     FocusedKind : String;
 Begin
+    If LowerCase(ExtractJsonValue(Params, 'allow_modal')) <> 'true' Then
+    Begin
+        Result := BuildErrorResponse(RequestId, 'INVALID_PARAMETER',
+            'Schematic-to-PCB ECO opens a modal dialog. Explicit allow_modal=true is required; no update was started.');
+        Exit;
+    End;
     ProjectPath := ExtractJsonValue(Params, 'project_path');
 
     Workspace := GetWorkspace;
@@ -4914,7 +4860,6 @@ Begin
         'get_variant_matrix': Result := Proj_GetVariantMatrix(Params, RequestId);
         'get_active_variant': Result := Proj_GetActiveVariant(Params, RequestId);
         'set_active_variant': Result := Proj_SetActiveVariant(Params, RequestId);
-        'create_variant':    Result := Proj_CreateVariant(Params, RequestId);
         'delete_variant':    Result := Proj_DeleteVariant(Params, RequestId);
         'get_open_projects': Result := Proj_GetOpenProjects(RequestId);
         'save_all':          Result := Proj_SaveAll(RequestId);

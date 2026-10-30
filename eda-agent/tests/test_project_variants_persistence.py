@@ -106,6 +106,22 @@ async def test_save_verifies_variant_records_and_library_membership(tmp_path):
     assert not (await verified_save(Bridge(path, save_changes=False), str(path)))['success']
 
 
+@pytest.mark.parametrize('ack', [{'success': True}, {'success': True, 'project_path': 'relative.PrjPcb'}])
+@pytest.mark.asyncio
+async def test_save_without_an_absolute_native_target_refuses_followup_io(ack):
+    class MissingTarget:
+        def __init__(self):
+            self.calls = []
+        async def send_command_async(self, command, params=None):
+            self.calls.append(command)
+            return ack
+    bridge = MissingTarget()
+    result = await verified_save(bridge)
+    assert result['success'] is False and result['verified'] is False
+    assert 'project_path' in result['error']
+    assert bridge.calls == ['project.save']
+
+
 @pytest.mark.asyncio
 async def test_failed_close_keeps_original_bytes(tmp_path):
     path = tmp_path/'p.PrjPcb';path.write_bytes(SAMPLE)

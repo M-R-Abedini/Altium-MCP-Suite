@@ -2,7 +2,7 @@
 
 The Free Core works without registration. The Codex plugin remains the preferred
 Codex integration because it installs the MCP endpoint and skills together. The
-standalone Windows installer is an alternative for machines without Python/Rust
+standalone Windows installer is an alternative for machines without Python
 and for other AI clients. Altium Designer is a separate prerequisite.
 
 ## Remove dependency on an adopted old checkout
@@ -15,8 +15,8 @@ python scripts/plugin_runtime.py --data-dir "C:\path\to\plugin-data" doctor
 ```
 
 `detach` creates a fresh private venv in `data/runtimes/<UTC-id>/python`, installs
-the EDA package as a regular wheel, and copies the existing Rust executable and
-library configuration into that private runtime. It retains the native runtime,
+the EDA package as a regular wheel, and migrates library configuration
+to the native Python service in that private runtime. It retains the native runtime,
 workspace identity, allowed library roots, tool restrictions, timeouts and audit
 destination. It publishes new state only after dependency and identity checks.
 Prior state remains in backups and the original environment is never deleted.
@@ -92,8 +92,7 @@ so this release produces the precise supported UI plan rather than guessing keys
 
 ## Offline installer pipeline
 
-Build on Windows x64 with Python 3.12, the pinned Rust toolchain/Windows C++ SDK,
-and Inno Setup 6+:
+Build on Windows x64 with Python 3.12 and Inno Setup 6+:
 
 ```powershell
 python installer/build_installer.py --python-embed "C:\inputs\python-3.12.x-embed-amd64.zip" `
@@ -110,12 +109,12 @@ records the exact Python/runtime dependency versions and SHA-256 values in
 `INSTALLER_PROVENANCE.json`. It rejects traversal and symlinks before extraction.
 
 The builder creates the EDA wheel, resolves constrained binary wheels into the
-embedded runtime, runs a real import probe including Windows COM dependencies,
-builds Rust with `--locked`, vendors exact Rust source dependencies, and includes
-`altium-designer-mcp-corresponding-source.zip` with rebuild instructions, licenses,
-Cargo.lock and binary hash. The isolated GPL executable retains its own license;
-the source pointer alone is not substituted for Corresponding Source. Wheel
-distribution metadata and the embedded Python license remain in the installation.
+embedded runtime, and runs a real import probe including Windows COM dependencies
+and `olefile`. The package audit checks every `.PrjScr` member against wheel includes; CI
+also builds the actual EDA wheel and verifies its native files byte-for-byte.
+Native library codecs are original Python source in the shared plugin package. No external library binary, crate vendor tree or corresponding-
+source archive is produced. Wheel distribution metadata and the embedded Python
+license remain in the installation.
 
 Inno Setup installs under `%LOCALAPPDATA%/Programs/AltiumMCPSuite` without admin,
 adds a local setup wizard, and leaves private state/backups on uninstall. The
@@ -133,7 +132,7 @@ registration service, login validation, tray daemon or paid entitlement service
 is implemented; the Free Core never requires such a token.
 
 `.github/workflows/installer.yml` is manually dispatched with the reviewed
-Python.org URL and SHA-256; it uploads installer, source and checksums as CI
+Python.org URL and SHA-256; it uploads installer and checksums as CI
 artifacts. It does not publish a release automatically or claim code signing.
 The product installer is unsigned unless separately signed by the publisher.
 
@@ -156,4 +155,3 @@ to protect those startup hooks.
 - [CPython embedded distribution](https://docs.python.org/3.12/using/windows.html#the-embeddable-package)
 - [Python 3.12 security release and binary availability](https://www.python.org/downloads/release/python-31216/)
 - [Inno Setup](https://jrsoftware.org/isinfo.php)
-- [GPLv3](https://www.gnu.org/licenses/gpl-3.0.html)

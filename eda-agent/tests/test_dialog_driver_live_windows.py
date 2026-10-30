@@ -173,7 +173,7 @@ def test_cancel_really_presses_and_the_window_really_closes(dialog):
 
     assert out["steps"][0]["action"].startswith("pressed")
     assert not _still_open(dialog.hwnd), "the press did not close it"
-    assert out["finished"] == "no dialog is open"
+    assert out["finished"] == "no visible dialog was detected"
 
 
 def test_an_unrecognised_real_dialog_is_refused_even_fully_authorised(dialog):
@@ -280,7 +280,7 @@ def test_blocked_is_false_when_nothing_is_modal():
     snapshot = dr.report(os.getpid())
     assert snapshot["ok"] is True
     assert snapshot["blocked"] is False
-    assert snapshot["summary"] == "no dialog is open"
+    assert snapshot["summary"] == "no visible dialog was detected"
 
 
 # --------------------------------------------------------------------

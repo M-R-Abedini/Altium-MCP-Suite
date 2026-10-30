@@ -32,3 +32,20 @@ def test_deployment_discovers_each_bundled_skill_and_excludes_caches():
         assert {'scripts/plugin_runtime.py', 'scripts/launch_plugin.ps1',
                 'docs/PLUGIN_PACKAGE.md', 'requirements-runtime.txt', 'mcp.json',
                 'plugin.json'} <= files
+
+
+def test_deployment_contains_native_contracts_and_no_duplicate_legacy_runner():
+    files = {path.relative_to(deploy.ROOT).as_posix() for path in deploy.deployment_files()}
+    assert {'suite_pcb_primitives.py', 'contracts/libraries-v0.3.0.json',
+            'contracts/legacy-tools.json', 'contracts/pcblib-default-board.json',
+            'eda-agent/pyproject.toml', 'eda-agent/README.md',
+            'coffeenmusic/server/batch_safety.py'} <= files
+    assert 'coffeenmusic/server/main.py' not in files
+    assert 'coffeenmusic/server/codex_stdio.py' not in files
+
+
+def test_direct_deployment_and_plugin_use_identical_source_closure():
+    from scripts.build_plugin import package_inputs
+    expected = set(package_inputs())
+    deployed = {path.relative_to(deploy.ROOT).as_posix() for path in deploy.deployment_files()}
+    assert deployed == expected

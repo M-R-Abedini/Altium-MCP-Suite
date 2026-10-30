@@ -3,9 +3,13 @@ on: [push, pull_request, workflow_dispatch]
 permissions:
   contents: read
 jobs:
-  windows-python:
-    runs-on: windows-latest
-    timeout-minutes: 20
+  python:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - uses: actions/setup-python@v5
@@ -14,55 +18,16 @@ jobs:
       - run: python -m pip install -r requirements.txt
       - name: Offline stdio startup without an Altium installation
         run: python tests/smoke_stdio.py
-      - run: python -m pytest tests -q
-      - name: Full offline design and transport regressions
-        run: python -m pytest tests/design ../tests/test_review_fixes.py ../tests/test_native_lifecycle.py -q
+      - name: Complete root regression suite, native codecs and package license closure
+        run: python -m pytest tests -q
+      - name: Native gateway catalog and all library contracts without external executables
+        run: python tests/smoke_suite_stdio.py --toolset full
+      - name: Complete EDA regression suite
+        run: python -m pytest tests -q
         working-directory: eda-agent
-      - name: Clean plugin package, reproducibility and offline MCP startup
+      - name: Build and verify actual EDA wheel native project closure
+        run: |
+          python -m pip wheel --no-deps ./eda-agent --wheel-dir dist/wheels
+          python scripts/build_plugin.py --check-wheel dist/wheels
+      - name: Clean plugin package, reproducibility and isolated MCP startup
         run: python scripts/build_plugin.py --output dist --smoke --check-reproducible
-      - run: python -m pytest tests/test_bridge.py tests/test_recovery.py tests/test_workspace_pointer_isolation.py tests/test_timeout_looks_for_a_dialog.py tests/test_units.py tests/test_websocket_framing.py -q
-        working-directory: eda-agent
-      - name: Connectivity verification and MCP discovery
-        run: python -m pytest tests/design/test_connectivity_contracts.py tests/design/test_verify_nets.py tests/test_tool_registration_consistency.py tests/test_tool_metadata.py tests/test_tool_catalog.py tests/test_minimal_toolset.py tests/test_registry_schema_validation.py -q
-        working-directory: eda-agent
-      - name: Batched schematic execution and planner contracts
-        run: python -m pytest tests/design/test_performance_batches.py tests/design/test_discipline_contract.py tests/design/test_buses.py -q
-        working-directory: eda-agent
-      - name: Project persistence and assembly variants
-        run: python -m pytest tests/test_project_variants_persistence.py tests/test_query_input_consistency.py tests/test_variant_matrix_csv.py tests/test_print_all_variants_restore.py tests/test_handlers_verify_their_outcome.py -q
-        working-directory: eda-agent
-      - name: Schematic updates and SVG regression checks
-        run: python -m pytest tests/test_display_audio_regressions.py tests/render/test_svg_wellformed.py tests/test_sch_properties_match_their_interface.py -q
-        working-directory: eda-agent
-      - name: Disabled-window diagnosis and dialog completion
-        run: python -m pytest tests/test_dialog_report.py tests/test_dialog_driver.py tests/test_detach_confirmation.py -q
-        working-directory: eda-agent
-      - name: Physical PCB counts, placed models and ECO evidence
-        run: python -m pytest tests/test_pcb_transfer_reliability.py tests/test_backend_adapter_contract.py -q
-        working-directory: eda-agent
-  portable-python:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - run: python -m pip install -r requirements.txt
-      - name: Portable checks (native Windows API checks explicitly skipped)
-        run: pytest tests -q
-      - name: Portable offline design and transport regressions
-        run: python -m pytest tests/design ../tests/test_review_fixes.py ../tests/test_native_lifecycle.py -q
-        working-directory: eda-agent
-      - name: Portable clean artifact and offline MCP startup
-        run: python scripts/build_plugin.py --output dist --smoke --check-reproducible
-  rust:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    defaults:
-      run:
-        working-directory: altium-designer-mcp
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582
-      - run: cargo test --locked --all-targets

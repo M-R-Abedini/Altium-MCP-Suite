@@ -203,8 +203,8 @@ def test_the_unused_converters_are_still_unused(converter):
     for path in PASCAL_DIR.glob("*.pas"):
         if path.name in ("Altium_MCP.pas", "Utils.pas"):
             continue
-        if converter + "(" in path.read_text(encoding="utf-8",
-                                             errors="replace"):
+        if re.search(r'(?<![A-Za-z0-9_])' + re.escape(converter) + r'\s*\(',
+                     path.read_text(encoding="utf-8", errors="replace")):
             callers.append(path.name)
     assert not callers, (
         f"{converter} is now called from {callers} but this file still "

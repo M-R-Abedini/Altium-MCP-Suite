@@ -1,4 +1,4 @@
-; Separate executables retain their own licenses. User data is never uninstalled.
+; Bundled Python dependencies retain their own licenses. User data is never uninstalled.
 #ifndef SourceRoot
   #error SourceRoot must point to a verified build_installer.py stage
 #endif
@@ -34,7 +34,7 @@ Source: "{#SourceRoot}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
 
 [Icons]
 Name: "{group}\Set up MCP Altium Suite"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoLogo -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File ""{app}\installer\onboarding.ps1"""; WorkingDir: "{app}"
-Name: "{group}\Third-party notices and source"; Filename: "{app}\THIRD_PARTY_NOTICES.md"
+Name: "{group}\Third-party notices"; Filename: "{app}\THIRD_PARTY_NOTICES.md"
 Name: "{group}\Uninstall MCP Altium Suite"; Filename: "{uninstallexe}"
 
 [Run]

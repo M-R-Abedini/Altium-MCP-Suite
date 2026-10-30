@@ -65,19 +65,22 @@ def test_all_runtime_sources_and_license_material_are_present(source):
     payload = builder.package_payload(source)
     for name in ('suite_stdio.py', 'scripts/launch_plugin.ps1', 'scripts/plugin_runtime.py',
                  'eda-agent/src/eda_agent/server.py', 'eda-agent/scripts/altium/Main.pas',
-                 'coffeenmusic/server/main.py', 'altium-designer-mcp/Cargo.lock',
-                 'altium-designer-mcp/src/altium/pcblib/assets/file_version_info.txt',
-                 'altium-designer-mcp/docs/AGENT_GUIDE.md',
-                 'altium-designer-mcp/scripts/samples/symbols.SchLib',
+                 'suite_libraries_native.py', 'suite_ole.py', 'suite_schlib_codec.py',
+                 'suite_pcblib_codec.py', 'suite_pcb_primitives.py', 'suite_legacy_compat.py',
+                 'suite_script_overlay.py', 'contracts/libraries-v0.3.0.json',
+                 'contracts/legacy-tools.json', 'contracts/pcblib-default-board.json',
+                 'coffeenmusic/server/batch_safety.py',
+                 'coffeenmusic/server/symbol_placement_rules.txt',
                  'LICENSE', 'THIRD_PARTY_NOTICES.md', 'eda-agent/LICENSE', 'eda-agent/NOTICE',
-                 'coffeenmusic/LICENSE', 'altium-designer-mcp/LICENCE'):
+                 'coffeenmusic/LICENSE'):
         assert name in payload
     for root_document in ('.gitignore', 'CONTRIBUTING.md', 'CONNECTIVITY_VERIFICATION.md'):
         assert root_document in payload
     assert 'eda-agent/scripts/altium/Altium_MCP.pas' not in payload
-    rust_files = {path.relative_to(source).as_posix() for path in
-                  (source / 'altium-designer-mcp/src').rglob('*') if path.is_file()}
-    assert rust_files <= set(payload)
+    assert not any(name.startswith('altium-designer-mcp/') for name in payload)
+    assert 'coffeenmusic/server/main.py' not in payload
+    assert 'coffeenmusic/server/codex_stdio.py' not in payload
+    assert json.loads(payload['plugin.json'])['license'] == 'MIT AND Apache-2.0'
     assert json.loads(payload['PACKAGE_CONTENTS.json'])['native_binary_bundled'] is False
 
 
@@ -125,3 +128,60 @@ def test_clean_staged_artifact_serves_real_minimal_mcp_without_native_tools(sour
                        'cloud_provider_dispatch': True, 'native_editor_or_workers_started': False}
     marketplace = json.loads((Path(result['marketplace']) / '.agents/plugins/marketplace.json').read_text())
     assert marketplace['plugins'][0]['source']['path'] == './plugins/mcp-altium-suite'
+
+
+@pytest.mark.parametrize('name', [
+    'altium-designer-mcp/src/main.rs', 'libraries/backend.exe',
+    'libraries/dependencies.crate', 'vendor/dependency/source.py',
+])
+def test_package_audit_rejects_retired_or_binary_implementation(source, name):
+    payload = builder.package_payload(source)
+    payload[name] = b'fixture'
+    with pytest.raises(ValueError, match='implementation'):
+        builder.audit_payload(payload)
+
+
+def test_package_audit_rejects_incompatible_source_license(source):
+    payload = builder.package_payload(source)
+    payload['accidental_source.py'] = b'# SPDX-License-Identifier: GPL-3.0-or-later\n'
+    with pytest.raises(ValueError, match='license'):
+        builder.audit_payload(payload)
+
+
+def test_current_source_and_upstream_inventory_exclude_retired_library_backend():
+    assert not (ROOT / 'altium-designer-mcp').exists()
+    upstream = json.loads((ROOT / 'UPSTREAM.json').read_text(encoding='utf-8'))
+    assert set(upstream) == {'eda-agent', 'coffeenmusic'}
+    assert {item['license'] for item in upstream.values()} <= {'MIT', 'Apache-2.0'}
+
+
+def test_wheel_configuration_covers_all_native_project_members(source):
+    members = builder.native_wheel_members(source)
+    assert {'eda_agent/scripts/LegacyCompat.pas', 'eda_agent/scripts/LegacySandbox.pas'} <= set(members)
+    metadata = source / 'eda-agent/pyproject.toml'
+    text = metadata.read_text(encoding='utf-8')
+    metadata.write_text('\n'.join(line for line in text.splitlines()
+                                   if not line.startswith('"scripts/altium/LegacySandbox.pas"')), encoding='utf-8')
+    with pytest.raises(ValueError, match='wheel closure.*LegacySandbox'):
+        builder.package_payload(source)
+
+
+def test_built_wheel_audit_detects_missing_or_stale_native_members(source, tmp_path):
+    members = builder.native_wheel_members(source)
+    wheel = tmp_path / 'eda_agent-fixture.whl'
+    with zipfile.ZipFile(wheel, 'w') as archive:
+        for name, path in members.items():
+            archive.writestr(name, path.read_bytes())
+    assert builder.verify_native_wheel(wheel, source)['native_project_members_verified'] == len(members)
+    with zipfile.ZipFile(wheel, 'w') as archive:
+        for name, path in members.items():
+            if name.endswith('LegacySandbox.pas'):
+                continue
+            archive.writestr(name, path.read_bytes())
+    with pytest.raises(ValueError, match='missing.*LegacySandbox'):
+        builder.verify_native_wheel(wheel, source)
+    with zipfile.ZipFile(wheel, 'w') as archive:
+        for name, path in members.items():
+            archive.writestr(name, b'outdated' if name.endswith('LegacyCompat.pas') else path.read_bytes())
+    with pytest.raises(ValueError, match='differs.*LegacyCompat'):
+        builder.verify_native_wheel(wheel, source)

@@ -56,15 +56,17 @@ Push-Location eda-agent
 Pop-Location
 ```
 
-The exact Python regression groups and Rust command run on GitHub are in
-[the CI workflow](.github/workflows/tests.yml). If you change the Rust library
-server, use its pinned toolchain and run:
+Run the full EDA test suite from its directory and build the reproducible package:
 
 ```powershell
-Push-Location altium-designer-mcp
-cargo test --locked --all-targets
+Push-Location eda-agent
+..\.venv\Scripts\python.exe -m pytest tests -q
 Pop-Location
+.\.venv\Scripts\python.exe scripts/build_plugin.py --smoke --check-reproducible
 ```
+
+Both CI platforms execute the full root and EDA suites. Native library regressions
+cover the independent Python codecs without an external library executable.
 
 The Altium editor backend and its real file-lock/UI tests require Windows.
 Portable root tests run on Linux in CI; native Windows API tests are explicitly
@@ -91,17 +93,15 @@ Push-Location eda-agent
 Pop-Location
 ```
 
-To compare all three real backend catalogs and input schemas without native
-editor operations, supply a built library executable to the separate smoke:
+The unified catalog retains all 544 public tools across eight namespaces.
+Its library and legacy schemas are checked against the recorded interface
+contracts in `contracts/`; native write compatibility also requires scratch-file
+checks with Altium itself. Run `python tests/smoke_suite_stdio.py --toolset full`
+for real isolated gateway discovery and native library operations without Altium.
 
-```powershell
-.\.venv\Scripts\python.exe tests/smoke_suite_stdio.py --library-command "C:\Path\To\altium-designer-mcp.exe"
-```
-
-This does not require an Altium installation. The complete real-backend smoke
-does require the Rust executable; an absent backend is not a passing result.
-Plugin artifact verification is described below and does not require that
-binary or a real Altium editor.
+Offline catalog and codec checks do not require Altium. Plugin artifact
+verification below checks the actual staged package. Live bridge and file-format
+compatibility evidence is recorded separately from offline checks.
 
 ## Plugin development
 
@@ -167,12 +167,12 @@ on EDA startup; their files remain on disk for diagnosis and rollback. See
 
 ## Bundled sources and licenses
 
-This suite includes snapshots of three upstream projects. Their source
+This suite includes snapshots of two upstream projects. Their source
 repositories and snapshot commits are recorded in [UPSTREAM.json](UPSTREAM.json).
 Preserve their license notices; original suite code uses [MIT](LICENSE).
-Bundled EDA code is Apache-2.0, legacy code is MIT with file-specific exceptions,
-and Rust library code is GPL-3.0-or-later. Follow
+Bundled EDA code is Apache-2.0 and legacy code is MIT with file-specific
+exceptions. Native library codecs are original MIT code. Follow
 [the license scope](THIRD_PARTY_NOTICES.md); keep Apache modification notices and
-attribution, and retain GPL terms when changing or redistributing the Rust backend.
+attribution. Historical release licensing remains unchanged.
 Do not relabel copied upstream code as MIT. Explain changes to bundled code so
 maintainers can distinguish suite fixes from the original snapshot.

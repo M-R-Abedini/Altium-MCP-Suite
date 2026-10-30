@@ -11,11 +11,5 @@
     "snapshot_commit": "36a3e000a1dd404727a6f09519994ddc36fa7808",
     "license": "MIT",
     "license_file": "coffeenmusic/LICENSE"
-  },
-  "altium-designer-mcp": {
-    "upstream": "https://github.com/embedded-society/altium-designer-mcp.git",
-    "snapshot_commit": "59264d50f1b528d3e9714facc9957944081f063d",
-    "license": "GPL-3.0-or-later",
-    "license_file": "altium-designer-mcp/LICENCE"
   }
 }

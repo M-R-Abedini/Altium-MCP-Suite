@@ -20,15 +20,14 @@ installed files. Altium requires local execution, as described in the
   checks, structured schematic execution and connectivity evidence.
 - `altium-suite-setup`: explicit onboarding, adopting an existing suite or
   preparing a new runtime, and diagnosis.
-- Python and DelphiScript sources, runtime dependency requirements and
-  corresponding Rust library-backend source with its license notices.
+- Python and DelphiScript sources, independent native library codecs,
+  compatibility contracts and runtime dependency requirements with license notices.
 
-The ZIP does not include Altium Designer, a Python interpreter, a prebuilt
-Rust executable, private settings, account credentials or design files.
-Altium and its license remain separate prerequisites. Use Python 3.12 on
-Windows. The library worker can be an existing executable or be built from
-the included source with the pinned Rust toolchain and Windows C++ build
-prerequisites.
+The ZIP does not include Altium Designer, a Python interpreter, private
+settings, account credentials or design files. Altium and its license remain
+separate prerequisites. Use Python 3.12 on Windows. Library operations execute
+in the gateway through the original Python OLE2 codecs; no external library
+executable, Rust compiler or crate sources are required.
 
 ## Build a clean distribution
 
@@ -42,7 +41,7 @@ The builder creates:
 
 ```text
 dist/
-  mcp-altium-suite-0.3.0.zip
+  mcp-altium-suite-0.4.0.zip
   artifacts.json
   marketplace/
     .agents/plugins/marketplace.json
@@ -57,7 +56,7 @@ dist/
 `--smoke` exercises the staged package's MCP initialization, minimal tool
 surface and cloud provider discovery using an isolated empty backend
 configuration. It does not launch Altium, read private machine settings or
-require a Rust binary. `--check-reproducible` compares repeated builds with
+require an external library executable. `--check-reproducible` compares repeated builds with
 the same package inputs. The artifact manifest records the selected files
 and hashes. Do not distribute a recursive copy of an installed checkout:
 it may contain local configurations and repair backups.
@@ -106,16 +105,17 @@ py -3.12 "$pluginRoot\scripts\plugin_runtime.py" doctor
 ```
 
 Adoption retains the selected native runtime/workspace identity, library
-executable/configuration, restrictions and explicit timeouts. It does not
-edit designs. EDA and legacy worker source paths resolve against the current
+configuration, restrictions and explicit timeouts. The retired executable
+path is ignored during migration. It does not
+edit designs. EDA worker and in-process legacy compatibility code resolve against the current
 installed plugin on each launch, so upgrading the package upgrades its code.
 Private state stays outside the versioned cache.
 
-Adoption can still depend on the selected old interpreter/library executable.
+Adoption can still depend on the selected old interpreter.
 To make dependencies independent of the old checkout while retaining the same
 native workspace, run `py -3.12 "$pluginRoot\scripts\plugin_runtime.py" detach`.
 This creates a private regular-wheel Python environment and private library
-worker/configuration before switching state, retaining the old files for
+configuration before switching state, retaining the old files for
 recovery. See [multi-client and installer setup](INSTALLER.md).
 
 Before switching an existing client, retain its configuration backup and
@@ -126,16 +126,14 @@ as a shortcut to setup.
 
 ### Prepare a new machine
 
-Supply the installed Altium executable and an existing library worker:
+Supply the installed Altium executable and intended library roots:
 
 ```powershell
-py -3.12 "$pluginRoot\scripts\plugin_runtime.py" bootstrap --altium-exe "C:\Program Files\Altium\AD26\X2.EXE" --library-binary "C:\Path\To\altium-designer-mcp.exe" --library-dir "D:\MyProject\Libraries"
+py -3.12 "$pluginRoot\scripts\plugin_runtime.py" bootstrap --altium-exe "C:\Program Files\Altium\AD26\X2.EXE" --library-dir "D:\MyProject\Libraries"
 py -3.12 "$pluginRoot\scripts\plugin_runtime.py" doctor
 ```
 
-Alternatively replace `--library-binary ...` with `--build-libraries` to
-build the bundled Rust source. Repeat `--library-dir` for intended existing
-library roots. Bootstrap explicitly creates a private Python environment
+Repeat `--library-dir` for intended existing library roots. Bootstrap explicitly creates a private Python environment
 and installs `requirements-runtime.txt` once. It does not install the
 development test/render/dashboard extras or run package installation on
 ordinary MCP calls.
@@ -196,8 +194,9 @@ development rebuilds of the same version are test artifacts, not a new release.
 
 The suite's existing [license scope](../THIRD_PARTY_NOTICES.md) remains in
 effect. Original suite code, vendored backends and their dependencies retain
-their own terms. The builder includes corresponding Rust source and notices
-and does not claim that the whole distribution is relicensed under MIT.
+their own terms. The builder includes MIT and Apache-2.0 notices and rejects retired binary,
+crate and Rust-source artifacts. Historical release tags keep their original
+contents and licensing; they are not rewritten by this source update.
 
 See [CONTRIBUTING](../CONTRIBUTING.md) for the source checks, package tests and
 native-test boundaries. Current validation evidence should distinguish
